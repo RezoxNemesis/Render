@@ -12,7 +12,6 @@ import android.os.Handler;
 import android.os.Looper;
 import android.text.InputType;
 import android.view.View;
-import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -38,7 +37,7 @@ public final class AgentActivity extends Activity {
         status.setText(secrets.status());history.setText(journal.history());ui.postDelayed(this,2000);
     }};
     @Override public void onCreate(Bundle state){
-        super.onCreate(state);getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        super.onCreate(state); // Screen recording and screenshots are allowed by the owner.
         secrets=new AgentSecrets(this);journal=new AgentJournal(this);
         ScrollView scroll=new ScrollView(this);LinearLayout content=new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);int pad=(int)(20*getResources().getDisplayMetrics().density);
