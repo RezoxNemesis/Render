@@ -108,6 +108,39 @@ def main():
         assert material["state"]=="succeeded",material
         assert len(bpy.data.objects["RenderSphere"].data.materials)>=1
 
+        # Full native-operator batching: one genuine Blender call, three
+        # independently editable coloured meshes, bevels and replay protection.
+        architecture={"assembly":"ArchitecturalAccent","parts":[
+            {"name":"StoneBeam","kind":"CUBE","location":[0,0,2],
+             "scale":[3,.2,.3],"color":[.8,.7,.6],"roughness":.6,"bevel":.06},
+            {"name":"BlueGlass","kind":"CUBE","location":[0,-1,1.4],
+             "scale":[.5,.08,.8],"color":[.08,.2,.45],"metallic":.1},
+            {"name":"TerraceColumn","kind":"CYLINDER","location":[2,0,1],
+             "scale":[.3,.3,1],"color":[.62,.62,.62]}
+        ]}
+        assembled=submit("blender.scene.batch_assembly",architecture)
+        assert assembled["state"]=="succeeded",assembled
+        assert assembled["result"]["created_count"]==3
+        assert assembled["result"]["material_count"]==3
+        names=assembled["result"]["objects"]
+        assert len(names)==3
+        assert all(bpy.data.objects.get(name) is not None for name in names)
+        assert all(bpy.data.objects[name].data.materials for name in names)
+        replay=submit("blender.scene.batch_assembly",architecture)
+        assert replay["state"]=="succeeded" and replay["result"]["already_complete"]
+        assert len([c for c in bpy.context.scene.collection.children
+                    if c.get("render_assembly_key")=="ArchitecturalAccent"])==1
+        conflicting={"assembly":"ArchitecturalAccent","parts":[
+            dict(architecture["parts"][0],color=[.2,.1,.1])
+        ]}
+        conflict=submit("blender.scene.batch_assembly",conflicting)
+        assert conflict["state"]=="failed" and conflict["error"]=="ASSEMBLY_NAME_REVISION_CONFLICT"
+        audit=submit("blender.scene.visual_audit",{})
+        assert audit["state"]=="succeeded",audit
+        assert audit["result"]["ready_for_lively_video"] is False
+        assert not audit["result"]["checks"]["pedestrians"]
+        assert audit["result"]["pbr_node_materials"]>=3
+
         configured=submit("blender.scene.render_settings",{
             "resolution_x":64,"resolution_y":64,"engine":"CYCLES","samples":2,
             "denoising":False})
