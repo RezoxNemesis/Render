@@ -1,5 +1,17 @@
 plugins { id 'com.android.application' }
 
+// Release keystore and passphrase are supplied ONLY by the owner's private
+// Gradle environment / GitHub Actions secrets. Never commit the keystore,
+// credentials, or signing password to this repository.
+def releaseKeystore = System.getenv('RENDER_ANDROID_SIGNING_STORE_FILE')
+def releaseStorePassword = System.getenv('RENDER_ANDROID_SIGNING_STORE_PASSWORD')
+def releaseKeyPassword = System.getenv('RENDER_ANDROID_SIGNING_KEY_PASSWORD')
+def releaseAlias = System.getenv('RENDER_ANDROID_SIGNING_KEY_ALIAS')
+def signingReady = releaseKeystore && releaseStorePassword &&
+                   releaseKeyPassword && releaseAlias &&
+                   new File(releaseKeystore).isFile()
+
+
 android {
     // Keeps Blender's original R resource namespace and JNI class paths intact.
     namespace 'org.blender.blender'
@@ -9,8 +21,8 @@ android {
         applicationId 'com.rezox.render'
         minSdk 31
         targetSdk 34
-        versionCode 16
-        versionName '0.14.2-direct-binder-compatibility'
+        versionCode 17
+        versionName '0.15.0-mobile-safe-ui-stable-signing'
         ndk { abiFilters 'arm64-v8a' }
     }
     sourceSets {
@@ -24,9 +36,43 @@ android {
     }
     packagingOptions { jniLibs { useLegacyPackaging = true } }
     androidResources { noCompress 'zip' }
-    buildTypes { debug { debuggable true } }
+    signingConfigs {
+        stableRelease {
+            if(signingReady) {
+                storeFile file(releaseKeystore)
+                storeType 'pkcs12'
+                storePassword releaseStorePassword
+                keyAlias releaseAlias
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
+    buildTypes {
+        debug { debuggable true }
+        release {
+            debuggable false
+            minifyEnabled false
+            shrinkResources false
+            if(signingReady) signingConfig signingConfigs.stableRelease
+        }
+    }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+
+// A release build without the registered owner key is a HARD FAILURE, never
+// an unsigned APK accidentally presented as an upgrade. Existing installations
+// will only update if certificate, package and versionCode are compatible.
+tasks.configureEach { task ->
+    if(task.name == 'preReleaseBuild') {
+        doFirst {
+            if(!signingReady) {
+                throw new GradleException(
+                    'Release signing is not configured. Supply the protected Render Studio PKCS12 keystore and all four signing environment variables.')
+            }
+        }
     }
 }
