@@ -35,12 +35,44 @@ public final class AgentActions {
     public static JSONArray capabilities() throws Exception {return capabilities(null);}
     public static JSONArray capabilities(Context context) throws Exception {
         final boolean fullBlender=hasFullBlender(context);
+        boolean editorReady=false;
+        if(context!=null){
+            File heartbeat=new File(context.getFilesDir(),"render_bpy_jobs/ready");
+            long age=System.currentTimeMillis()-heartbeat.lastModified();
+            editorReady=heartbeat.isFile() && age>=0 && age<15000;
+        }
         JSONArray out = new JSONArray();
         for (String id : AgentPolicy.ACTIONS.keySet()) {
             JSONObject properties = new JSONObject();
             for (String field : AgentPolicy.ACTIONS.get(id)) {
                 JSONObject prop=new JSONObject();
-                if(field.equals("offset")||field.equals("limit")){
+                if(field.equals("assembly")){
+                    prop.put("type","string").put("pattern","^[A-Za-z][A-Za-z0-9_-]{0,63}$");
+                }else if(field.equals("parts")){
+                    prop.put("type","array").put("minItems",1).put("maxItems",96)
+                        .put("items",new JSONObject().put("type","object")
+                            .put("required",new JSONArray(new String[]{
+                                "name","kind","location","scale"}))
+                            .put("additionalProperties",false)
+                            .put("properties",new JSONObject()
+                                .put("name",new JSONObject().put("type","string")
+                                    .put("pattern","^[A-Za-z][A-Za-z0-9_-]{0,63}$"))
+                                .put("kind",new JSONObject().put("type","string")
+                                    .put("enum",new JSONArray(new String[]{
+                                        "CUBE","CYLINDER","CONE","UV_SPHERE","PLANE"}))
+                                .put("location",new JSONObject().put("type","array")
+                                    .put("minItems",3).put("maxItems",3))
+                                .put("scale",new JSONObject().put("type","array")
+                                    .put("minItems",3).put("maxItems",3))
+                                .put("color",new JSONObject().put("type","array")
+                                    .put("minItems",3).put("maxItems",3))
+                                .put("metallic",new JSONObject().put("type","number")
+                                    .put("minimum",0).put("maximum",1))
+                                .put("roughness",new JSONObject().put("type","number")
+                                    .put("minimum",0).put("maximum",1))
+                                .put("bevel",new JSONObject().put("type","number")
+                                    .put("minimum",0).put("maximum",.25))));
+                }else if(field.equals("offset")||field.equals("limit")){
                     prop.put("type","integer").put("minimum",field.equals("offset")?0:1);
                     prop.put("maximum",field.equals("offset")?Integer.MAX_VALUE:200);
                 }else if(field.equals("name")){
@@ -95,7 +127,8 @@ public final class AgentActions {
                 }else prop.put("type","string").put("pattern","^[a-f0-9]{64}$");
                 properties.put(field,prop);
             }
-            String[] required = id.equals("projects.inspect") ? new String[]{"project_id"} :
+            String[] required = id.equals("blender.scene.batch_assembly") ? new String[]{"assembly","parts"} :
+                            String[] required = id.equals("projects.inspect") ? new String[]{"project_id"} :
                 id.equals("blender.project.restore_scene") ? new String[]{"project_id"} :
                 id.equals("blender.scene.set_frame") ? new String[]{"frame"} :
                 id.equals("blender.object.set_transform") ? new String[]{"name"} :
@@ -121,9 +154,14 @@ public final class AgentActions {
             boolean bpy=id.startsWith("blender.");
             boolean available=!bpy||fullBlender;
             JSONObject descriptor=new JSONObject().put("id",id).put("available",available).put("api_version",1)
-                .put("read_only",!bpy || id.equals("blender.scene.summary"))
+                .put("read_only",!bpy || id.equals("blender.scene.summary") ||
+                    id.equals("blender.scene.visual_audit"))
                 .put("cancellation","between_native_calls").put("input_schema",schema);
-            if(bpy&&!available)descriptor.put("reason","Full native Blender editor not packaged in this Android build");
+            descriptor.put("executable_now",!bpy || editorReady);
+            descriptor.put("editor_required",bpy);
+            if(bpy && available && !editorReady)
+                descriptor.put("runtime_status","BLENDER_EDITOR_NOT_RUNNING");
+                        if(bpy&&!available)descriptor.put("reason","Full native Blender editor not packaged in this Android build");
             if(bpy&&available)descriptor.put("requires","Open full Blender editor and wait for bpy timer startup");
             out.put(descriptor);
         }
@@ -141,6 +179,32 @@ public final class AgentActions {
         String action = command.getString("action");
         AgentPolicy.validate(command.getString("request_id"),command.getInt("api_version"),action,fields);
         checkCancelled(cancelled);
+        if (action.equals("agent.capabilities")) {
+            JSONArray descriptors=capabilities(context);
+            int installed=0,ready=0;
+            for(int i=0;i<descriptors.length();i++){
+                JSONObject item=descriptors.getJSONObject(i);
+                if(item.optBoolean("available"))installed++;
+                if(item.optBoolean("executable_now"))ready++;
+            }
+            File heartbeat=new File(context.getFilesDir(),"render_bpy_jobs/ready");
+            long age=System.currentTimeMillis()-heartbeat.lastModified();
+            boolean editorReady=heartbeat.isFile() && age>=0 && age<15000;
+            return new JSONObject()
+                .put("target_app","Render Studio")
+                .put("target_package",context.getPackageName())
+                .put("action_registry_version",2)
+                .put("native_editor_bundled",hasFullBlender(context))
+                .put("native_editor_ready",editorReady)
+                .put("supports_one_command_lively_scene",
+                     AgentPolicy.ACTIONS.containsKey("blender.scene.create_lively_project"))
+                .put("supports_bounded_geometry_batch",
+                     AgentPolicy.ACTIONS.containsKey("blender.scene.batch_assembly"))
+                .put("supported_count",installed)
+                .put("executable_now_count",ready)
+                .put("actions",descriptors)
+                .put("executed_by","android-native");
+        }
         if (action.equals("agent.diagnostics")) {
             AgentWorkPresence.Snapshot work=AgentWorkPresence.snapshot(context);
             File ready=new File(context.getFilesDir(),"render_bpy_jobs/ready");
