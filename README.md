@@ -52,3 +52,6 @@ A second CI job creates actual Blender scene and animation fixtures with upstrea
 
 ## Shared VideoStudio MCP control
 Render can reuse the existing VideoStudio v3 Cloudflare Worker and ChatGPT plugin as an isolated second native device. It generates a new Render-owned Keystore identity via a one-use VideoStudio pairing code, and adds native Blender work to a separate queue. No new Railway or Render.com server or second ChatGPT connection is required; real on-phone pairing and actual Blender execution remain to be verified. See docs/AGENT_ACTIVATION.md.
+
+## v0.14 VideoStudio-style Connect / Share with ChatGPT
+Render's UI now offers a direct on-phone bridge using the SAME VideoStudio MCP v3 connection, with a one-tap Connect / Share action and a stable NON-SECRET Render app UUID. A command result includes target_app=Render Studio, target_package=com.rezox.render and render_public_id, so ChatGPT can distinguish Blender work from VideoStudio timeline work. No second relay, developer key or Cloudflare redeployment is needed for this direct native mode; on-phone APK pairing and actual result verification remain outstanding. See docs/AGENT_ACTIVATION.md.

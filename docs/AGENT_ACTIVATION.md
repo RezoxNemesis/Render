@@ -1,3 +1,52 @@
+## Render Studio v0.14: Connect / Share with ChatGPT (existing VideoStudio MCP)
+
+This is the recommended mode and does NOT require deploying a new Worker or
+copying VideoStudio's private MCP owner key. It is a deliberate second Android
+executor, separate from VideoStudio's timeline, projects, caches and identity.
+
+Prerequisites: updated VideoStudio Android v3.5.0 or later (versionCode >=350)
+and Render Studio v0.14.0+ installed on the SAME phone; VideoStudio's existing
+ChatGPT MCP must remain connected. Existing VideoStudio Worker code can deliver
+nativeAction=render.engine.status through its original queue_video_edit tool.
+
+On your phone:
+1. Open Render Studio -> ChatGPT x Render -> CONNECT / SHARE WITH CHATGPT.
+2. Review and approve the local VideoStudio Binder bridge. Choose Enable & Share.
+3. Choose ChatGPT in Android's Share sheet (or use SHARE RENDER CONNECTION).
+   The shared card is non-secret: app name, Android package, stable public
+   Render app ID, allowed action prefix and connection setup. It NEVER contains
+   the original VideoStudio owner key, API tokens, or a new credential.
+4. Keep VideoStudio Native Agent connected and not paused in its existing MCP.
+5. In ChatGPT, request an action through the existing VideoStudio MCP:
+   queue_video_edit(deviceId=<existing VideoStudio private credential provided
+   by the already-paired connector>, projectId=active-native,
+   action=autonomous_request, parameters.nativeAction=render.engine.status,
+   parameters.nativeParameters={}). The connector never sends its owner key
+   to Render, only a typed native operation through VideoStudio's IPC.
+6. Poll get_video_command_result for that command ID. Success must include
+   target_app='Render Studio', target_package='com.rezox.render',
+   render_public_id matching the locally shared Render app ID, and an actual
+   native result. This is the acceptance gate before claiming 'connected'.
+
+Additional supported native action names: render.gpu.info, render.projects.list,
+render.projects.inspect, render.blender.scene.summary, render.blender.object.add_cube,
+render.blender.object.set_transform, render.blender.scene.set_frame,
+render.blender.object.keyframe, render.blender.project.save_copy.
+Only operations backed by real installed engine handlers can report success.
+
+RENDER bridge local status has three distinct states: STOPPED, NOT READY
+(missing/incompatible VideoStudio app), READY ON PHONE awaiting native result,
+and NATIVE COMMAND CONFIRMED once an authenticated VideoStudio Binder request
+has completed and the result was written to Render's local journal.
+All use Android Binder UID verification and a separate owner-enabled Stop gate.
+
+To disconnect: Render -> ChatGPT x Render -> STOP VIDEOSTUDIO BRIDGE. This does
+not turn off VideoStudio itself or change its existing MCP credentials.
+
+VideoStudio Server-side Render child-device code lives in separate draft PR #142
+but is OPTIONAL for the direct same-phone Binder bridge. Do not merge/deploy it
+just to activate the direct mode. Physical-device proof still requires both
+updated APKs installed, VideoStudio online, and an observed native result.
 ## Direct local VideoStudio MCP → Render Android (no Worker deployment required)
 
 This is the fastest transport to test. It requires UPDATED APKs for both VideoStudio and Render,
