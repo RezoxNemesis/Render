@@ -50,8 +50,8 @@ class NativeLivelySceneContractTests(unittest.TestCase):
         agent = AGENT.read_text(encoding="utf-8")
         spool = SPOOL.read_text(encoding="utf-8")
         startup = STARTUP.read_text(encoding="utf-8")
-        for action in ("blender.project.restore_scene", "blender.scene.populate_lively",
-                       "blender.scene.render_video"):
+        for action in ("blender.project.restore_scene", "blender.scene.create_lively_project",
+                       "blender.scene.populate_lively", "blender.scene.render_video"):
             for body in (policy, spool, startup):
                 self.assertIn(action, body)
         self.assertIn('projects.find(args.getString("project_id"))', agent)
@@ -59,6 +59,22 @@ class NativeLivelySceneContractTests(unittest.TestCase):
         self.assertIn("PROJECT_REVISION_CONFLICT", agent)
         self.assertIn('args.length()!=0', spool)
         self.assertNotIn('ProcessBuilder(', HELPER.read_text(encoding="utf-8"))
+
+    def test_fresh_scene_is_separate_and_contains_lively_cast(self):
+        source = HELPER.read_text(encoding="utf-8")
+        self.assertIn("def create_lively_project(args):", source)
+        self.assertIn('bpy.data.scenes.new("Lively Building - New Project")', source)
+        self.assertIn("window.scene = previous", source)
+        self.assertIn("bpy.data.scenes.remove(scene, do_unlink=True)", source)
+        self.assertIn("environment = populate_lively(scene, {})", source)
+        self.assertIn('"previous_scene_preserved": previous in bpy.data.scenes', source)
+        self.assertIn("new_scene_needs_save_copy", source)
+        self.assertIn("new_building_objects", source)
+        self.assertIn("walking_people", source)
+        self.assertIn("walking_cats", source)
+        self.assertIn("walking_dogs", source)
+        self.assertIn("RoofCap", source)
+        self.assertIn("EntryCanopy", source)
 
     def test_apk_runtime_archive_includes_scene_helper(self):
         spec = importlib.util.spec_from_file_location("assemble_full_native_test", ASSEMBLER)
