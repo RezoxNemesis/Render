@@ -17,26 +17,28 @@ class NativePackagingTests(unittest.TestCase):
         self.source = self.base / "source"
         java = self.source / "build_files/android/apk/app/src/main/java/org/blender/blender"
         java.mkdir(parents=True)
-        (java / "BlenderActivity.java").write_text(
-            "package org.blender.blender; import android.app.NativeActivity; "
-            "import android.content.pm.ActivityInfo; import android.view.View;"
-            "public class BlenderActivity extends NativeActivity {"
-            "  protected void onCreate(Bundle state) {"
-            "    super.onCreate(state);"
-            "    setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);"
-            "\n    enterImmersive();"
-            "  }"
-            "  private void enterImmersive() {"
-            "    View d = getWindow().getDecorView();"
-            "    d.setSystemUiVisibility("
-            "        View.SYSTEM_UI_FLAG_LAYOUT_STABLE"
-            "        | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION"
-            "        | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN"
-            "        | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION"
-            "        | View.SYSTEM_UI_FLAG_FULLSCREEN"
-            "        | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);"
-            "  }"
-            "}")
+        (java / "BlenderActivity.java").write_text("""package org.blender.blender;
+import android.app.NativeActivity;
+import android.content.pm.ActivityInfo;
+import android.view.View;
+public class BlenderActivity extends NativeActivity {
+  protected void onCreate(Bundle state) {
+    super.onCreate(state);
+    setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+    enterImmersive();
+  }
+  private void enterImmersive() {
+    View d = getWindow().getDecorView();
+    d.setSystemUiVisibility(
+        View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+        | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+        | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+        | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+        | View.SYSTEM_UI_FLAG_FULLSCREEN
+        | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+  }
+}
+""")
         main = self.source / "build_files/android/apk/app/src/main"
         (main / "res/values").mkdir(parents=True)
         (main / "res/values/strings.xml").write_text("<resources/>")
