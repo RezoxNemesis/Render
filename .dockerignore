@@ -1,0 +1,8 @@
+**
+!Dockerfile
+!relay/
+!relay/**
+relay/__pycache__
+relay/*.sqlite*
+relay/*.key
+relay/.env
