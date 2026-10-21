@@ -79,6 +79,22 @@ public final class AgentActivity extends Activity {
             12,0xFFBBAFD4,false));
         StudioUi.add(page,statusPanel);
         StudioUi.space(page,17);
+
+        LinearLayout localBridge=StudioUi.card(this);
+        StudioUi.add(localBridge,StudioUi.label(this,"DIRECT  /  VIDEOSTUDIO APP-TO-APP MCP"));
+        StudioUi.space(localBridge,9);
+        StudioUi.add(localBridge,StudioUi.text(this,"No new relay.\nNo new pairing code.",20,StudioUi.WHITE,true));
+        StudioUi.space(localBridge,7);
+        StudioUi.add(localBridge,StudioUi.text(this,
+            "Use your existing VideoStudio Native Agent as a trusted on-phone bridge. Only the installed VideoStudio app can deliver typed commands to Render, and Blender still runs here. Both apps need the updated APKs.",
+            13,StudioUi.MUTED,false));
+        StudioUi.space(localBridge,13);
+        addAction(localBridge,"ENABLE DIRECT VIDEOSTUDIO BRIDGE",StudioUi.PRIMARY,()->enableDirectBridge());
+        StudioUi.space(localBridge,10);
+        addAction(localBridge,"STOP DIRECT BRIDGE",StudioUi.SECONDARY,()->disableDirectBridge());
+        StudioUi.add(page,localBridge);
+        StudioUi.space(page,17);
+
         LinearLayout shared=StudioUi.violetCard(this);
         StudioUi.add(shared,StudioUi.label(this,"PREFERRED / EXISTING VIDEOSTUDIO MCP"));
         StudioUi.space(shared,10);
@@ -169,6 +185,21 @@ public final class AgentActivity extends Activity {
         TextView view=StudioUi.action(this,title,style);
         StudioUi.add(parent,view);
         view.setOnClickListener(v->action.run());
+    }
+    private void enableDirectBridge(){
+        new AlertDialog.Builder(this)
+            .setTitle("Enable VideoStudio native access?")
+            .setMessage("Only the installed VideoStudio Android application can send typed Render commands using Android Binder caller verification. VideoStudio keeps its original MCP connection and projects. Render performs all Blender work locally. You can stop this link any time.")
+            .setNegativeButton("Cancel",null)
+            .setPositiveButton("Enable",(dialog,which)->{
+                secrets.videoStudioBridgeEnabled(true);
+                secrets.status("Direct VideoStudio MCP bridge enabled. Awaiting commands from the installed VideoStudio Native Agent.");
+            }).show();
+    }
+    private void disableDirectBridge(){
+        secrets.videoStudioBridgeEnabled(false);
+        VideoStudioNativeBridgeService.requestCancel();
+        secrets.status("Direct VideoStudio native command access stopped. VideoStudio's own projects and MCP remain untouched.");
     }
     private void pairWithVideoStudio(){
         final String oneTimeCode=videoStudioPairCode.getText().toString().trim();
@@ -286,6 +317,7 @@ public final class AgentActivity extends Activity {
         }catch(Exception e){secrets.enabled(false);secrets.status("Cannot start session: "+e.getClass().getSimpleName());}
     }
     private void stopSession(){
+        disableDirectBridge();
         secrets.enabled(false);secrets.status("Stopped locally; current native calls stop at the next safe boundary.");
         try{startService(new Intent(this,AgentService.class).setAction(AgentService.STOP));}catch(Exception ignored){}
     }
