@@ -9,12 +9,12 @@ android {
         applicationId = "com.rezox.render"
         minSdk = 28
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0-native-inspection"
+        versionCode = 3
+        versionName = "0.3.0-upstream-bli-port"
 
         ndk { abiFilters += listOf("arm64-v8a") }
         externalNativeBuild {
-            cmake { cppFlags += listOf("-std=c++17", "-Wall", "-Wextra", "-Werror") }
+            cmake { cppFlags += listOf("-std=c++20", "-Wall", "-Wextra", "-Werror") }
         }
     }
     externalNativeBuild {

@@ -11,7 +11,7 @@
 - Downloadable Google Drive asset libraries and backup are optional; active resources must be local when offline.
 - Do not advertise feature parity until real Android device tests against upstream Blender show it.
 
-**Current status: Android application/NDK foundation with native .blend framing preflight and Vulkan hardware capabilities inventory. It does not yet contain or execute Blender itself. This is not a full Blender port or a render-capable APK.**
+**Current status: Android application/NDK foundation with native .blend framing preflight, Vulkan capability probing, and one real Blender BLI C++ module compiled for Android. It does not yet contain or execute Blender itself. This is not a full Blender port or a render-capable APK.**
 
 ## Repository layout
 

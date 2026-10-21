@@ -1,0 +1,3 @@
+add_library(blender_upstream_half STATIC math_half.cc)
+target_include_directories(blender_upstream_half PUBLIC . PRIVATE compat)
+target_compile_features(blender_upstream_half PUBLIC cxx_std_20)

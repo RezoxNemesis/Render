@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 #include <jni.h>
 #include <string>
+#include "BLI_math_half.hh"
 
 #include "blend_probe.h"
 #include "vulkan_capability.h"
@@ -8,8 +9,11 @@
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_rezox_render_MainActivity_nativeEngineStatus(JNIEnv *env, jobject /* self */)
 {
-  return env->NewStringUTF(
-      "Native format inspector available; Blender core NOT integrated; rendering unavailable");
+  const bool fp16 = blender::math::float_to_half(1.0f) == 0x3c00 &&
+                    blender::math::half_to_float(0x3c00) == 1.0f;
+  return env->NewStringUTF(fp16
+      ? "Upstream Blender BLI math linked; Blender scene engine NOT integrated"
+      : "Upstream Blender BLI math check failed; Blender engine NOT integrated");
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
