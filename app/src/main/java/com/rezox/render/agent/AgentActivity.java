@@ -376,7 +376,7 @@ public final class AgentActivity extends Activity {
         perform(()->{
             if(secrets.load()!=null)
                 throw new IllegalStateException("Revoke the previous Render pairing before changing transport. VideoStudio stays connected.");
-            JSONObject credentials=VideoStudioMcpTransport.pair(oneTimeCode);
+            JSONObject credentials=VideoStudioMcpTransport.pair(this,oneTimeCode);
             secrets.save(credentials);
             secrets.enabled(false);
             secrets.status("Render paired to existing VideoStudio MCP. Start the native agent session.");
