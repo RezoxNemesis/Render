@@ -159,6 +159,14 @@ public final class AgentActions {
             long age=System.currentTimeMillis()-ready.lastModified();
             result.put("editorCommandBridgeReady",
                 ready.isFile() && age>=0 && age<15000);
+            // Public signer identity only. Protect user app-data continuity.
+            String signer=SigningIdentity.installedSigner(context);
+            result.put("installedSignerSha256",signer);
+            result.put("permanentSignerSha256",SigningIdentity.PERMANENT_SHA256);
+            result.put("usesPermanentOwnerSigner",
+                    SigningIdentity.PERMANENT_SHA256.equals(signer));
+            result.put("fullDesktopParityVerified",false);
+            result.put("nativeJobRunning",AgentWorkPresence.snapshot(context).isWorking());
             return result;
         }
         if (action.equals("gpu.info")) return new JSONObject().put("native_status",RenderNative.gpuInfo())
