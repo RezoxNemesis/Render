@@ -19,7 +19,7 @@ class NativePackagingTests(unittest.TestCase):
         java.mkdir(parents=True)
         (java / "BlenderActivity.java").write_text(
             "package org.blender.blender; class BlenderActivity {"
-            " protected void onCreate(Bundle state) { } }")
+            "  protected void onCreate(Bundle state) { } }")
         main = self.source / "build_files/android/apk/app/src/main"
         (main / "res/values").mkdir(parents=True)
         (main / "res/values/strings.xml").write_text("<resources/>")
