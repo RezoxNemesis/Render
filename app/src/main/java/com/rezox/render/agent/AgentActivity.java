@@ -62,7 +62,7 @@ public final class AgentActivity extends Activity {
         button(content,"Check native agent locally",()->localCheck());
         button(content,"Open Render project inspector",()->startActivity(new Intent(this,com.rezox.render.MainActivity.class)));
         label(content,"Activity on this phone",20);history=label(content,journal.history(),14);
-        label(content,"Available now: engine status, imported-project inventory, native .blend inspection and Vulkan hardware information. Modeling, animation and rendering become callable only when their native modules are implemented.",14);
+        label(content,"Available on the full-engine APK when Blender is open: bpy scene summary and native cube creation. Also available: imported-project inventory, .blend inspection and GPU diagnostics. Other modeling, animation and rendering tools require tested native handlers.",14);
         label(content,"Android may pause background execution. Work and outcomes are journaled; an unfinished native call is never silently replayed.",14);
         ui.post(refresh);
     }

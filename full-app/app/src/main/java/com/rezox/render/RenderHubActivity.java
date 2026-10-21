@@ -32,7 +32,7 @@ public final class RenderHubActivity extends Activity {
             startActivity(new Intent(this,com.rezox.render.agent.AgentActivity.class)));
         button(content, "Project import and file inspection", () ->
             startActivity(new Intent(this,MainActivity.class)));
-        label(content, "Current ChatGPT agent actions: native project inventory, file inspection and GPU diagnostics. Native modeling, Blender bpy editing and rendering actions are not connected to the agent yet.", 14);
+        label(content, "The agent can inspect Blender’s live scene and create a cube through its native bpy timer after the editor opens. More Blender actions will be added through the same typed bridge. Full rendering workflows still require integration and phone testing.", 14);
         label(content, "Back up projects before testing experimental APKs. This is not an official Blender Foundation product.", 13);
     }
     private TextView label(LinearLayout content,String value,int size) {

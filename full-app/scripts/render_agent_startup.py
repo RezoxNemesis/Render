@@ -15,6 +15,7 @@ import time
 import bpy
 
 ROOT = os.environ.get("RENDER_AGENT_SPOOL", "")
+_LAST_HEARTBEAT = 0.0
 _ID_PATTERN = re.compile(r"^[a-f0-9]{32}$")
 _OBJECT_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,63}$")
 _MAX_BYTES = 16384
@@ -94,12 +95,17 @@ def _write_result(path, report):
             pass
 
 def _poll():
+    global _LAST_HEARTBEAT
     if not ROOT:
         return None
     root = Path(ROOT)
     pending, working, results = (root / part for part in ("pending", "working", "results"))
     for path in (pending, working, results):
         path.mkdir(mode=0o700, parents=True, exist_ok=True)
+    now = time.time()
+    if now - _LAST_HEARTBEAT > 3.0:
+        (root / "ready").touch(exist_ok=True)
+        _LAST_HEARTBEAT = now
     for incoming in sorted(pending.glob("*.json"))[:4]:
         name = incoming.stem
         if not _ID_PATTERN.fullmatch(name) or incoming.is_symlink():

@@ -79,7 +79,7 @@ public final class AgentService extends Service {
             Work w=active;
             if(!secrets.enabled()&&w!=null)w.cancelled.set(true);
             JSONObject reply=post("/v1/device/poll",new JSONObject().put("enabled",secrets.enabled())
-                .put("capabilities",AgentActions.capabilities()).put("active_job_id",w==null?JSONObject.NULL:w.envelope.id));
+                .put("capabilities",AgentActions.capabilities(getApplicationContext())).put("active_job_id",w==null?JSONObject.NULL:w.envelope.id));
             JSONArray cancelled=reply.optJSONArray("cancel_job_ids");
             if(w!=null&&cancelled!=null)for(int i=0;i<cancelled.length();i++)
                 if(w.envelope.id.equals(cancelled.getString(i)))w.cancelled.set(true);
@@ -128,7 +128,8 @@ public final class AgentService extends Service {
                 }else state="succeeded";
             }
         }catch(Exception|LinkageError e){
-            state=work.cancelled.get()?"cancelled":"failed";
+            state=e instanceof BlenderSpool.RecoveryRequired ? "recovery_required"
+                :work.cancelled.get()?"cancelled":"failed";
             try{
                 String code=e.getMessage();
                 if(code==null||!code.matches("[A-Z_]{3,96}"))code=e.getClass().getSimpleName();

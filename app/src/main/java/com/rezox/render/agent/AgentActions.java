@@ -1,6 +1,8 @@
 package com.rezox.render.agent;
 
 import android.content.Context;
+import android.content.ComponentName;
+import android.content.pm.PackageManager;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.File;
@@ -15,14 +17,24 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /** Typed action boundary: future modules extend this registry, never a remote shell. */
 public final class AgentActions {
     private final ProjectScope projects;
+    private final Context context;
+    private static boolean hasFullBlender(Context context) {
+        if(context==null)return false;
+        try{ context.getPackageManager().getActivityInfo(
+            new ComponentName(context,"org.blender.blender.BlenderActivity"),0); return true; }
+        catch(PackageManager.NameNotFoundException e){return false;}
+    }
     public AgentActions(Context context) throws Exception {
+        this.context=context.getApplicationContext();
         List<File> roots = new ArrayList<>();
         File external = context.getExternalFilesDir(null);
         if (external != null) roots.add(new File(external,"Projects"));
         roots.add(new File(context.getFilesDir(),"Projects"));
         projects = new ProjectScope(roots.toArray(new File[0]));
     }
-    public static JSONArray capabilities() throws Exception {
+    public static JSONArray capabilities() throws Exception {return capabilities(null);}
+    public static JSONArray capabilities(Context context) throws Exception {
+        final boolean fullBlender=hasFullBlender(context);
         JSONArray out = new JSONArray();
         for (String id : AgentPolicy.ACTIONS.keySet()) {
             JSONObject properties = new JSONObject();
@@ -31,18 +43,31 @@ public final class AgentActions {
                 if(field.equals("offset")||field.equals("limit")){
                     prop.put("type","integer").put("minimum",field.equals("offset")?0:1);
                     prop.put("maximum",field.equals("offset")?Integer.MAX_VALUE:200);
+                }else if(field.equals("name")){
+                    prop.put("type","string").put("pattern","^[A-Za-z][A-Za-z0-9_-]{0,63}$");
+                }else if(field.equals("size")){
+                    prop.put("type","number").put("minimum",0.001).put("maximum",10000);
+                }else if(field.equals("location")){
+                    prop.put("type","array").put("minItems",3).put("maxItems",3)
+                        .put("items",new JSONObject().put("type","number").put("minimum",-100000).put("maximum",100000));
                 }else prop.put("type","string").put("pattern","^[a-f0-9]{64}$");
                 properties.put(field,prop);
             }
             JSONObject schema = new JSONObject().put("type","object").put("properties",properties)
                 .put("additionalProperties",false).put("required",new JSONArray(
                     id.equals("projects.inspect") ? new String[]{"project_id"} : new String[]{}));
-            out.put(new JSONObject().put("id",id).put("available",true).put("api_version",1)
-                .put("read_only",true).put("cancellation","between_native_calls").put("input_schema",schema));
+            boolean bpy=id.startsWith("blender.");
+            boolean available=!bpy||fullBlender;
+            JSONObject descriptor=new JSONObject().put("id",id).put("available",available).put("api_version",1)
+                .put("read_only",!id.equals("blender.object.add_cube"))
+                .put("cancellation","between_native_calls").put("input_schema",schema);
+            if(bpy&&!available)descriptor.put("reason","Full native Blender editor not packaged in this Android build");
+            if(bpy&&available)descriptor.put("requires","Open full Blender editor and wait for bpy timer startup");
+            out.put(descriptor);
         }
         for (String id : new String[]{"scene.create","scene.save","mesh.edit","rig.animate","cycles.render","eevee.render"})
             out.put(new JSONObject().put("id",id).put("available",false).put("api_version",1)
-                .put("reason","Blender scene/evaluation/render module is not integrated yet"));
+                .put("reason","Not connected to native bpy action dispatcher yet"));
         return out;
     }
     private static void checkCancelled(AtomicBoolean cancelled) {
@@ -55,9 +80,14 @@ public final class AgentActions {
         AgentPolicy.validate(command.getString("request_id"),command.getInt("api_version"),action,fields);
         checkCancelled(cancelled);
         if (action.equals("engine.status")) return new JSONObject().put("native_status",RenderNative.engineStatus())
-            .put("engineIntegrated",false).put("executed_by","android-native");
+            .put("engineIntegrated",false).put("fullBlenderEditorBundled",hasFullBlender(context))
+            .put("executed_by","android-native");
         if (action.equals("gpu.info")) return new JSONObject().put("native_status",RenderNative.gpuInfo())
             .put("is_renderer",false).put("executed_by","android-native");
+        if (action.startsWith("blender.")) {
+            if (!hasFullBlender(context)) throw new IllegalStateException("BLENDER_ENGINE_NOT_INSTALLED");
+            return new BlenderSpool(context).execute(action,args,cancelled);
+        }
         if (action.equals("projects.list")) {
             int offset = args.has("offset") ? strictInt(args,"offset") : 0;
             int limit = args.has("limit") ? strictInt(args,"limit") : 50;

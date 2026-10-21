@@ -20,6 +20,8 @@ public final class AgentPolicy {
         registry.put("projects.list", fields("offset", "limit"));
         registry.put("projects.inspect", fields("project_id", "expected_sha256"));
         registry.put("gpu.info", Collections.emptySet());
+        registry.put("blender.scene.summary", Collections.emptySet());
+        registry.put("blender.object.add_cube", fields("name", "size", "location"));
         ACTIONS = Collections.unmodifiableMap(registry);
     }
     private static Set<String> fields(String... values) {
