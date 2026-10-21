@@ -21,7 +21,7 @@ public class AgentPolicyTest {
         }
     }
     @Test public void registryExposesOnlyRealHandlers(){
-        assertEquals(20,AgentPolicy.ACTIONS.size());
+        assertEquals(21,AgentPolicy.ACTIONS.size());
         assertFalse(AgentPolicy.ACTIONS.containsKey("cycles.render"));
         assertFalse(AgentPolicy.ACTIONS.containsKey("shell.exec"));
         assertTrue(AgentPolicy.ACTIONS.containsKey("blender.scene.summary"));
@@ -38,6 +38,7 @@ public class AgentPolicyTest {
         assertTrue(AgentPolicy.ACTIONS.containsKey("blender.scene.render_settings"));
         assertTrue(AgentPolicy.ACTIONS.containsKey("blender.scene.render_still"));
         assertTrue(AgentPolicy.ACTIONS.containsKey("blender.project.restore_scene"));
+        assertTrue(AgentPolicy.ACTIONS.containsKey("blender.scene.create_lively_project"));
         assertTrue(AgentPolicy.ACTIONS.containsKey("blender.scene.populate_lively"));
         assertTrue(AgentPolicy.ACTIONS.containsKey("blender.scene.render_video"));
     }
@@ -53,11 +54,16 @@ public class AgentPolicyTest {
         AgentPolicy.validate("snapshot-1",1,"blender.project.save_copy",Collections.emptySet());
         AgentPolicy.validate("restore-1",1,"blender.project.restore_scene",
             new HashSet<>(Arrays.asList("project_id","expected_sha256")));
+        AgentPolicy.validate("fresh-scene-1",1,"blender.scene.create_lively_project",Collections.emptySet());
         AgentPolicy.validate("scenery-1",1,"blender.scene.populate_lively",Collections.emptySet());
         AgentPolicy.validate("video-1",1,"blender.scene.render_video",Collections.emptySet());
         try {
             AgentPolicy.validate("restore-2",1,"blender.project.restore_scene",Collections.emptySet());
             fail("Must require an opaque project ID");
+        } catch(IllegalArgumentException expected){}
+        try {
+            AgentPolicy.validate("fresh-scene-2",1,"blender.scene.create_lively_project",Collections.singleton("path"));
+            fail("Fresh scene accepts no external paths or scripts");
         } catch(IllegalArgumentException expected){}
         try {
             AgentPolicy.validate("video-2",1,"blender.scene.render_video",Collections.singleton("shell"));
