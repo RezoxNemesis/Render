@@ -64,6 +64,11 @@ public final class AgentService extends Service {
         return START_NOT_STICKY;
     }
     private JSONObject post(String path,JSONObject body)throws Exception{
+        if(VideoStudioMcpTransport.isSelected(credentials)) {
+            if("/v1/device/poll".equals(path))return VideoStudioMcpTransport.poll(credentials,body);
+            if("/v1/device/result".equals(path))return VideoStudioMcpTransport.complete(credentials,body);
+            throw new IllegalArgumentException("VIDEOSTUDIO_MCP_ROUTE_NOT_ALLOWED");
+        }
         return AgentHttp.post(credentials.getString("relay"),path,credentials.getString("device_token"),body);
     }
     private void sendPending()throws Exception{
@@ -83,7 +88,9 @@ public final class AgentService extends Service {
             JSONArray cancelled=reply.optJSONArray("cancel_job_ids");
             if(w!=null&&cancelled!=null)for(int i=0;i<cancelled.length();i++)
                 if(w.envelope.id.equals(cancelled.getString(i)))w.cancelled.set(true);
-            secrets.status(secrets.enabled()?"Relay authenticated. Waiting for authorized commands or running on this phone.":
+            String connection=VideoStudioMcpTransport.isSelected(credentials)
+                ?"Existing VideoStudio MCP transport":"Private Render relay";
+            secrets.status(secrets.enabled()?connection+" connected. Authorized native Render actions execute on this phone.":
                 (active==null?"Stopped. No new commands will run.":"Stopping after current native call."));
             JSONObject job=reply.optJSONObject("job");
             if(job!=null&&secrets.enabled()&&active==null&&!destroyed){
@@ -108,7 +115,9 @@ public final class AgentService extends Service {
             if(e.status==401||e.status==403){
                 secrets.enabled(false);Work w=active;if(w!=null)w.cancelled.set(true);
                 secrets.status("Connection authorization revoked or expired. No further commands will execute.");
-            }else secrets.status("Relay unavailable (HTTP "+e.status+"). Pending results are retained locally.");
+            }else if(e.status==404 && VideoStudioMcpTransport.isSelected(credentials))
+                secrets.status("VideoStudio MCP Worker has not been upgraded with the Render route yet. Native jobs are retained.");
+            else secrets.status("Command transport unavailable (HTTP "+e.status+"). Pending results are retained locally.");
         }catch(Exception e){
             secrets.status("Connection interrupted: "+e.getClass().getSimpleName()+". Pending work is journaled.");
         }finally{
