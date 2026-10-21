@@ -4,28 +4,22 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class VideoStudioMcpTransportTest {
-    private static final String HOST="https://wispy-queen-f9b5.prakasharuntandon634.workers.dev";
-    private static final String KEY="AbCdEfGhIjKlMnOpQrStUvWxYz_123456789012345678901";
-    @Test public void acceptsExistingPrivateVideoStudioMcpUrl(){
-        assertEquals(KEY,VideoStudioMcpTransport.privateOwnerKey(HOST+"/app-mcp-v3/"+KEY));
+    private static final String CODE="a".repeat(40);
+    @Test public void singleUsePairingCodeFormat(){
+        assertEquals(CODE,VideoStudioMcpTransport.pairingCode(CODE));
     }
-    @Test public void rejectsFakeHostsAndDowngrades(){
-        String[] bad={null,"","http://wispy-queen-f9b5.prakasharuntandon634.workers.dev/app-mcp-v3/"+KEY,
-            "https://evil.example/app-mcp-v3/"+KEY,
-            HOST+".evil.example/app-mcp-v3/"+KEY,
-            HOST+"/api/v3/app/register",HOST+"/mcp-v06/"+KEY,
-            HOST+"/app-mcp-v3/"+KEY+"?extra=yes",
-            HOST+"/app-mcp-v3/%2f"+KEY,
-            HOST+"/app-mcp-v3/"+KEY+"/commands"};
-        for(String value:bad) {
-            try{VideoStudioMcpTransport.privateOwnerKey(value);fail("Accepted unsafe path");}
+    @Test public void neverRequestOriginalVideoStudioPrivateOwnerUrl(){
+        for(String bad:new String[]{null,"","123","g".repeat(40),CODE+"x",
+            "https://example.com/app-mcp-v3/"+"x".repeat(43),
+            "../"+CODE}) {
+            try{VideoStudioMcpTransport.pairingCode(bad);fail("Accepted unsafe credential");}
             catch(IllegalArgumentException expected){}
         }
     }
-    @Test public void transportTypeIsSeparateFromOldRelay()throws Exception{
-        org.json.JSONObject c=new org.json.JSONObject().put("transport","videostudio-mcp-v3");
-        assertTrue(VideoStudioMcpTransport.isSelected(c));
-        c.put("transport","legacy");
-        assertFalse(VideoStudioMcpTransport.isSelected(c));
+    @Test public void independentAndSharedMcpCredentialsRemainDistinct()throws Exception{
+        org.json.JSONObject device=new org.json.JSONObject().put("transport","videostudio-mcp-v3");
+        assertTrue(VideoStudioMcpTransport.isSelected(device));
+        device.put("transport","independent-relay");
+        assertFalse(VideoStudioMcpTransport.isSelected(device));
     }
 }
