@@ -75,7 +75,8 @@ def merge_manifest(source):
     existing = {p.get(ANDROID + "name") for p in root.findall("uses-permission")}
     for permission in ("android.permission.FOREGROUND_SERVICE",
                        "android.permission.FOREGROUND_SERVICE_SPECIAL_USE",
-                       "android.permission.POST_NOTIFICATIONS"):
+                       "android.permission.POST_NOTIFICATIONS",
+                       "android.permission.WAKE_LOCK"):
         if permission not in existing:
             ET.SubElement(root, "uses-permission", {ANDROID + "name": permission})
     application.set(ANDROID + "label", "Render Studio")
