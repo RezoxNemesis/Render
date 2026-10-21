@@ -30,7 +30,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class AgentActivity extends Activity {
     private AgentSecrets secrets;
     private AgentJournal journal;
-    private EditText relay,enrollment;
+    private EditText relay,enrollment,videoStudioPairCode;
     private TextView status,history;
     private final ExecutorService background=Executors.newSingleThreadExecutor();
     private final Handler ui=new Handler(Looper.getMainLooper());
@@ -79,14 +79,31 @@ public final class AgentActivity extends Activity {
             12,0xFFBBAFD4,false));
         StudioUi.add(page,statusPanel);
         StudioUi.space(page,17);
+        LinearLayout shared=StudioUi.violetCard(this);
+        StudioUi.add(shared,StudioUi.label(this,"PREFERRED / EXISTING VIDEOSTUDIO MCP"));
+        StudioUi.space(shared,10);
+        StudioUi.add(shared,StudioUi.text(this,"One connection.\nTwo native studios.",22,StudioUi.WHITE,true));
+        StudioUi.space(shared,8);
+        StudioUi.add(shared,StudioUi.text(this,
+            "Ask ChatGPT through the existing VideoStudio MCP for a one-time Render pairing code. Enter the code here; VideoStudio's private owner key never leaves its original connection.",
+            13,0xFFE2D5FF,false));
+        StudioUi.space(shared,13);
+        videoStudioPairCode=StudioUi.field(this,"One-time Render pairing code (10 minutes)",true);
+        StudioUi.add(shared,videoStudioPairCode);
+        StudioUi.space(shared,12);
+        addAction(shared,"PAIR VIA VIDEOSTUDIO MCP",StudioUi.PURPLE,()->pairWithVideoStudio());
+        StudioUi.space(shared,10);
+        addAction(shared,"CHECK VIDEOSTUDIO MCP WORKER",StudioUi.SECONDARY,()->verifyExistingMcp());
+        StudioUi.add(page,shared);
+        StudioUi.space(page,17);
 
         LinearLayout pairPanel=StudioUi.card(this);
-        StudioUi.add(pairPanel,StudioUi.label(this,"01   /   PRIVATE PAIRING"));
+        StudioUi.add(pairPanel,StudioUi.label(this,"OPTIONAL / OLD INDEPENDENT RELAY"));
         StudioUi.space(pairPanel,8);
         StudioUi.add(pairPanel,StudioUi.text(this,"Connect your phone",21,StudioUi.WHITE,true));
         StudioUi.space(pairPanel,7);
         StudioUi.add(pairPanel,StudioUi.text(this,
-            "Use the HTTPS relay origin and one-use enrollment code. This is not your ChatGPT password.",
+            "Optional older method. The existing VideoStudio MCP above needs no new server or ChatGPT connector.",
             13,StudioUi.MUTED,false));
         StudioUi.space(pairPanel,14);
         relay=StudioUi.field(this,"Relay origin  ·  https://…",false);
@@ -152,6 +169,32 @@ public final class AgentActivity extends Activity {
         TextView view=StudioUi.action(this,title,style);
         StudioUi.add(parent,view);
         view.setOnClickListener(v->action.run());
+    }
+    private void pairWithVideoStudio(){
+        final String oneTimeCode=videoStudioPairCode.getText().toString().trim();
+        videoStudioPairCode.setText(""); // Do not retain a reusable code in the UI.
+        if(oneTimeCode.isEmpty()){
+            new AlertDialog.Builder(this).setTitle("One-time code required")
+                .setMessage("Ask ChatGPT to get the new Render pairing code using your existing VideoStudio MCP. Enter that short-lived code here. Do not copy your private VideoStudio owner link.")
+                .setPositiveButton("OK",null).show();
+            return;
+        }
+        perform(()->{
+            if(secrets.load()!=null)
+                throw new IllegalStateException("Revoke the previous Render pairing before changing transport. VideoStudio stays connected.");
+            JSONObject credentials=VideoStudioMcpTransport.pair(oneTimeCode);
+            secrets.save(credentials);
+            secrets.enabled(false);
+            secrets.status("Render paired to existing VideoStudio MCP. Start the native agent session.");
+            return "Render uses your existing VideoStudio MCP! No second ChatGPT connection or extra relay is needed. Start Agent Session on this phone to accept native Blender commands.";
+        });
+    }
+    private void verifyExistingMcp(){
+        perform(()->{
+            JSONObject check=VideoStudioMcpTransport.checkSharedWorker();
+            return "Existing VideoStudio MCP Worker reachable: "+check.optString("service")
+                +"\nThe phone still needs one-time pairing and Start Agent Session.";
+        });
     }
     private void testRelay(){
         String requested=relay.getText().toString().trim();
