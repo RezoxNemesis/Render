@@ -25,28 +25,11 @@ public final class VideoStudioMcpTransport {
     private static final String FAMILY="videostudio-mcp-v3";
     private VideoStudioMcpTransport(){}
 
-    /**
-     * Parse ONLY the existing private VideoStudio owner lane. The URL contains
-     * a secret. Return its key only in memory and never log, persist or display.
-     */
-    public static String privateOwnerKey(String pasted) {
-        if(pasted==null)throw new IllegalArgumentException("Paste the private VideoStudio MCP v3 link from VideoStudio.");
-        try {
-            URI uri=new URI(pasted.trim());
-            if(!"https".equals(uri.getScheme()) || !HOST.equals(uri.getHost()) ||
-               uri.getPort()!=-1 || uri.getUserInfo()!=null ||
-               uri.getRawQuery()!=null || uri.getRawFragment()!=null)
-                throw new IllegalArgumentException("Use the original VideoStudio /app-mcp-v3/ HTTPS link, not a login or GitHub URL.");
-            String path=uri.getRawPath();
-            String prefix="/app-mcp-v3/";
-            if(path==null || !path.startsWith(prefix))throw new IllegalArgumentException("Paste the full private VideoStudio /app-mcp-v3/ link.");
-            String key=path.substring(prefix.length());
-            if(!key.matches("[A-Za-z0-9_-]{32,128}"))
-                throw new IllegalArgumentException("VideoStudio MCP private link is incomplete or malformed.");
-            return key;
-        }catch(java.net.URISyntaxException e) {
-            throw new IllegalArgumentException("VideoStudio MCP link is malformed.");
-        }
+    /** The existing VideoStudio MCP provides a single-use pairing code. */
+    public static String pairingCode(String supplied) {
+        if(supplied==null || !supplied.trim().matches("[a-f0-9]{40}"))
+            throw new IllegalArgumentException("Enter the one-time pairing code from VideoStudio MCP, not the private owner link.");
+        return supplied.trim();
     }
     private static JSONObject request(String method,String route,String token,JSONObject body)throws Exception {
         if(!route.matches("/api/v3/render/(health|link|poll|result|unlink)"))
@@ -87,8 +70,8 @@ public final class VideoStudioMcpTransport {
             throw new java.io.IOException("RENDER_BRIDGE_WORKER_NOT_READY");
         return result;
     }
-    public static JSONObject pair(String originalVideoStudioPrivateMcpUrl)throws Exception {
-        String videoKey=privateOwnerKey(originalVideoStudioPrivateMcpUrl);
+    public static JSONObject pair(String shortCode)throws Exception {
+        String code=pairingCode(shortCode);
         byte[] random=new byte[32];
         new SecureRandom().nextBytes(random);
         String renderKey=Base64.getUrlEncoder().withoutPadding().encodeToString(random);
@@ -97,7 +80,7 @@ public final class VideoStudioMcpTransport {
             .put("protocolFamily","render-native").put("nativeAgent","render-native-v1")
             .put("protocolVersion",3).put("appGeneration",1)
             .put("galleryAccess",false);
-        JSONObject request=new JSONObject().put("videoStudioOwnerKey",videoKey)
+        JSONObject request=new JSONObject().put("pairingCode",code)
             .put("renderDeviceId",renderId).put("renderOwnerKey",renderKey)
             .put("meta",metadata);
         JSONObject response=VideoStudioMcpTransport.request(
