@@ -62,6 +62,10 @@ def merge_manifest(source):
                      if node.get(ANDROID + "name") == "org.blender.blender.BlenderActivity"), None)
     if activity is None:
         raise ValueError("UPSTREAM_BLENDER_ACTIVITY_MISSING")
+    # Upstream pins all users to sensorLandscape. Render instead exposes
+    # full landscape AND a portrait-focused native workspace on a phone.
+    # Java BlenderMobileControls supplies the owner's preferred orientation.
+    activity.set(ANDROID + "screenOrientation", "unspecified")
     # One launcher opens Render's hub; native editor keeps .blend VIEW/EDIT intents.
     for intent in list(activity.findall("intent-filter")):
         if any(x.get(ANDROID + "name") == "android.intent.action.MAIN"
@@ -126,6 +130,7 @@ def patch_native_activity(path):
     if java.count(original) != 1:
         raise ValueError("PINNED_BLENDER_ACTIVITY_HOOK_CHANGED")
     patch = original + """
+    setRequestedOrientation(BlenderMobileControls.preferredOrientation(this));
     /* Startup breadcrumb visible in Render Editor Diagnostics even if the GPU fails. */
     getSharedPreferences("render_editor_launch", MODE_PRIVATE).edit()
         .putString("stage", "Blender NativeActivity initialized; preparing native viewport")
@@ -151,6 +156,51 @@ def patch_native_activity(path):
         .putString("stage", "Blender NativeActivity created; awaiting Vulkan frames")
         .putLong("updated", System.currentTimeMillis()).apply();
 """,1)
+    # The stock NativeActivity hides all Android bars and places Blender's
+    # toolbar under cutouts. Restore safe content insets and provide an
+    # always-reachable in-editor Home/Focus/Scale/Rotate touch panel.
+    old_launch = ("    setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);"
+                  "\n    enterImmersive();")
+    if old_launch not in java:
+        raise ValueError("PINNED_NATIVE_BLENDER_LAUNCH_HOOK_CHANGED")
+    java = java.replace(old_launch, "    BlenderMobileControls.attach(this);", 1)
+    old_immersive = """  private void enterImmersive() {
+    View d = getWindow().getDecorView();
+    d.setSystemUiVisibility(
+        View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+        | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+        | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+        | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+        | View.SYSTEM_UI_FLAG_FULLSCREEN
+        | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+  }"""
+    if old_immersive not in java:
+        raise ValueError("PINNED_BLENDER_INSETS_HOOK_CHANGED")
+    java = java.replace(old_immersive, """  private void enterImmersive() {
+    BlenderMobileControls.applySafeInsets(this);
+  }""", 1)
+    if "android.window.OnBackInvokedCallback renderBackCallback;" not in java:
+        cls = "public class BlenderActivity extends NativeActivity {"
+        if java.count(cls)!=1: raise ValueError("PINNED_BLENDER_CLASS_DECLARATION_CHANGED")
+        java=java.replace(cls,cls+"\n  android.window.OnBackInvokedCallback renderBackCallback;",1)
+    if "  public void onBackPressed(" in java or "  protected void onDestroy(" in java:
+        raise ValueError("PINNED_BLENDER_NAVIGATION_HOOK_COLLISION")
+    # The system back callback handles Android 13+/16 gestures. This fallback
+    # handles old navigation-key devices. Neither exits without confirmation.
+    addon = """
+  @Override
+  public void onBackPressed() {
+    BlenderMobileControls.confirmHome(this);
+  }
+
+  @Override
+  protected void onDestroy() {
+    BlenderMobileControls.detach(this);
+    super.onDestroy();
+  }
+"""
+    if not java.rstrip().endswith("}"): raise ValueError("INVALID_UPSTREAM_JAVA_END")
+    java = java.rstrip()[:-1] + addon + "}"
     path.write_text(java, encoding="utf-8")
 
 def check_source(source, verify):

@@ -18,8 +18,25 @@ class NativePackagingTests(unittest.TestCase):
         java = self.source / "build_files/android/apk/app/src/main/java/org/blender/blender"
         java.mkdir(parents=True)
         (java / "BlenderActivity.java").write_text(
-            "package org.blender.blender; class BlenderActivity {"
-            "  protected void onCreate(Bundle state) { } }")
+            "package org.blender.blender; import android.app.NativeActivity; "
+            "import android.content.pm.ActivityInfo; import android.view.View;"
+            "public class BlenderActivity extends NativeActivity {"
+            "  protected void onCreate(Bundle state) {"
+            "    super.onCreate(state);"
+            "    setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);"
+            "\n    enterImmersive();"
+            "  }"
+            "  private void enterImmersive() {"
+            "    View d = getWindow().getDecorView();"
+            "    d.setSystemUiVisibility("
+            "        View.SYSTEM_UI_FLAG_LAYOUT_STABLE"
+            "        | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION"
+            "        | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN"
+            "        | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION"
+            "        | View.SYSTEM_UI_FLAG_FULLSCREEN"
+            "        | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);"
+            "  }"
+            "}")
         main = self.source / "build_files/android/apk/app/src/main"
         (main / "res/values").mkdir(parents=True)
         (main / "res/values/strings.xml").write_text("<resources/>")
@@ -74,6 +91,9 @@ class NativePackagingTests(unittest.TestCase):
         self.assertTrue(java.exists())
         self.assertIn("RENDER_AGENT_SPOOL",java.read_text())
         self.assertIn("render_editor_launch",java.read_text())
+        self.assertIn("BlenderMobileControls.attach(this)",java.read_text())
+        self.assertIn("BlenderMobileControls.confirmHome(this)",java.read_text())
+        self.assertIn("BlenderMobileControls.applySafeInsets(this)",java.read_text())
         self.assertTrue((self.output / "assets/licenses/Render-Full-Native-Sources.txt").exists())
         root = ET.parse(self.output / "AndroidManifest.xml").getroot()
         assert root.find("queries") is not None
@@ -91,6 +111,7 @@ class NativePackagingTests(unittest.TestCase):
         self.assertIn("com.rezox.render.EditorLaunchActivity", activities)
         blender = activities["org.blender.blender.BlenderActivity"]
         self.assertEqual(1, len(blender.findall("intent-filter")))
+        self.assertEqual("unspecified",blender.get(A+"screenOrientation"))
         launch = activities["com.rezox.render.RenderHubActivity"]
         self.assertEqual("android.intent.action.MAIN",
                          launch.find("intent-filter/action").get(A+"name"))
