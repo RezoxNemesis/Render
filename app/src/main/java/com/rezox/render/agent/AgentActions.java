@@ -200,6 +200,14 @@ public final class AgentActions {
                 }
                 throw new IllegalStateException("SAVED_PROJECT_NOT_INDEXED");
             }
+            if (action.equals("blender.scene.render_video")) {
+                try { return RenderVideoExport.publish(context,result); }
+                catch (Exception exportError) {
+                    // The native MP4 still exists. Report export failure without
+                    // lying about whether Blender rendered it.
+                    return result.put("android_downloads_export_warning","DOWNLOAD_EXPORT_FAILED");
+                }
+            }
             return result;
         }
         if (action.equals("projects.list")) {
