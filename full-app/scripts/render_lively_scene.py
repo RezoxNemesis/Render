@@ -163,6 +163,110 @@ def _animal(name, start, end, fur, collection, frames, cat=False):
     return root
 
 
+
+def create_lively_project(args):
+    """Build a separate, editable building and lively animation in native bpy.
+
+    Never clear the old scene, close other windows, or overwrite a .blend file.
+    On failure return to the previous scene and remove only our new scene.
+    Persistence requires the separate, owner-approved save_copy command.
+    """
+    if args:
+        raise ValueError("UNEXPECTED_ARGUMENT")
+    window = bpy.context.window
+    if window is None or window.scene is None:
+        raise RuntimeError("BLENDER_WINDOW_UNAVAILABLE")
+    previous = window.scene
+    if any(s.get("render_fresh_lively_complete", False) for s in bpy.data.scenes):
+        raise ValueError("FRESH_LIVELY_PROJECT_ALREADY_EXISTS")
+
+    scene = bpy.data.scenes.new("Lively Building - New Project")
+    try:
+        window.scene = scene
+        building = bpy.data.collections.new(_PREFIX + "NewBuilding")
+        scene.collection.children.link(building)
+        cream = _mat("FreshFacade", (.80, .74, .63), roughness=.76)
+        stone = _mat("FreshStone", (.69, .67, .63), roughness=.81)
+        brass = _mat("FreshBrass", (.71, .54, .23), metallic=.65, roughness=.33)
+        window_glass = _mat("FreshGlass", (.11, .29, .38), metallic=.24, roughness=.18)
+        charcoal = _mat("FreshFrame", (.20, .24, .27), metallic=.45, roughness=.30)
+        wood = _mat("FreshDoor", (.32, .19, .11), roughness=.47)
+
+        def part(name, shape, loc, half_size, material):
+            ob = _mesh(name, shape, loc, half_size, material, building)
+            # Keep the architectural identifiers used by the typed decoration command.
+            ob.name = name
+            return ob
+
+        # Four-storey architecture. Every object stays independently editable.
+        part("MainBuilding", "cube", (0, 2.0, 6.2), (9.0, 5.0, 6.2), cream)
+        part("StonePlinth", "cube", (0, 2.0, .15), (9.35, 5.35, .32), stone)
+        part("RoofCap", "cube", (0, 2.0, 12.70), (9.60, 5.50, .38), brass)
+        part("RoofParapetFront", "cube", (0, -3.31, 13.15), (9.52, .22, .49), stone)
+        part("RoofParapetBack", "cube", (0, 7.33, 13.15), (9.52, .22, .49), stone)
+        for side, xx in (("L", -9.38), ("R", 9.38)):
+            part("RoofParapet" + side, "cube", (xx, 2, 13.15), (.21, 5.40, .49), stone)
+        for index, z in enumerate((3.33, 6.49, 9.66), start=1):
+            part("FloorBand" + str(index), "cube",
+                 (0, -3.16, z), (9.33, .24, .12), brass)
+        for floor, z in enumerate((2.14, 5.29, 8.43, 11.54), start=1):
+            for column, x in enumerate((-6.65, -3.26, 3.26, 6.65), start=1):
+                prefix = "Window" + str(floor) + "_" + str(column)
+                part(prefix + "Pane", "cube", (x, -3.16, z),
+                     (1.05, .105, .94), window_glass)
+                for side, dx in (("L", -1.15), ("R", 1.15)):
+                    part(prefix + "Frame" + side, "cube", (x + dx, -3.24, z),
+                         (.10, .14, 1.04), charcoal)
+                for edge, dz in (("Top", 1.02), ("Base", -1.02)):
+                    part(prefix + "Frame" + edge, "cube", (x, -3.24, z + dz),
+                         (1.22, .14, .10), charcoal)
+                part(prefix + "Mullion", "cube", (x, -3.30, z),
+                     (.045, .09, .92), charcoal)
+
+        # Balconies, railings, doorway and architectural details.
+        for level, z in enumerate((5.30, 8.45), start=1):
+            for side, x in (("L", -5.05), ("R", 5.05)):
+                tag = str(level) + side
+                part("BalconyDeck" + tag, "cube", (x, -4.22, z-1.22),
+                     (1.67, 1.30, .14), stone)
+                part("BalconyRail" + tag, "cube", (x, -5.42, z-.63),
+                     (1.67, .10, .56), charcoal)
+                for dx, end in ((-1.54, "L"), (1.54, "R")):
+                    part("BalconyRailPost" + tag + end, "cube",
+                         (x + dx, -5.42, z-.64), (.11, .13, .57), brass)
+        part("FrontDoor", "cube", (0, -3.22, 1.35), (1.19, .16, 1.35), wood)
+        for side, x in (("L", -1.30), ("R", 1.30)):
+            part("DoorFrame" + side, "cube", (x, -3.35, 1.48),
+                 (.12, .17, 1.52), charcoal)
+        part("DoorFrameTop", "cube", (0, -3.35, 2.95), (1.43, .17, .12), charcoal)
+        part("DoorHandle", "sphere", (.76, -3.41, 1.27),
+             (.09, .09, .16), brass)
+        part("EntryCanopy", "cube", (0, -4.34, 3.34), (2.20, 1.56, .18), brass)
+        part("FrontStep1", "cube", (0, -4.10, .09), (1.69, 1.00, .18), stone)
+        part("FrontStep2", "cube", (0, -5.14, -.10), (1.95, .58, .12), stone)
+
+        environment = populate_lively(scene, {})
+        scene["render_fresh_lively_complete"] = True
+        return {
+            "new_scene": scene.name,
+            "new_building_objects": len(building.objects),
+            "environment_objects": environment["environment_objects"],
+            "walking_people": environment["walking_people"],
+            "walking_dogs": environment["walking_dogs"],
+            "walking_cats": environment["walking_cats"],
+            "duration_seconds": environment["duration_seconds"],
+            "fps": environment["fps"],
+            "previous_scene_preserved": previous in bpy.data.scenes,
+            "previous_scene_name": previous.name,
+            "new_scene_needs_save_copy": True,
+            "executed_by": "bpy-main-thread-on-android",
+        }
+    except Exception:
+        window.scene = previous
+        bpy.data.scenes.remove(scene, do_unlink=True)
+        raise
+
+
 def populate_lively(scene, args):
     if args:
         raise ValueError("UNEXPECTED_ARGUMENT")
