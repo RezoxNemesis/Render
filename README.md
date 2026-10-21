@@ -11,14 +11,16 @@
 - Downloadable Google Drive asset libraries and backup are optional; active resources must be local when offline.
 - Do not advertise feature parity until real Android device tests against upstream Blender show it.
 
-**Current status: Android application/NDK foundation with native .blend framing preflight, Vulkan capability probing, and one real Blender BLI C++ module compiled for Android. It does not yet contain or execute Blender itself. This is not a full Blender port or a render-capable APK.**
+**Current status: Android application/NDK foundation with native .blend framing preflight, Vulkan capability probing, and one real Blender BLI C++ module compiled for Android. The full Blender scene engine is not integrated: only a genuine upstream math module is compiled. This is not a full Blender port or a render-capable APK.**
 
 ## Repository layout
 
 - `app/` — native Android shell, Storage Access Framework `.blend` import, JNI bridge, native file-format preflight, Vulkan hardware probe (not a renderer).
 - `docs/ENGINE_PORT_CONTRACT.md` — technical port plan and release gates.
 - `docs/BLEND_FILE_PREFLIGHT.md` — detailed v0/v1 binary format coverage and strict limitations.
-- `native-tests/` — host C++ unit tests against synthetic binary header/block fixtures.
+- `native-tests/` — host C++ tests for structural file preflight and Blender FP16 math.
+- `third_party/blender_half/` — actual version-pinned upstream Blender math code (GPL) plus narrow Android guard patch.
+- `docs/BLENDER_UPSTREAM_PORT.md` — upstream source provenance and next core engine integration.
 - `docs/ASSETS_AND_STORAGE.md` — Google Drive and offline asset architecture.
 - `docs/PARITY_MATRIX.md` — feature acceptance tracking.
 - `tools/check_contract.py` — static checks that guard against silent remote-compute substitution.
@@ -40,6 +42,6 @@ The project deliberately does not include a checked-in Gradle wrapper binary; a 
 ## Blender upstream and licensing
 
 Blender official source: https://projects.blender.org/blender/blender and public mirror https://github.com/blender/blender .
-The eventual integrated Blender-derived app must fulfill Blender's GNU GPL and all third-party asset/component licenses, include license/attribution notices, and provide corresponding source. This foundation contains no redistributed Blender code or bundled Blender assets yet.
+The eventual integrated Blender-derived app must fulfill Blender's GNU GPL and all third-party asset/component licenses, include license/attribution notices, and provide corresponding source. This foundation includes genuine Blender BLI FP16 source and its GPLv2 license text under third_party/blender_half; it does not bundle Blender factory assets. Full GPL/copyleft and bundled third-party license obligations will apply to distributable releases.
 
 See the documents for blockers and milestone gates. Do not mark core features implemented based on this scaffold.

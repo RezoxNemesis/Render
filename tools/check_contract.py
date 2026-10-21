@@ -15,7 +15,7 @@ required = {
     "engine must not pretend ready": "JNI_FALSE" in jni and "NOT integrated" in jni,
     "SAF import": "ACTION_OPEN_DOCUMENT" in activity,
     "local streaming": "InputStream" in activity and "OutputStream" in activity,
-    "honest scaffold status": "does not yet contain or execute Blender itself" in readme,
+    "honest scaffold status": "This is not a full Blender port or a render-capable APK." in readme,
     "Drive optional": "optional" in store and "NO Blender factory assets have been uploaded" in store,
 }
 for name, ok in required.items():
