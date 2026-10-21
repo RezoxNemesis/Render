@@ -119,6 +119,20 @@ def main():
         assert invalid_mat["state"]=="failed"
         assert invalid_mat["error"]=="INVALID_MATERIAL_COLOR"
 
+        # Genuine CPU Cycles still: verify actual Blender engine output, not
+        # simply action registration or a fabricated file reference.
+        still=submit("blender.scene.render_still",{})
+        assert still["state"]=="succeeded",still
+        report=still["result"]
+        image=root.parent/"Renders"/report["filename"]
+        assert image.is_file(),image
+        assert image.read_bytes()[:8]==b"\x89PNG\r\n\x1a\n"
+        assert report["bytes"]==image.stat().st_size
+        assert report["sha256"]==__import__("hashlib").sha256(image.read_bytes()).hexdigest()
+        assert report["engine"]=="CYCLES"
+        assert report["resolution"]==[64,64]
+        assert report["executed_by"]=="bpy-main-thread-on-android"
+
         invalid_key=submit("blender.object.keyframe",{
             "name":"NativeRenderCube","data_path":"__class__","frame":25,
             "value":[1,2,3]})
@@ -164,7 +178,7 @@ def main():
         assert saved["result"]["sha256"]==digest.hexdigest()
         assert saved["result"]["copied_without_changing_open_project"] is True
 
-        print("PASS: real Blender bpy scene, keyframes, transforms, security and expired jobs and actual saved .blend snapshots")
+        print("PASS: actual Blender 3D geometry, camera, materials, modifiers, animation, PNG render and .blend saving")
 
 if __name__=="__main__":
     main()
