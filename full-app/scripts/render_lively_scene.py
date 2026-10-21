@@ -163,10 +163,22 @@ def populate_lively(scene, args):
     # Never populate the accidental empty Blender tab. Require the saved building.
     if "RoofCap" not in scene.objects or "EntryCanopy" not in scene.objects:
         raise ValueError("BUILDING_MODEL_NOT_LOADED")
-    if _PREFIX+"LivelyEnvironment" in bpy.data.collections:
-        raise ValueError("LIVELY_SCENERY_ALREADY_PRESENT")
+    existing = scene.collection.children.get(_PREFIX+"LivelyEnvironment")
+    if existing is not None:
+        if existing.get("render_populate_complete", False):
+            raise ValueError("LIVELY_SCENERY_ALREADY_PRESENT")
+        # An interrupted native command may leave half-built scenery behind.
+        # Delete ONLY our incomplete collection, never user building objects.
+        for incomplete in list(existing.objects):
+            if incomplete.name.startswith(_PREFIX):
+                bpy.data.objects.remove(incomplete, do_unlink=True)
+            else:
+                raise RuntimeError("SCENERY_RECOVERY_CONFLICT")
+        scene.collection.children.unlink(existing)
+        bpy.data.collections.remove(existing)
     collection = bpy.data.collections.new(_PREFIX+"LivelyEnvironment")
     scene.collection.children.link(collection)
+    collection["render_populate_complete"] = False
 
     grass = _mat("GardenGrass",(.22,.43,.16))
     road = _mat("Road",(.22,.23,.26))
@@ -253,6 +265,7 @@ def populate_lively(scene, args):
     scene.render.resolution_y=540
     scene.render.resolution_percentage=100
     scene.frame_set(1)
+    collection["render_populate_complete"] = True
     return {
         "environment_objects": len(collection.objects),
         "walking_people": 3,
@@ -273,7 +286,8 @@ def render_video(scene, args, uid, spool):
     """Render native MP4 in app-owned Renders; no cloud process or upload."""
     if args:
         raise ValueError("UNEXPECTED_ARGUMENT")
-    if _PREFIX+"LivelyEnvironment" not in bpy.data.collections:
+    completed = scene.collection.children.get(_PREFIX+"LivelyEnvironment")
+    if completed is None or not completed.get("render_populate_complete", False):
         raise ValueError("SCENERY_NOT_READY")
     if not spool or not re.fullmatch(r"[a-f0-9]{32}",str(uid)):
         raise ValueError("INVALID_RENDER_JOB_ID")
