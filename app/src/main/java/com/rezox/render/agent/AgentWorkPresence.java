@@ -131,6 +131,13 @@ public final class AgentWorkPresence {
                 .setOnlyAlertOnce(true)
                 .setCategory(Notification.CATEGORY_PROGRESS);
         if(running){
+            PendingIntent stop=PendingIntent.getBroadcast(ctx,79,
+                    new Intent(ctx,NativeWorkStopReceiver.class)
+                        .setAction(NativeWorkStopReceiver.ACTION_STOP),
+                    PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
+            builder.addAction(new Notification.Action.Builder(
+                    android.R.drawable.ic_media_pause,
+                    "Stop new commands",stop).build());
             builder.setWhen(s.startedAt>0?s.startedAt:System.currentTimeMillis())
                     .setUsesChronometer(true)
                     .setProgress(100,Math.max(s.progress,0),s.progress<0);
