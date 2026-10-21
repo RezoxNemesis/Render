@@ -4,6 +4,9 @@ on:
     branches: ["feature/android-native-foundation-20261021"]
     paths:
       - "full-app/**"
+      - "app/src/main/java/**"
+      - "app/src/main/cpp/**"
+      - "app/build.gradle.kts"
       - "tools/test_blender_bpy_bridge.py"
       - "tools/test_real_blender_bpy.py"
       - "tools/assemble_full_native.py"
