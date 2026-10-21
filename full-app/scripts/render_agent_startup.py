@@ -527,6 +527,21 @@ def _dispatch(command):
             "executed_by": "bpy-main-thread-on-android",
             "warning": "Referenced external textures and libraries are not automatically packed",
         }
+    if action in ("blender.project.restore_scene",
+                  "blender.scene.populate_lively",
+                  "blender.scene.render_video"):
+        import importlib.util
+        helper_path = Path(__file__).with_name("render_lively_scene.py")
+        if not helper_path.is_file():
+            raise RuntimeError("LIVELY_SCENE_MODULE_NOT_PACKAGED")
+        spec = importlib.util.spec_from_file_location("render_lively_scene", helper_path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        if action == "blender.project.restore_scene":
+            return module.restore_scene(args, ROOT)
+        if action == "blender.scene.populate_lively":
+            return module.populate_lively(scene, args)
+        return module.render_video(scene, args, command.get("id"), ROOT)
     extra = _model_action(command, scene)
     if extra is not None:
         return extra
