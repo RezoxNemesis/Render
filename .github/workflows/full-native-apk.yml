@@ -92,34 +92,8 @@ jobs:
             --bridge-apk "app/build/outputs/apk/debug/app-debug.apk" \
             --upstream-source "$RUNNER_TEMP/full-blender-src" \
             --output "full-app/stage"
-      - name: Prepare owner-protected stable release signing
-        shell: bash
-        env:
-          SIGNING_B64: ${{ secrets.RENDER_ANDROID_SIGNING_KEYSTORE_B64 }}
-          STORE_PASS: ${{ secrets.RENDER_ANDROID_SIGNING_STORE_PASSWORD }}
-          SIGN_ALIAS: ${{ secrets.RENDER_ANDROID_SIGNING_KEY_ALIAS }}
-          KEY_PASS: ${{ secrets.RENDER_ANDROID_SIGNING_KEY_PASSWORD }}
-        run: |
-          set -euo pipefail
-          if [[ -z "$SIGNING_B64" ]]; then
-            echo "Release signing secrets absent; debug APK only." >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          if [[ -z "$STORE_PASS" || -z "$SIGN_ALIAS" || -z "$KEY_PASS" ]]; then
-            echo "Incomplete protected release signing secrets" >&2
-            exit 1
-          fi
-          keyfile="$RUNNER_TEMP/render-studio-release.p12"
-          printf "%s" "$SIGNING_B64" | base64 --decode > "$keyfile"
-          chmod 600 "$keyfile"
-          keytool -list -v -storetype PKCS12 -keystore "$keyfile" \
-            -storepass "$STORE_PASS" -alias "$SIGN_ALIAS" \
-            > "$RUNNER_TEMP/render-release-cert.txt"
-          grep -Fq "03:01:F0:84:CB:37:45:7B:E8:23:53:A8:A0:7E:88:14:35:17:5B:FD:5B:F0:CF:EA:FA:2C:3D:D4:B2:5F:CF:57" \
-            "$RUNNER_TEMP/render-release-cert.txt"
-          echo "RENDER_ANDROID_SIGNING_STORE_FILE=$keyfile" >> "$GITHUB_ENV"
-          echo "RENDER_STABLE_SIGNING_READY=1" >> "$GITHUB_ENV"
-
+      # Release secrets never enter push/PR feature-branch runners.
+      # Only render-owner-release.yml may sign after protected environment approval.
       - name: Compile full native engine + agent Android APK
         run: gradle -p full-app --no-daemon :app:assembleDebug
       - name: Verify engine, agent, runtime and signature
@@ -136,44 +110,6 @@ jobs:
           grep -q "package: name='com.rezox.render'" "$RUNNER_TEMP/render-full-badging.txt"
           grep -q "launchable-activity: name='com.rezox.render.RenderHubActivity'" "$RUNNER_TEMP/render-full-badging.txt"
           sha256sum "$APK" | tee "$RUNNER_TEMP/render-full-sha256.txt"
-      - name: Compile stable signed release
-        if: env.RENDER_STABLE_SIGNING_READY == '1'
-        env:
-          RENDER_ANDROID_SIGNING_STORE_PASSWORD: ${{ secrets.RENDER_ANDROID_SIGNING_STORE_PASSWORD }}
-          RENDER_ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.RENDER_ANDROID_SIGNING_KEY_PASSWORD }}
-          RENDER_ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.RENDER_ANDROID_SIGNING_KEY_ALIAS }}
-        run: gradle -p full-app --no-daemon :app:assembleRelease
-
-      - name: Verify owner certificate and release package
-        if: env.RENDER_STABLE_SIGNING_READY == '1'
-        shell: bash
-        run: |
-          set -euo pipefail
-          APK=full-app/app/build/outputs/apk/release/app-release.apk
-          test -s "$APK"
-          unzip -tqq "$APK"
-          unzip -Z -1 "$APK" | grep -Fx "lib/arm64-v8a/libblender.so"
-          unzip -Z -1 "$APK" | grep -Fx "lib/arm64-v8a/librender_bridge.so"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" \
-            > "$RUNNER_TEMP/render-release-signature.txt"
-          grep -Fqi "0301f084cb3745b8e82353a8a07e881435175bfd5bf0cfeafa2c3dd4b25fcf57" \
-            "$RUNNER_TEMP/render-release-signature.txt"
-          sha256sum "$APK" > "$RUNNER_TEMP/render-release-sha256.txt"
-          echo "Owner release certificate verified. Retain the same keystore for updates." >> "$GITHUB_STEP_SUMMARY"
-
-      - uses: actions/upload-artifact@v4
-        if: env.RENDER_STABLE_SIGNING_READY == '1'
-        with:
-          name: render-studio-owner-signed-native-blender-release
-          path: full-app/app/build/outputs/apk/release/app-release.apk
-          compression-level: 0
-          retention-days: 14
-          if-no-files-found: error
-
-      - name: Erase signing keystore from the CI runner
-        if: always()
-        run: rm -f "$RUNNER_TEMP/render-studio-release.p12"
-
       - uses: actions/upload-artifact@v4
         with:
           name: render-full-native-blender-and-chatgpt-agent-debug
