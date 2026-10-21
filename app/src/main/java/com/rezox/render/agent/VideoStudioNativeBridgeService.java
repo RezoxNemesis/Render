@@ -30,6 +30,13 @@ public final class VideoStudioNativeBridgeService extends Service {
     public static final int EXECUTE = 1;
     public static final int RESPONSE = 2;
     private static volatile AtomicBoolean runningCancellation;
+    private static volatile VideoStudioNativeBridgeService currentService;
+    /** Commands waiting only inside Render Android; not the cloud transport. */
+    public static int pendingBinderCommands(){
+        VideoStudioNativeBridgeService current=currentService;
+        return current==null?0:current.worker.getQueue().size();
+    }
+    public static boolean binderServiceActive(){return currentService!=null;}
     // Bound incoming Binder work. An unlimited queue can exhaust the app while
     // Blender renders or the phone is under memory/thermal pressure.
     private final ThreadPoolExecutor worker = new ThreadPoolExecutor(
@@ -56,6 +63,7 @@ public final class VideoStudioNativeBridgeService extends Service {
 
     @Override public void onCreate() {
         super.onCreate();
+        currentService=this;
         secrets = new AgentSecrets(this);
         journal = new AgentJournal(this);
         if(!AgentExecutionLock.BUSY.get()) {
@@ -208,6 +216,7 @@ public final class VideoStudioNativeBridgeService extends Service {
     }
 
     @Override public void onDestroy(){
+        currentService=null;
         requestCancel();
         worker.shutdown();
         super.onDestroy();
