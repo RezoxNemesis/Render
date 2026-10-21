@@ -18,7 +18,9 @@ public final class BlenderSpool {
         RecoveryRequired(String code) { super(code); }
     }
     private final File root;
+    private final Context app;
     public BlenderSpool(Context context) {
+        app=context.getApplicationContext();
         root = new File(context.getFilesDir(), "render_bpy_jobs");
     }
     private static boolean finite(Object value, double low, double high) {
@@ -191,6 +193,9 @@ public final class BlenderSpool {
         File request=new File(pending,id+".json");
         File claimed=new File(working,id+".json");
         File resultFile=new File(results,id+".json");
+        File progressFile=new File(new File(root,"progress"),id+".json");
+        long lastPresenceUpdate=0;
+        long lastProgressModified=-1;
         long timeoutMillis=action.equals("blender.scene.render_video") ? 1800000L :
             action.equals("blender.scene.create_lively_project") ? 120000L :
             action.equals("blender.scene.populate_lively") ? 120000L :
@@ -208,12 +213,40 @@ public final class BlenderSpool {
         catch(java.nio.file.AtomicMoveNotSupportedException e) {
             Files.move(temporary.toPath(),request.toPath());
         }
+        AgentWorkPresence.stage(app,action.equals("blender.scene.render_video")?
+                "Rendering Blender animation on this phone":"Waiting for Blender main-thread receipt",-1);
         long deadline=SystemClock.elapsedRealtime()+timeoutMillis;
         while(SystemClock.elapsedRealtime()<deadline){
+            // The Blender timer or native FFmpeg renderer may occupy the main
+            // thread for several minutes. Read only the matching owned job's
+            // progress file; never invent a percentage or replay a timed-out edit.
+            long now=SystemClock.elapsedRealtime();
+            if(progressFile.isFile() && progressFile.lastModified()!=lastProgressModified &&
+                    progressFile.length()>0 && progressFile.length()<4096){
+                try {
+                    JSONObject progress=new JSONObject(new String(
+                        Files.readAllBytes(progressFile.toPath()),StandardCharsets.UTF_8));
+                    if(id.equals(progress.optString("id"))){
+                        String stage=progress.optString("stage","Native Blender running");
+                        if(!stage.matches("[A-Za-z0-9 _.-]{1,80}"))stage="Native Blender running";
+                        int percent=progress.optInt("percent",-1);
+                        AgentWorkPresence.stage(app,stage,percent);
+                        lastProgressModified=progressFile.lastModified();
+                        lastPresenceUpdate=now;
+                    }
+                }catch(Exception ignored){ /* Never fail a render on telemetry. */ }
+            }
+            if(now-lastPresenceUpdate>=8000L){
+                AgentWorkPresence.stage(app,action.equals("blender.scene.render_video")?
+                        "Rendering on Android - detailed progress unavailable":
+                        "Native Blender command still in progress",-1);
+                lastPresenceUpdate=now;
+            }
             if(resultFile.isFile()){
                 if(resultFile.length()>65536)throw new IllegalStateException("BLENDER_RESULT_TOO_LARGE");
                 byte[] bytes=Files.readAllBytes(resultFile.toPath());
                 resultFile.delete();
+                progressFile.delete();
                 JSONObject reply=new JSONObject(new String(bytes,StandardCharsets.UTF_8));
                 if(!id.equals(reply.optString("id")))throw new RecoveryRequired("BLENDER_RESULT_ID_MISMATCH");
                 if(!"succeeded".equals(reply.optString("state")))
