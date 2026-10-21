@@ -86,7 +86,7 @@ def main():
     )
     for name,value in zip(NAMES,entries):
         run(["gh","secret","set",name,"-R",REPO,"-e",ENVIRONMENT],
-            value=value+b"\n")
+            value=value)
         print("Stored protected environment secret:",name)
     print("Protected Render signer configured. Keep your separate offline backup.")
     print("Only the main-branch manual workflow may use this certificate.")
