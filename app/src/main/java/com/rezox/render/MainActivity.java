@@ -11,6 +11,7 @@ import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import com.rezox.render.ui.StudioUi;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.File;
@@ -43,47 +44,67 @@ public final class MainActivity extends Activity {
     private TextView status;
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
-        ScrollView scrolling = new ScrollView(this);
-        LinearLayout content = new LinearLayout(this);
-        content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(28, 34, 28, 34);
-        scrolling.addView(content);
-        setContentView(scrolling);
+        LinearLayout page=StudioUi.page(this);
+        LinearLayout nav=StudioUi.row(this);
+        TextView back=StudioUi.action(this,"←",StudioUi.SECONDARY);
+        nav.addView(back,new LinearLayout.LayoutParams(StudioUi.dp(this,52),StudioUi.dp(this,50)));
+        back.setOnClickListener(v->finish());
+        LinearLayout heading=StudioUi.column(this);
+        heading.setPadding(StudioUi.dp(this,13),0,0,0);
+        StudioUi.add(heading,StudioUi.label(this,"RENDER  /  LOCAL FILES"));
+        StudioUi.add(heading,StudioUi.text(this,"Project Inspector",18,StudioUi.WHITE,true));
+        nav.addView(heading,new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1));
+        StudioUi.add(page,nav);
+        StudioUi.space(page,30);
+        StudioUi.add(page,StudioUi.text(this,"Every project.\nEvery detail.",30,StudioUi.WHITE,true));
+        StudioUi.space(page,10);
+        StudioUi.add(page,StudioUi.text(this,
+            "Bring your existing .blend projects into Render and inspect their actual stored Blender data without uploading them to a server.",
+            14,StudioUi.MUTED,false));
+        StudioUi.space(page,20);
 
-        label(content, "Render — Native Blender for Android", 25);
-        label(content, "ON-DEVICE ONLY • No streaming or remote workstation", 15);
-        label(content, "The Blender engine port is not integrated yet. Importing a .blend file stores it locally but does not open it in an editor.", 15);
-        status = label(content, nativeEngineStatus(), 14);
+        LinearLayout files=StudioUi.card(this);
+        StudioUi.add(files,StudioUi.label(this,"01   /   IMPORT"));
+        StudioUi.space(files,10);
+        StudioUi.add(files,StudioUi.text(this,"Local project library",22,StudioUi.WHITE,true));
+        StudioUi.space(files,7);
+        StudioUi.add(files,StudioUi.text(this,
+            "Use Android Files or a supported Drive document provider. Selected project bytes are copied into Render's app-owned Projects directory.",
+            13,StudioUi.MUTED,false));
+        StudioUi.space(files,16);
+        TextView importer=StudioUi.action(this,"IMPORT .BLEND PROJECT     +",StudioUi.PRIMARY);
+        StudioUi.add(files,importer);
+        importer.setOnClickListener(v->selectBlend());
+        StudioUi.add(page,files);
+        StudioUi.space(page,15);
 
-        Button select = new Button(this);
-        select.setText("Import local or Drive .blend file");
-        content.addView(select, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        select.setOnClickListener(v -> selectBlend());
+        LinearLayout diagnostics=StudioUi.card(this);
+        StudioUi.add(diagnostics,StudioUi.label(this,"02   /   DIAGNOSTICS"));
+        StudioUi.space(diagnostics,11);
+        TextView core=StudioUi.action(this,"INSPECT NATIVE CORE",StudioUi.SECONDARY);
+        StudioUi.add(diagnostics,core);
+        core.setOnClickListener(v->status.setText(
+            nativeBlenderCoreReady()?"Core integrated: verify actual scene operations":
+                nativeEngineStatus()));
+        StudioUi.space(diagnostics,11);
+        TextView gpu=StudioUi.action(this,"CHECK DEVICE VULKAN",StudioUi.SECONDARY);
+        StudioUi.add(diagnostics,gpu);
+        gpu.setOnClickListener(v->status.setText(nativeGpuReport()
+            + "\nHardware inventory only; launch Full Blender separately to test the real viewport."));
+        StudioUi.add(page,diagnostics);
+        StudioUi.space(page,15);
 
-        Button diagnose = new Button(this);
-        diagnose.setText("Check on-device core status");
-        content.addView(diagnose);
-        diagnose.setOnClickListener(v -> status.setText(
-            nativeBlenderCoreReady() ? "Core integrated — check parity tests" : nativeEngineStatus()));
-
-        Button gpu = new Button(this);
-        gpu.setText("Inspect on-device Vulkan hardware");
-        content.addView(gpu);
-        gpu.setOnClickListener(v -> status.setText(nativeGpuReport()
-            + "\nThis is device capability detection, not a working 3D renderer."));
-
-        label(content, "Working files: Android app-specific local storage / Projects", 14);
-        label(content, "Google Drive / Render / AssetLibrary is an optional library and backup location; it is NOT RAM, GPU, or a render server.", 14);
-        label(content, "Milestone: local import, read-only native .blend structure inspection, and Vulkan capability report. Blender scene loading, tools, viewport, simulation and rendering are NOT integrated.", 14);
-    }
-
-    private TextView label(LinearLayout parent, String value, int size) {
-        TextView label = new TextView(this);
-        label.setText(value);
-        label.setTextSize(size);
-        label.setPadding(0, 8, 0, 12);
-        parent.addView(label);
-        return label;
+        LinearLayout result=StudioUi.card(this);
+        StudioUi.add(result,StudioUi.label(this,"NATIVE OUTPUT"));
+        StudioUi.space(result,13);
+        status=StudioUi.text(this,nativeEngineStatus(),13,StudioUi.WHITE,false);
+        status.setTextIsSelectable(true);
+        StudioUi.add(result,status);
+        StudioUi.add(page,result);
+        StudioUi.space(page,18);
+        StudioUi.add(page,StudioUi.text(this,
+            "File introspection uses Blender's real low-level file readers. The complete Blender editor is a separate native activity inside the Full APK. Google Drive is optional asset storage, never a render server.",
+            12,StudioUi.MUTED,false));
     }
 
     private void selectBlend() {
