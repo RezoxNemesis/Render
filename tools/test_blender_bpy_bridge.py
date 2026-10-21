@@ -3,6 +3,7 @@
 A real bpy smoke test will remain necessary for Android device parity.
 """
 import importlib.util
+import contextlib
 import json
 import os
 from pathlib import Path
@@ -23,13 +24,23 @@ class BlenderBridgeTests(unittest.TestCase):
         self.scene = types.SimpleNamespace(name="Scene", objects=self.objects,
                                            frame_current=3, render=types.SimpleNamespace(engine="CYCLES"))
         self.context = types.SimpleNamespace(scene=self.scene, object=None)
+        self.context.preferences=types.SimpleNamespace(
+            view=types.SimpleNamespace(ui_scale=1.0))
+        self.context.window=types.SimpleNamespace(
+            screen=types.SimpleNamespace(areas=[
+                types.SimpleNamespace(type="VIEW_3D")]))
+        self.context.temp_override=lambda **kwargs: contextlib.nullcontext()
+
         def add_cube(size, location):
             ob = types.SimpleNamespace(name="Cube", type="MESH", location=list(location))
             self.objects.append(ob)
             self.context.object = ob
         fake = types.SimpleNamespace(context=self.context,
             app=types.SimpleNamespace(version_string="5.3-test", timers=types.SimpleNamespace(register=lambda *a, **k: None)),
-            ops=types.SimpleNamespace(mesh=types.SimpleNamespace(primitive_cube_add=add_cube)))
+            ops=types.SimpleNamespace(
+                mesh=types.SimpleNamespace(primitive_cube_add=add_cube),
+                screen=types.SimpleNamespace(
+                    screen_full_area=lambda use_hide_panels=False: {"FINISHED"})))
         self.old_bpy = sys.modules.get("bpy")
         sys.modules["bpy"] = fake
         spec = importlib.util.spec_from_file_location("render_agent_native_test", MODULE)
@@ -79,6 +90,33 @@ class BlenderBridgeTests(unittest.TestCase):
         self.assertEqual("failed", report["state"])
         self.assertEqual("COMMAND_EXPIRED", report["error"])
         self.assertEqual(1, len(self.objects))
+
+    def test_mobile_ui_scale_does_not_touch_scene_or_render_quality(self):
+        self.assertEqual(1.0,self.context.preferences.view.ui_scale)
+        x=self.module._dispatch({"action":"blender.ui.adjust_scale",
+                                "args":{"delta":.15}})
+        self.assertEqual(1.15,x["ui_scale"])
+        self.assertTrue(x["render_quality_unchanged"])
+        landscape=self.module._dispatch({"action":"blender.ui.set_mode",
+                                         "args":{"mode":"landscape"}})
+        self.assertEqual("landscape",landscape["orientation"])
+        self.assertEqual(1.18,landscape["ui_scale"])
+        portrait=self.module._dispatch({"action":"blender.ui.set_mode",
+                                        "args":{"mode":"portrait"}})
+        self.assertEqual(1.34,portrait["ui_scale"])
+        focused=self.module._dispatch({"action":"blender.ui.focus_viewport","args":{}})
+        self.assertTrue(focused["preserves_other_editors"])
+        self.assertEqual("CYCLES",self.scene.render.engine)
+        self.assertEqual(1,len(self.objects))
+
+    def test_mobile_touch_actions_reject_injection(self):
+        for action,args in [
+            ("blender.ui.adjust_scale",{"delta":100}),
+            ("blender.ui.set_mode",{"mode":"arbitrary"}),
+            ("blender.ui.focus_viewport",{"script":"import os"}),
+        ]:
+            with self.assertRaises(ValueError):
+                self.module._dispatch({"action":action,"args":args})
 
     def test_rejects_nonfinite_and_wrong_type(self):
         for location in [[float('inf'),0,0],["0",0,0],[True,0,0]]:
