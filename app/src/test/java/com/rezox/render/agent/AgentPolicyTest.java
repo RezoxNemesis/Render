@@ -13,7 +13,7 @@ public class AgentPolicyTest {
         }
     }
     @Test public void registryExposesOnlyRealHandlers(){
-        assertEquals(9,AgentPolicy.ACTIONS.size());
+        assertEquals(10,AgentPolicy.ACTIONS.size());
         assertFalse(AgentPolicy.ACTIONS.containsKey("cycles.render"));
         assertFalse(AgentPolicy.ACTIONS.containsKey("shell.exec"));
         assertTrue(AgentPolicy.ACTIONS.containsKey("blender.scene.summary"));
@@ -21,6 +21,7 @@ public class AgentPolicyTest {
         assertTrue(AgentPolicy.ACTIONS.containsKey("blender.scene.set_frame"));
         assertTrue(AgentPolicy.ACTIONS.containsKey("blender.object.set_transform"));
         assertTrue(AgentPolicy.ACTIONS.containsKey("blender.object.keyframe"));
+        assertTrue(AgentPolicy.ACTIONS.containsKey("blender.project.save_copy"));
     }
     @Test public void validReadCommand(){AgentPolicy.validate("command-1",1,"engine.status",Collections.emptySet());}
     @Test public void acceptsTypedBpyCommandsButNoPythonShell(){
@@ -31,6 +32,7 @@ public class AgentPolicyTest {
         AgentPolicy.validate("key-1",1,"blender.object.keyframe",new HashSet<>(Arrays.asList("name","data_path","frame","value")));
         AgentPolicy.validate("move-1",1,"blender.object.set_transform",new HashSet<>(Arrays.asList("name","location","scale")));
         AgentPolicy.validate("frame-1",1,"blender.scene.set_frame",Collections.singleton("frame"));
+        AgentPolicy.validate("snapshot-1",1,"blender.project.save_copy",Collections.emptySet());
         try{AgentPolicy.validate("id-4",1,"python.eval",Collections.emptySet());fail();}
         catch(IllegalArgumentException expected){}
     }

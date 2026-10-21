@@ -15,9 +15,10 @@ import bpy
 
 def main():
     bpy.ops.wm.read_factory_settings(use_empty=False)
-    with tempfile.TemporaryDirectory(prefix="render-real-bpy-") as root_string:
-        root=Path(root_string)
-        os.environ["RENDER_AGENT_SPOOL"]=root_string
+    with tempfile.TemporaryDirectory(prefix="render-real-bpy-") as sandbox:
+        root=Path(sandbox)/"render_bpy_jobs"
+        root.mkdir()
+        os.environ["RENDER_AGENT_SPOOL"]=str(root)
         code=runpy.run_path("full-app/scripts/render_agent_startup.py")
         execute=code["_poll"]
         uid="2b30a4d1b87947fe9f7e61c3940bca65"
@@ -108,7 +109,23 @@ def main():
         assert expired["state"]=="failed" and expired["error"]=="COMMAND_EXPIRED",expired
         assert "MustNotExist" not in bpy.data.objects
 
-        print("PASS: real Blender bpy scene, keyframes, transforms, security and expired jobs")
+        saved=submit("blender.project.save_copy",{})
+        assert saved["state"]=="succeeded",saved
+        filename=saved["result"]["filename"]
+        assert filename.startswith("Render_") and filename.endswith(".blend")
+        snapshot=root.parent/"Projects"/filename
+        assert snapshot.is_file(),snapshot
+        assert saved["result"]["bytes"]==snapshot.stat().st_size
+        assert snapshot.stat().st_size>256
+        import hashlib
+        with snapshot.open("rb") as source:
+            digest=hashlib.sha256()
+            for block in iter(lambda:source.read(65536), b""):
+                digest.update(block)
+        assert saved["result"]["sha256"]==digest.hexdigest()
+        assert saved["result"]["copied_without_changing_open_project"] is True
+
+        print("PASS: real Blender bpy scene, keyframes, transforms, security and expired jobs and actual saved .blend snapshots")
 
 if __name__=="__main__":
     main()
