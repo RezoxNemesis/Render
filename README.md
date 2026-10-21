@@ -49,3 +49,6 @@ See the documents for blockers and milestone gates. Do not mark core features im
 
 ### Genuine Blender file compatibility CI
 A second CI job creates actual Blender scene and animation fixtures with upstream `bpy` on a temporary Linux runner, then tests our native Android-targeted reader against the saved files and gzip envelope. The CI desktop binary is a development **test generator only**, not an app dependency or remotely hosted engine. No complete BKE scene reconstruction is claimed.
+
+## Shared VideoStudio MCP control
+Render can reuse the existing VideoStudio v3 Cloudflare Worker and ChatGPT plugin as an isolated second native device. It generates a new Render-owned Keystore identity via a one-use VideoStudio pairing code, and adds native Blender work to a separate queue. No new Railway or Render.com server or second ChatGPT connection is required; real on-phone pairing and actual Blender execution remain to be verified. See docs/AGENT_ACTIVATION.md.

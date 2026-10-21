@@ -1,10 +1,50 @@
+## Preferred connection: existing VideoStudio MCP v3 — no extra relay
+
+Render shares the existing VideoStudio Cloudflare Worker and connected ChatGPT MCP,
+but it keeps a SEPARATE Android device identity, queue, native execution service,
+projects and encrypted credential. VideoStudio's original MCP URL, owner secret,
+native editing and project data remain unchanged. Render never stores, asks for,
+or displays the original VideoStudio private owner key.
+
+One-time 10-minute code flow:
+1. The existing VideoStudio Worker receives the additive Render channel update
+   from VideoStudio-MCP draft PR #142. Without deployment, /api/v3/render/health
+   reports 404, so phone pairing must not claim to work.
+2. Via the existing VideoStudio ChatGPT MCP, request a Render pairing code.
+   Compatibility tool: queue_video_edit with projectId=active-native,
+   action=autonomous_request,
+   parameters.nativeAction=render.pair_code, parameters.nativeParameters={}.
+   The plugin's existing owner identity is supplied privately as deviceId.
+3. On the Render phone, open ChatGPT x Render -> Preferred VideoStudio MCP,
+   enter the 40-hex one-time code, and choose PAIR VIA VIDEOSTUDIO MCP.
+   Render generates a new random Android UUID and owner key in memory and
+   stores ONLY its own identity using Android Keystore encryption.
+4. Tap Start Agent Session. Render polls the same Worker under its own device
+   identity and executes validated native commands on this Android device.
+5. ChatGPT can send a command using its existing queue_video_edit tool:
+   action=autonomous_request, projectId=active-native,
+   parameters.nativeAction=render.blender.scene.summary and
+   parameters.nativeParameters={}. Then poll get_video_command_result with
+   the returned command ID until an actual native result appears.
+6. Render Stop/Revoke affects only Render, not VideoStudio.
+
+The original VideoStudio native executor need not be awake for Render to work.
+A queued command receipt is not proof that Blender executed it. This
+same Worker contains only authenticated command metadata and results,
+never remote Blender modeling or rendering. No Gallery enumeration, arbitrary
+Python source, shell or unrestricted paths are permitted.
+
+Legacy standalone relay setup is optional, not required by this design.
+Phone pairing and a physical-device native result are pending even if all CI
+builds pass. Back up app data before changing debug signing certificates.
+
 # ChatGPT x Render activation and current implementation
 
 The Android launcher now opens the user-owned native agent page. It supports one-time device enrollment, Android-Keystore encrypted credentials, temporary OAuth phone link codes, Start, Stop, revocation, journal history, and a local native self-check. Existing project import/inspection remains available through the project-inspector button. The native registry is shared with the actual JNI implementations and advertises unavailable Blender editing/rendering actions honestly.
 
 The relay implements authenticated MCP HTTP, S256 PKCE OAuth, audience/scope binding, device isolation, refresh-token rotation/reuse revocation, durable SQLite command delivery, FIFO ordering, idempotency, cancellation, and result acknowledgments. It does not render or evaluate Blender scenes. A receipt is not native execution evidence.
 
-## Deployment requirements
+## Legacy standalone deployment requirements
 
 Deploy this repository's root Dockerfile from the feature branch, one replica, with a persistent volume mounted at `/data`. Set `DATABASE_PATH=/data/render-relay.sqlite`, `PUBLIC_URL` to the service's exact HTTPS origin, and `ENROLLMENT_SECRET` to a new cryptographically random value of at least 32 characters. Never put those credentials in Git or build artifacts. The enrollment secret is consumed once. A new device requires explicit rotation by the owner, not a public reset API.
 
