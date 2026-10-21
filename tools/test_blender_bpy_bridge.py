@@ -79,6 +79,14 @@ class BlenderBridgeTests(unittest.TestCase):
         self.assertEqual([3.0,1.0,5.0], report["result"]["location"])
         self.assertEqual(2, len(self.objects))
 
+    def test_rejects_invalid_primitive_and_material_before_bpy(self):
+        with self.assertRaisesRegex(ValueError,"INVALID_PRIMITIVE_KIND"):
+            self.module._dispatch({"action":"blender.object.add_primitive",
+                                   "args":{"kind":"python"}})
+        with self.assertRaisesRegex(ValueError,"INVALID_OBJECT_NAME"):
+            self.module._dispatch({"action":"blender.material.assign",
+                                   "args":{"name":"../unauthorized"}})
+
     def test_unknown_action_cannot_run_arbitrary_python(self):
         report = self.job("python.eval", {"code":"import os; os.unlink('/tmp/project')"})
         self.assertEqual("failed", report["state"])

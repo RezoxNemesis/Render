@@ -80,6 +80,45 @@ def main():
         assert abs(selected.location.x-3.0)<0.0001
         assert abs(selected.location.z-1.0)<0.0001
 
+        added=submit("blender.object.add_primitive",{
+            "name":"RenderSphere","kind":"UV_SPHERE","size":1.4,"location":[2,0,0]})
+        assert added["state"]=="succeeded",added
+        assert added["result"]["vertices"]>100,added
+        assert bpy.data.objects["RenderSphere"].type=="MESH"
+
+        camera=submit("blender.object.add_camera",{
+            "name":"RenderCam","location":[0,-6,3]})
+        assert camera["state"]=="succeeded",camera
+        assert bpy.context.scene.camera.name=="RenderCam"
+
+        light=submit("blender.object.add_light",{
+            "name":"RenderLamp","light_type":"AREA","energy":800.0,
+            "location":[0,-2,4],"color":[1.0,0.8,0.6]})
+        assert light["state"]=="succeeded",light
+        assert bpy.data.objects["RenderLamp"].data.type=="AREA"
+
+        modifier=submit("blender.object.modifier_add",{
+            "name":"RenderSphere","modifier_type":"SUBSURF","levels":1})
+        assert modifier["state"]=="succeeded",modifier
+        assert modifier["result"]["modifier_count"]>=1
+
+        material=submit("blender.material.assign",{
+            "name":"RenderSphere","material_name":"RenderCopper",
+            "color":[0.8,0.45,0.2],"metallic":0.6,"roughness":0.34})
+        assert material["state"]=="succeeded",material
+        assert len(bpy.data.objects["RenderSphere"].data.materials)>=1
+
+        configured=submit("blender.scene.render_settings",{
+            "resolution_x":64,"resolution_y":64,"engine":"CYCLES","samples":2})
+        assert configured["state"]=="succeeded",configured
+        assert bpy.context.scene.render.resolution_x==64
+        assert bpy.context.scene.render.resolution_percentage==100
+
+        invalid_mat=submit("blender.material.assign",{
+            "name":"RenderSphere","color":[1,0,2]})
+        assert invalid_mat["state"]=="failed"
+        assert invalid_mat["error"]=="INVALID_MATERIAL_COLOR"
+
         invalid_key=submit("blender.object.keyframe",{
             "name":"NativeRenderCube","data_path":"__class__","frame":25,
             "value":[1,2,3]})
