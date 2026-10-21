@@ -75,7 +75,8 @@ def merge_manifest(source):
     existing = {p.get(ANDROID + "name") for p in root.findall("uses-permission")}
     for permission in ("android.permission.FOREGROUND_SERVICE",
                        "android.permission.FOREGROUND_SERVICE_SPECIAL_USE",
-                       "android.permission.POST_NOTIFICATIONS"):
+                       "android.permission.POST_NOTIFICATIONS",
+                       "android.permission.WAKE_LOCK"):
         if permission not in existing:
             ET.SubElement(root, "uses-permission", {ANDROID + "name": permission})
     application.set(ANDROID + "label", "Render Studio")
@@ -110,6 +111,10 @@ def merge_manifest(source):
     ET.SubElement(application, "service", {
         ANDROID + "name": "com.rezox.render.agent.VideoStudioNativeBridgeService",
         ANDROID + "exported": "true",
+    })
+    ET.SubElement(application, "receiver", {
+        ANDROID + "name": "com.rezox.render.agent.NativeWorkStopReceiver",
+        ANDROID + "exported": "false",
     })
     return ET.ElementTree(root)
 

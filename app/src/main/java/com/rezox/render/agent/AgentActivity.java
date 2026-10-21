@@ -1,6 +1,8 @@
 package com.rezox.render.agent;
 
 import android.Manifest;
+import android.animation.ObjectAnimator;
+import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.NotificationManager;
@@ -35,7 +37,8 @@ public final class AgentActivity extends Activity {
     private AgentSecrets secrets;
     private AgentJournal journal;
     private EditText relay,enrollment,videoStudioPairCode;
-    private TextView status,history,bridgeState;
+    private TextView status,history,bridgeState,workingHand,workingCaption;
+    private ObjectAnimator handAnimator;
     private final ExecutorService background=Executors.newSingleThreadExecutor();
     private final Handler ui=new Handler(Looper.getMainLooper());
     private boolean busy;
@@ -43,7 +46,19 @@ public final class AgentActivity extends Activity {
         if(isFinishing()||isDestroyed())return;
         status.setText(secrets.videoStudioBridgeEnabled()?localBridgeStatus():secrets.status());
         if(bridgeState!=null)bridgeState.setText(localBridgeStatus());
-        history.setText(journal.history());ui.postDelayed(this,2000);
+        AgentWorkPresence.Snapshot state=AgentWorkPresence.snapshot(AgentActivity.this);
+        if(workingCaption!=null)workingCaption.setText(state.description());
+        if(workingHand!=null) {
+            workingHand.setText(state.isWorking()?"👆":
+                    state.needsRecovery()?"⚠":"✋");
+            if(state.isWorking() && handAnimator!=null && !handAnimator.isRunning())
+                handAnimator.start();
+            if(!state.isWorking() && handAnimator!=null && handAnimator.isRunning()){
+                handAnimator.cancel();
+                workingHand.setTranslationY(0f);
+            }
+        }
+        history.setText(journal.history());ui.postDelayed(this,750);
     }};
     @Override public void onCreate(Bundle state){
         super.onCreate(state);
@@ -51,6 +66,7 @@ public final class AgentActivity extends Activity {
         // Enrollment remains masked; credentials are in Android Keystore.
         getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
         secrets=new AgentSecrets(this);journal=new AgentJournal(this);
+        if(!AgentExecutionLock.BUSY.get())AgentWorkPresence.recoverIfInterrupted(this);
         LinearLayout page=StudioUi.page(this);
 
         LinearLayout header=StudioUi.row(this);
@@ -84,6 +100,32 @@ public final class AgentActivity extends Activity {
             "Direct Render commands use the existing VideoStudio MCP. Pairing to a separate hosted relay is optional.",
             12,0xFFBBAFD4,false));
         StudioUi.add(page,statusPanel);
+        StudioUi.space(page,13);
+        // This hand moves ONLY while a verified native execution is ongoing.
+        // It does not claim to control other Android apps or user tabs.
+        LinearLayout workCard=StudioUi.card(this);
+        StudioUi.add(workCard,StudioUi.label(this,"LIVE NATIVE ACTIVITY"));
+        StudioUi.space(workCard,12);
+        LinearLayout handRow=StudioUi.row(this);
+        workingHand=StudioUi.text(this,"✋",34,StudioUi.WHITE,true);
+        workingHand.setContentDescription("Actual native Blender work indicator");
+        handRow.addView(workingHand,new LinearLayout.LayoutParams(
+                StudioUi.dp(this,55),StudioUi.dp(this,54)));
+        workingCaption=StudioUi.text(this,"No native Blender command is running",
+                14,StudioUi.WHITE,true);
+        handRow.addView(workingCaption,new LinearLayout.LayoutParams(
+                0,ViewGroup.LayoutParams.WRAP_CONTENT,1));
+        StudioUi.add(workCard,handRow);
+        StudioUi.space(workCard,8);
+        StudioUi.add(workCard,StudioUi.text(this,
+                "The hand and Android notification report Render's own native command journal. GitHub coding and unrelated app taps are not simulated.",
+                12,StudioUi.MUTED,false));
+        StudioUi.add(page,workCard);
+        handAnimator=ObjectAnimator.ofFloat(workingHand,"translationY",0f,
+                -StudioUi.dp(this,9));
+        handAnimator.setDuration(480);
+        handAnimator.setRepeatMode(ValueAnimator.REVERSE);
+        handAnimator.setRepeatCount(ValueAnimator.INFINITE);
         StudioUi.space(page,17);
 
         LinearLayout localBridge=StudioUi.violetCard(this);
@@ -202,6 +244,15 @@ public final class AgentActivity extends Activity {
         StudioUi.space(utility,12);
         addAction(utility,"CHECK AGENT LOCALLY",StudioUi.SECONDARY,()->localCheck());
         StudioUi.space(utility,10);
+        addAction(utility,"OPEN BLENDER TO RESUME NATIVE JOBS",StudioUi.PRIMARY,()->{
+            try {
+                startActivity(new Intent().setClassName(this,
+                        "com.rezox.render.EditorLaunchActivity"));
+            }catch(android.content.ActivityNotFoundException unavailable){
+                secrets.status("Full native Blender editor is not installed in this APK.");
+            }
+        });
+        StudioUi.space(utility,10);
         addAction(utility,"OPEN PROJECT INSPECTOR",StudioUi.SECONDARY,
             ()->startActivity(new Intent(this,com.rezox.render.MainActivity.class)));
         StudioUi.add(page,utility);
@@ -267,6 +318,11 @@ public final class AgentActivity extends Activity {
         secrets.videoStudioBridgeEnabled(true);
         secrets.status("Local Render bridge enabled. Awaiting a confirmed native command via existing VideoStudio MCP.");
         if(bridgeState!=null)bridgeState.setText(localBridgeStatus());
+        // Direct Binder jobs need notification permission too; never block a
+        // modelling job because the user declines the optional notification.
+        if(Build.VERSION.SDK_INT>=33 && checkSelfPermission(
+                Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)
+            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},44);
     }
     private void shareRenderConnection(){
         String card=RenderConnectionCard.shareText(secrets.renderPublicId(),
@@ -447,5 +503,10 @@ public final class AgentActivity extends Activity {
         super.onRequestPermissionsResult(code,permissions,results);
         if(code==42&&results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED)startSession();
     }
-    @Override protected void onDestroy(){ui.removeCallbacksAndMessages(null);background.shutdown();super.onDestroy();}
+    @Override protected void onDestroy(){
+        ui.removeCallbacksAndMessages(null);
+        if(handAnimator!=null)handAnimator.cancel();
+        background.shutdown();
+        super.onDestroy();
+    }
 }

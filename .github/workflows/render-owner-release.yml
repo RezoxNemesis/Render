@@ -1,0 +1,140 @@
+name: Render Studio permanent owner-signed release
+
+# Manual, owner-reviewed and main-only. No release key in ordinary PR/push jobs.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: render-production-signing
+  cancel-in-progress: false
+
+jobs:
+  native-owner-release:
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: render-production
+    runs-on: ubuntu-24.04
+    timeout-minutes: 80
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+      - name: Require the preserved owner signing identity
+        env:
+          RENDER_KEYSTORE_B64: ${{ secrets.RENDER_ANDROID_SIGNING_KEYSTORE_B64 }}
+          RENDER_SIGNING_PASS_FOR_KEYTOOL: ${{ secrets.RENDER_ANDROID_SIGNING_STORE_PASSWORD }}
+          RENDER_KEY_ALIAS: ${{ secrets.RENDER_ANDROID_SIGNING_KEY_ALIAS }}
+          RENDER_KEY_PASSWORD: ${{ secrets.RENDER_ANDROID_SIGNING_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          if [[ -z "$RENDER_KEYSTORE_B64" || -z "$RENDER_SIGNING_PASS_FOR_KEYTOOL" ||
+                -z "$RENDER_KEY_ALIAS" || -z "$RENDER_KEY_PASSWORD" ]]; then
+            echo "::error::Protected Render signing secrets missing. Configure the render-production environment; do not create a new key."
+            exit 1
+          fi
+          keyfile="$RUNNER_TEMP/render-permanent-release.p12"
+          printf "%s" "$RENDER_KEYSTORE_B64" | base64 --decode > "$keyfile"
+          test -s "$keyfile"
+          chmod 600 "$keyfile"
+          keytool -list -v -storetype PKCS12 -keystore "$keyfile" \
+            -storepass:env RENDER_SIGNING_PASS_FOR_KEYTOOL -alias "$RENDER_KEY_ALIAS" \
+            > "$RUNNER_TEMP/render-owner-cert.txt"
+          grep -Fq '03:01:F0:84:CB:37:45:7B:E8:23:53:A8:A0:7E:88:14:35:17:5B:FD:5B:F0:CF:EA:FA:2C:3D:D4:B2:5F:CF:57' \
+            "$RUNNER_TEMP/render-owner-cert.txt" || {
+              echo "::error::Private keystore certificate does not match the permanently pinned Render owner identity."
+              exit 1
+            }
+          echo "RENDER_ANDROID_SIGNING_STORE_FILE=$keyfile" >> "$GITHUB_ENV"
+          echo "Owner signer matched the pinned SHA-256 public fingerprint." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install Android toolchains
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -path '*/bin/sdkmanager' -type f | sort -V | tail -1)"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" --install 'platforms;android-35' 'build-tools;35.0.0' 'cmake;3.22.1' 'ndk;27.2.12479018'
+
+      - name: Build and test native command bridge
+        run: |
+          PYTHONPATH=tools python3 -m unittest tools/test_assemble_full_native.py tools/test_blender_bpy_bridge.py tools/test_lively_scene_contract.py tools/test_lively_scene_mock.py -v
+          gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
+
+      - name: Fetch pinned Blender binary and native source
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 --connect-timeout 15 \
+            'https://github.com/simfeo/blender/releases/download/android-alpha-4/blender-full.apk' \
+            -o "$RUNNER_TEMP/blender-full.apk"
+          echo "3fe775a1e14470ebfcd3c25ae32b57003433f04552f896880631ae98b1f18aea  $RUNNER_TEMP/blender-full.apk" |
+            sha256sum --check --status
+          test "$(stat -c%s "$RUNNER_TEMP/blender-full.apk")" = '286561495'
+          mkdir "$RUNNER_TEMP/full-blender-src"
+          git -C "$RUNNER_TEMP/full-blender-src" init -q
+          git -C "$RUNNER_TEMP/full-blender-src" remote add origin https://github.com/simfeo/blender.git
+          git -C "$RUNNER_TEMP/full-blender-src" sparse-checkout init --cone
+          git -C "$RUNNER_TEMP/full-blender-src" sparse-checkout set build_files/android/apk/app/src/main
+          git -C "$RUNNER_TEMP/full-blender-src" -c protocol.version=2 fetch --depth=1 --filter=blob:none origin d93bd33cba768e19ee4387a31c0ea137ee2f0047
+          git -C "$RUNNER_TEMP/full-blender-src" checkout --detach -q FETCH_HEAD
+          test "$(git -C "$RUNNER_TEMP/full-blender-src" rev-parse HEAD)" = 'd93bd33cba768e19ee4387a31c0ea137ee2f0047'
+
+      - name: Stage full native Blender plus Render
+        run: |
+          python3 tools/assemble_full_native.py \
+            --engine-apk "$RUNNER_TEMP/blender-full.apk" \
+            --bridge-apk app/build/outputs/apk/debug/app-debug.apk \
+            --upstream-source "$RUNNER_TEMP/full-blender-src" \
+            --output full-app/stage
+
+      - name: Build signed Android APK using permanent key
+        env:
+          RENDER_ANDROID_SIGNING_STORE_PASSWORD: ${{ secrets.RENDER_ANDROID_SIGNING_STORE_PASSWORD }}
+          RENDER_ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.RENDER_ANDROID_SIGNING_KEY_ALIAS }}
+          RENDER_ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.RENDER_ANDROID_SIGNING_KEY_PASSWORD }}
+        run: gradle -p full-app --no-daemon :app:assembleRelease
+
+      - name: Verify exact installed package identity and release signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=full-app/app/build/outputs/apk/release/app-release.apk
+          test -s "$APK"
+          unzip -tqq "$APK"
+          unzip -Z -1 "$APK" | grep -Fx 'lib/arm64-v8a/libblender.so'
+          unzip -Z -1 "$APK" | grep -Fx 'lib/arm64-v8a/librender_bridge.so'
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" \
+            > "$RUNNER_TEMP/render-release-signature.txt"
+          grep -Fqi '0301f084cb3745b8e82353a8a07e881435175bfd5bf0cfeafa2c3dd4b25fcf57' \
+            "$RUNNER_TEMP/render-release-signature.txt"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" \
+            > "$RUNNER_TEMP/render-owner-release-badging.txt"
+          grep -q "package: name='com.rezox.render'" "$RUNNER_TEMP/render-owner-release-badging.txt"
+          sha256sum "$APK" > "$RUNNER_TEMP/render-release-sha256.txt"
+          echo "Production signer and package verified. A real phone upgrade test remains required." >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: render-studio-permanent-owner-signed-release
+          path: full-app/app/build/outputs/apk/release/app-release.apk
+          retention-days: 14
+          compression-level: 0
+          if-no-files-found: error
+
+      - name: Erase temporary owner signing material
+        if: always()
+        shell: bash
+        run: |
+          rm -f "$RUNNER_TEMP/render-permanent-release.p12"
+          rm -f "$RUNNER_TEMP/render-owner-cert.txt"

@@ -11,8 +11,9 @@ import android.os.Messenger;
 
 import org.json.JSONObject;
 
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -29,7 +30,11 @@ public final class VideoStudioNativeBridgeService extends Service {
     public static final int EXECUTE = 1;
     public static final int RESPONSE = 2;
     private static volatile AtomicBoolean runningCancellation;
-    private final ExecutorService worker = Executors.newSingleThreadExecutor();
+    // Bound incoming Binder work. An unlimited queue can exhaust the app while
+    // Blender renders or the phone is under memory/thermal pressure.
+    private final ThreadPoolExecutor worker = new ThreadPoolExecutor(
+            1,1,0L,TimeUnit.MILLISECONDS,new ArrayBlockingQueue<>(12),
+            new ThreadPoolExecutor.AbortPolicy());
     private AgentJournal journal;
     private AgentSecrets secrets;
 
@@ -54,7 +59,10 @@ public final class VideoStudioNativeBridgeService extends Service {
         secrets = new AgentSecrets(this);
         journal = new AgentJournal(this);
         if(!AgentExecutionLock.BUSY.get()) {
-            try { journal.recover(); }
+            try {
+                journal.recover();
+                AgentWorkPresence.recoverIfInterrupted(this);
+            }
             catch(Exception error) {
                 secrets.videoStudioBridgeEnabled(false);
                 secrets.status("Render native command journal requires recovery.");
@@ -87,7 +95,7 @@ public final class VideoStudioNativeBridgeService extends Service {
             }
             try { worker.execute(() -> executeNative(caller,id,action,raw)); }
             catch(RejectedExecutionException ex) {
-                send(caller,id,error("RENDER_AGENT_STOPPING"));
+                send(caller,id,error("RENDER_NATIVE_QUEUE_FULL_OR_STOPPING"));
             }
         }
     });
@@ -106,6 +114,7 @@ public final class VideoStudioNativeBridgeService extends Service {
         JSONObject outcome=error("RENDER_NATIVE_ACTION_FAILED");
         String state="failed";
         boolean journaled=false;
+        boolean liveWork=false;
         try {
             if(!secrets.videoStudioBridgeEnabled())
                 throw new IllegalStateException("RENDER_DIRECT_BRIDGE_DISABLED_ON_PHONE");
@@ -127,6 +136,8 @@ public final class VideoStudioNativeBridgeService extends Service {
                 throw new IllegalStateException("NATIVE_RESULT_RECOVERY_REQUIRED");
             }
             journaled=true;
+            liveWork=true;
+            AgentWorkPresence.begin(this,"render."+action,"VideoStudio MCP v3 Binder");
             JSONObject nativeResult=new AgentActions(this).execute(command,cancel);
             if(cancel.get() || !secrets.videoStudioBridgeEnabled()) {
                 state="cancelled";
@@ -162,8 +173,13 @@ public final class VideoStudioNativeBridgeService extends Service {
                 }
                 catch(Exception error){
                     outcome=error("RENDER_JOURNAL_WRITE_FAILED");
+                    state="recovery_required";
                     secrets.videoStudioBridgeEnabled(false);
                 }
+            }
+            if(liveWork) {
+                try {AgentWorkPresence.finish(this,state);}
+                catch(Exception ignored) { /* Native journal is the source of truth. */ }
             }
             send(caller,id,outcome);
             runningCancellation=null;

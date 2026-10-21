@@ -141,6 +141,36 @@ public final class AgentActions {
         String action = command.getString("action");
         AgentPolicy.validate(command.getString("request_id"),command.getInt("api_version"),action,fields);
         checkCancelled(cancelled);
+        if (action.equals("agent.diagnostics")) {
+            AgentWorkPresence.Snapshot work=AgentWorkPresence.snapshot(context);
+            File ready=new File(context.getFilesDir(),"render_bpy_jobs/ready");
+            long age=System.currentTimeMillis()-ready.lastModified();
+            boolean bridgeReady=ready.isFile() && age>=0 && age<15000;
+            android.app.NotificationManager manager=context.getSystemService(
+                    android.app.NotificationManager.class);
+            boolean canNotify=manager!=null && manager.areNotificationsEnabled();
+            if(android.os.Build.VERSION.SDK_INT>=33 &&
+                    context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+                        !=android.content.pm.PackageManager.PERMISSION_GRANTED)
+                canNotify=false;
+            return new JSONObject()
+                    .put("target_app","Render Studio")
+                    .put("target_package",context.getPackageName())
+                    .put("registeredTypedActions",AgentPolicy.ACTIONS.size())
+                    .put("directBinderEnabled",new AgentSecrets(context).videoStudioBridgeEnabled())
+                    .put("nativeExecutorBusy",AgentExecutionLock.BUSY.get())
+                    .put("blenderEditorReady",bridgeReady)
+                    .put("ownerNotificationsEnabled",canNotify)
+                    .put("nativeWorkState",work.state)
+                    .put("nativeAction",work.action)
+                    .put("nativeStage",work.stage)
+                    .put("nativeProgressPercent",work.progress)
+                    .put("lastJobHistory",new AgentJournal(context).history())
+                    .put("installedSigningCertificateSha256",SigningIdentity.installedSigner(context))
+                    .put("noGalleryAccess",true)
+                    .put("fullDesktopParityVerified",false)
+                    .put("executed_by","android-native");
+        }
         if (action.equals("engine.status")) {
             JSONObject result=new JSONObject().put("native_status",RenderNative.engineStatus())
                 .put("engineIntegrated",false).put("fullBlenderEditorBundled",hasFullBlender(context))
@@ -159,12 +189,21 @@ public final class AgentActions {
             long age=System.currentTimeMillis()-ready.lastModified();
             result.put("editorCommandBridgeReady",
                 ready.isFile() && age>=0 && age<15000);
+            // Public signer identity only. Protect user app-data continuity.
+            String signer=SigningIdentity.installedSigner(context);
+            result.put("installedSignerSha256",signer);
+            result.put("permanentSignerSha256",SigningIdentity.PERMANENT_SHA256);
+            result.put("usesPermanentOwnerSigner",
+                    SigningIdentity.PERMANENT_SHA256.equals(signer));
+            result.put("fullDesktopParityVerified",false);
+            result.put("nativeJobRunning",AgentWorkPresence.snapshot(context).isWorking());
             return result;
         }
         if (action.equals("gpu.info")) return new JSONObject().put("native_status",RenderNative.gpuInfo())
             .put("is_renderer",false).put("executed_by","android-native");
         if (action.startsWith("blender.")) {
             if (!hasFullBlender(context)) throw new IllegalStateException("BLENDER_ENGINE_NOT_INSTALLED");
+            try (NativeWakeGuard wake=NativeWakeGuard.acquire(context,action)) {
             if (action.equals("blender.project.restore_scene")) {
                 File saved = projects.find(args.getString("project_id"));
                 File owned = new File(context.getFilesDir(),"Projects").getCanonicalFile();
@@ -209,6 +248,7 @@ public final class AgentActions {
                 }
             }
             return result;
+            } // Native CPU wake lock is always released, including timeouts.
         }
         if (action.equals("projects.list")) {
             int offset = args.has("offset") ? strictInt(args,"offset") : 0;

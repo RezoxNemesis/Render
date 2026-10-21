@@ -40,7 +40,11 @@ public final class AgentService extends Service {
             credentials=secrets.load();
             if(PROCESS_BUSY.get()){
                 secrets.enabled(false);secrets.status("Previous native call is still stopping; wait before restarting.");
-            }else{journal.recover();actions=new AgentActions(this);}
+            }else{
+                journal.recover();
+                AgentWorkPresence.recoverIfInterrupted(this);
+                actions=new AgentActions(this);
+            }
         }catch(Exception e){secrets.enabled(false);secrets.status("Agent initialization failed: "+e.getClass().getSimpleName());}
         getSystemService(NotificationManager.class).createNotificationChannel(
             new NotificationChannel(CHANNEL,"ChatGPT x Render",NotificationManager.IMPORTANCE_LOW));
@@ -81,6 +85,13 @@ public final class AgentService extends Service {
         if(destroyed)return;
         try{
             sendPending();
+            // Do not claim/consume a remote job while the same-phone
+            // VideoStudio Binder executor owns Blender's process-wide lock.
+            // Still retry delivery of durable results above.
+            if(PROCESS_BUSY.get() && active==null){
+                secrets.status("Native Blender busy in direct VideoStudio Binder bridge. Pending cloud jobs remain queued.");
+                return;
+            }
             Work w=active;
             if(!secrets.enabled()&&w!=null)w.cancelled.set(true);
             JSONObject reply=post("/v1/device/poll",new JSONObject().put("enabled",secrets.enabled())
@@ -100,7 +111,9 @@ public final class AgentService extends Service {
                 if(journal.begin(envelope.id,envelope.digest,envelope.command)){
                     Work pending=new Work(envelope);pending.cancelled.set(wasCancelled||!secrets.enabled());
                     if(!PROCESS_BUSY.compareAndSet(false,true)){
-                        journal.finish(envelope.id,"recovery_required",new JSONObject().put("error","OTHER_NATIVE_CALL_STILL_ACTIVE"));
+                        journal.finish(envelope.id,"failed",new JSONObject()
+                            .put("error","OTHER_NATIVE_CALL_STILL_ACTIVE")
+                            .put("executed",false).put("safe_to_retry",true));
                     }else{
                         active=pending;
                         try{executor.execute(()->execute(pending));}
@@ -131,6 +144,8 @@ public final class AgentService extends Service {
             if(work.cancelled.get()){
                 state="cancelled";result.put("executed",false);
             }else{
+                AgentWorkPresence.begin(this,work.envelope.command.getString("action"),
+                        "Render native session");
                 result=actions.execute(work.envelope.command,work.cancelled);
                 if(work.cancelled.get()||!secrets.enabled()||destroyed){
                     state="cancelled";result.put("native_call_completed_after_cancel",true);
@@ -145,8 +160,15 @@ public final class AgentService extends Service {
                 result=new JSONObject().put("error",code).put("executed_by","android-agent");
             }catch(Exception ignored){}
         }finally{
-            try{journal.finish(work.envelope.id,state,result);}
-            catch(Exception e){secrets.enabled(false);secrets.status("Result journal failed. Recovery required; automatic replay disabled.");}
+            boolean receiptStored=false;
+            try{
+                journal.finish(work.envelope.id,state,result);
+                receiptStored=true;
+            }catch(Exception e){
+                secrets.enabled(false);
+                secrets.status("Result journal failed. Recovery required; automatic replay disabled.");
+            }
+            AgentWorkPresence.finish(this,receiptStored?state:"recovery_required");
             active=null;PROCESS_BUSY.set(false);
         }
     }
