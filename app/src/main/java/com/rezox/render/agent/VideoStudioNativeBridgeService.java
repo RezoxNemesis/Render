@@ -151,7 +151,7 @@ public final class VideoStudioNativeBridgeService extends Service {
             // Android executor so ChatGPT can distinguish Render from VideoStudio.
             try {
                 outcome.put("target_app",RenderConnectionCard.APP);
-                outcome.put("target_package",RenderConnectionCard.PACKAGE);
+                outcome.put("target_package",getPackageName());
                 outcome.put("render_public_id",secrets.renderPublicId());
                 outcome.put("transport","VideoStudio MCP v3 > Android Binder");
             } catch(Exception ignored) {}

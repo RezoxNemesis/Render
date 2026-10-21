@@ -19,6 +19,12 @@ android {
     defaultConfig {
         // Render's actual application ID, distinct from the upstream project's install.
         applicationId 'com.rezox.render'
+        // A side-by-side install option for owners whose old debug APK uses a
+        // different signer. This does not touch or uninstall the old app.
+        if(project.hasProperty('renderSideBySide')) {
+            applicationIdSuffix '.preview'
+            versionNameSuffix '-side-by-side'
+        }
         minSdk 31
         targetSdk 34
         versionCode 19

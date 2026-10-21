@@ -54,3 +54,6 @@ Current signing proof: JDK keytool creation and fingerprint verification.
 Current missing proof: protected CI secrets, completed assembleRelease,
 apksigner certificate check and physical-device update over a matching
 older release APK. No existing installed APK signing identity was inspected.
+
+## Non-destructive side-by-side installer
+For a previous `com.rezox.render` APK whose debug certificate cannot be matched, build the `-PrenderSideBySide=true` variant. Android installs this variant as `com.rezox.render.preview`, independently of the original app: it does not uninstall, overwrite or migrate the original app-owned files, and it has its own Android Keystore identity. This is a safe test path while keeping existing projects. The original `com.rezox.render` package remains the production upgrade identity. VideoStudio Binder companion must explicitly support the preview package to route direct native commands. Never falsely claim the preview shares the original app data or automatically fixes all compatibility problems.
