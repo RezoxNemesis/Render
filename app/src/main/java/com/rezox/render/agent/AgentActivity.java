@@ -243,6 +243,15 @@ public final class AgentActivity extends Activity {
         StudioUi.space(utility,12);
         addAction(utility,"CHECK AGENT LOCALLY",StudioUi.SECONDARY,()->localCheck());
         StudioUi.space(utility,10);
+        addAction(utility,"OPEN BLENDER TO RESUME NATIVE JOBS",StudioUi.PRIMARY,()->{
+            try {
+                startActivity(new Intent().setClassName(this,
+                        "com.rezox.render.EditorLaunchActivity"));
+            }catch(android.content.ActivityNotFoundException unavailable){
+                secrets.status("Full native Blender editor is not installed in this APK.");
+            }
+        });
+        StudioUi.space(utility,10);
         addAction(utility,"OPEN PROJECT INSPECTOR",StudioUi.SECONDARY,
             ()->startActivity(new Intent(this,com.rezox.render.MainActivity.class)));
         StudioUi.add(page,utility);
