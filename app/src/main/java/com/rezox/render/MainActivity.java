@@ -35,6 +35,8 @@ public final class MainActivity extends Activity {
     }
     private native String nativeEngineStatus();
     private native boolean nativeBlenderCoreReady();
+    private native String nativeInspectBlend(String absolutePath);
+    private native String nativeGpuReport();
 
     private TextView status;
     @Override public void onCreate(Bundle state) {
@@ -62,9 +64,15 @@ public final class MainActivity extends Activity {
         diagnose.setOnClickListener(v -> status.setText(
             nativeBlenderCoreReady() ? "Core integrated — check parity tests" : nativeEngineStatus()));
 
+        Button gpu = new Button(this);
+        gpu.setText("Inspect on-device Vulkan hardware");
+        content.addView(gpu);
+        gpu.setOnClickListener(v -> status.setText(nativeGpuReport()
+            + "\nThis is device capability detection, not a working 3D renderer."));
+
         label(content, "Working files: Android app-specific local storage / Projects", 14);
         label(content, "Google Drive / Render / AssetLibrary is an optional library and backup location; it is NOT RAM, GPU, or a render server.", 14);
-        label(content, "Milestone: local project import and NDK bridge only. The 3D viewport, full Blender engine, shaders, rigs, simulations and renderers must still be ported.", 14);
+        label(content, "Milestone: local import, read-only native .blend structure inspection, and Vulkan capability report. Blender scene loading, tools, viewport, simulation and rendering are NOT integrated.", 14);
     }
 
     private TextView label(LinearLayout parent, String value, int size) {
@@ -136,8 +144,14 @@ public final class MainActivity extends Activity {
                         if (count == 0) continue;
                         offset += count;
                     }
-                    if (!"BLENDER".equals(new String(header, StandardCharsets.US_ASCII)))
-                        throw new IOException("Not a Blender project file");
+                    boolean rawBlend = "BLENDER".equals(new String(header, StandardCharsets.US_ASCII));
+                    boolean gzipCandidate = (header[0] & 0xff) == 0x1f && (header[1] & 0xff) == 0x8b;
+                    boolean zstdCandidate = (header[0] & 0xff) == 0x28 && (header[1] & 0xff) == 0xb5
+                        && (header[2] & 0xff) == 0x2f && (header[3] & 0xff) == 0xfd;
+                    if (!rawBlend && !gzipCandidate && !zstdCandidate)
+                        throw new IOException("Unrecognized Blender file signature (raw, gzip or zstd)");
+                    // Compressed .blend is a candidate only; native preflight does not decompress
+                    // or claim that a compressed file is a valid Blender scene.
                     out.write(header);
                     sha.update(header);
                     total += header.length;
@@ -163,8 +177,8 @@ public final class MainActivity extends Activity {
             StringBuilder hex = new StringBuilder();
             for (byte b : digest) hex.append(String.format(Locale.ROOT, "%02x", b & 0xff));
             return String.format(Locale.ROOT,
-                "Imported %s (%d bytes) locally. SHA-256: %s. Blender engine is not yet integrated.",
-                name, total, hex);
+                "Imported %s (%d bytes) locally. SHA-256: %s.\nLow-level format preflight: %s\nBlender scene editing and rendering remain unavailable.",
+                name, total, hex, nativeInspectBlend(destination.getAbsolutePath()));
         } finally {
             if (!completed) pending.delete();
         }

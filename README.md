@@ -11,12 +11,14 @@
 - Downloadable Google Drive asset libraries and backup are optional; active resources must be local when offline.
 - Do not advertise feature parity until real Android device tests against upstream Blender show it.
 
-**Current status: Android application/NDK bridge foundation only. It does not yet contain or execute Blender itself. This is not a full Blender port or a render-capable APK.**
+**Current status: Android application/NDK foundation with native .blend framing preflight and Vulkan hardware capabilities inventory. It does not yet contain or execute Blender itself. This is not a full Blender port or a render-capable APK.**
 
 ## Repository layout
 
-- `app/` — native Android shell, Storage Access Framework `.blend` import, JNI bridge.
+- `app/` — native Android shell, Storage Access Framework `.blend` import, JNI bridge, native file-format preflight, Vulkan hardware probe (not a renderer).
 - `docs/ENGINE_PORT_CONTRACT.md` — technical port plan and release gates.
+- `docs/BLEND_FILE_PREFLIGHT.md` — detailed v0/v1 binary format coverage and strict limitations.
+- `native-tests/` — host C++ unit tests against synthetic binary header/block fixtures.
 - `docs/ASSETS_AND_STORAGE.md` — Google Drive and offline asset architecture.
 - `docs/PARITY_MATRIX.md` — feature acceptance tracking.
 - `tools/check_contract.py` — static checks that guard against silent remote-compute substitution.
@@ -27,6 +29,9 @@ Prerequisites: JDK 17, Android SDK Platform 35, Android NDK, CMake 3.22.1, Gradl
 
 ```bash
 gradle :app:testDebugUnitTest :app:assembleDebug
+cmake -S native-tests -B /tmp/render-format-tests
+cmake --build /tmp/render-format-tests
+ctest --test-dir /tmp/render-format-tests --output-on-failure
 python3 tools/check_contract.py
 ```
 

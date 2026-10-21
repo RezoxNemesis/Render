@@ -4,6 +4,8 @@ Status vocabulary: NOT_STARTED, IN_PROGRESS, VERIFIED, BLOCKED. Every row must b
 
 | Feature | Status | Evidence needed |
 | --- | --- | --- |
+| Native binary .blend structure preflight | IN_PROGRESS | real Blender-created files, device execution, malformed-file tests |
+| Android Vulkan GPU capability detection | IN_PROGRESS | on-device API/driver data and graceful no-Vulkan fallback |
 | .blend open/save with linked data and library overrides | NOT_STARTED | byte-preserving functional round-trip |
 | Modeling, edit mesh, modifiers, retopology | NOT_STARTED | evaluated mesh reference tests |
 | Sculpt, UV editor, texture painting | NOT_STARTED | topology/paint output comparison |

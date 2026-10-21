@@ -25,6 +25,11 @@ jobs:
           gradle-version: "8.11.1"
       - name: Check offline-only contract
         run: python3 tools/check_contract.py
+      - name: Run C++ Blender file format framing tests
+        run: |
+          cmake -S native-tests -B "$RUNNER_TEMP/render-tests" -DCMAKE_BUILD_TYPE=Release
+          cmake --build "$RUNNER_TEMP/render-tests" --parallel 2
+          ctest --test-dir "$RUNNER_TEMP/render-tests" --output-on-failure
       - name: Build and unit test Android foundation
         run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
       - uses: actions/upload-artifact@v4
