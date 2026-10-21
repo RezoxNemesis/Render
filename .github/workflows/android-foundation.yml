@@ -1,0 +1,29 @@
+name: Android foundation checks
+on:
+  pull_request:
+  push:
+    branches: [main, "feature/android-native-foundation-20261021"]
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - name: Install Android platform and native toolchain
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "cmake;3.22.1" "ndk;27.2.12479018"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+      - name: Check offline-only contract
+        run: python3 tools/check_contract.py
+      - name: Build and unit test Android foundation
+        run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: render-android-foundation-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
