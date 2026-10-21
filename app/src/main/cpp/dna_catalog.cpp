@@ -194,6 +194,7 @@ bool DecodeSchema(const std::vector<uint8_t> &dna, DnaCatalogResult &result)
   result.member_names = static_cast<uint32_t>(names.size());
   result.types = static_cast<uint32_t>(types.size());
   result.structures = count;
+  result.structure_fields = total_fields;
   result.sample_structures = std::move(preview);
   result.message = "Indexed SDNA type and struct metadata only; Blender BKE scene is NOT loaded";
   return true;
@@ -286,6 +287,7 @@ std::string DnaCatalogJson(const DnaCatalogResult &r)
     << ",\"memberNames\":" << r.member_names
     << ",\"types\":" << r.types
     << ",\"structures\":" << r.structures
+    << ",\"structureFields\":" << r.structure_fields
     << ",\"sampleStructures\":[";
   for (size_t i = 0; i < r.sample_structures.size(); ++i) {
     if (i) o << ",";
