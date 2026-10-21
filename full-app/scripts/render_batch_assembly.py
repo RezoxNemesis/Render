@@ -135,6 +135,7 @@ def apply_assembly(scene, args):
     collection["render_assembly_digest"] = digest
     collection["render_assembly_complete"] = False
     built = []
+    created_objects = []
     created_materials = []
     try:
         for part in parts:
@@ -144,13 +145,14 @@ def apply_assembly(scene, args):
             ob = bpy.context.object
             if ob is None or ob.type != "MESH":
                 raise RuntimeError("NATIVE_MESH_OBJECT_MISSING")
+            created_objects.append(ob)
             ob.name = "RA_" + part["name"]
+            ob["render_part_owner"] = digest
             # Move the object from the Blender default collection into our
             # scene-owned assembly; the user's other scene is unaffected.
             for parent in list(ob.users_collection):
                 parent.objects.unlink(ob)
             collection.objects.link(ob)
-            ob["render_part_owner"] = digest
             ob.location = part["location"]
             ob.scale = part["scale"]
             mat = _material(part, "RA_Material_" + key + "_" + part["name"])
@@ -178,8 +180,9 @@ def apply_assembly(scene, args):
     except Exception:
         # Roll back only owned new parts. Never delete another scene or the
         # existing user's Blender building.
-        for ob in list(collection.objects):
-            if ob.get("render_part_owner") == digest:
+        for ob in created_objects:
+            if (bpy.data.objects.get(ob.name) is ob and
+                    ob.get("render_part_owner") == digest):
                 bpy.data.objects.remove(ob, do_unlink=True)
         for mat in created_materials:
             if mat.users == 0:
