@@ -247,7 +247,7 @@ public final class BlenderSpool {
         JSONObject envelope=new JSONObject().put("id",id).put("action",action)
             .put("args",args).put("deadline",System.currentTimeMillis()/1000+timeoutMillis/1000);
         byte[] contents=envelope.toString().getBytes(StandardCharsets.UTF_8);
-        if(contents.length>16384)throw new IllegalArgumentException("NATIVE_COMMAND_TOO_LARGE");
+        if(contents.length>65536)throw new IllegalArgumentException("NATIVE_COMMAND_TOO_LARGE");
         File temporary=File.createTempFile("render-",".part",pending);
         try(FileOutputStream output=new FileOutputStream(temporary)) {
             output.write(contents);output.getFD().sync();
