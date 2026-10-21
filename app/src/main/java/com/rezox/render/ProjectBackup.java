@@ -15,6 +15,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.json.JSONException;
 
 /**
  * User-chosen Android Storage Access Framework backup. Streams original
@@ -29,7 +30,7 @@ public final class ProjectBackup {
     }
     private ProjectBackup(){}
 
-    public static Result export(List<ProjectScope.Entry> sources,OutputStream destination) throws IOException {
+    public static Result export(List<ProjectScope.Entry> sources,OutputStream destination) throws IOException, JSONException {
         if(sources==null || sources.isEmpty())
             throw new IOException("No saved .blend projects found to back up.");
         long bytesWritten=0;
