@@ -4,31 +4,26 @@ android {
     namespace = "com.rezox.render"
     compileSdk = 35
     ndkVersion = "27.2.12479018"
-
     defaultConfig {
         applicationId = "com.rezox.render"
         minSdk = 28
         targetSdk = 35
-        versionCode = 8
-        versionName = "0.8.0-zstd-native"
-
+        versionCode = 9
+        versionName = "0.9.0-native-agent"
         ndk { abiFilters += listOf("arm64-v8a") }
         externalNativeBuild {
             cmake { cppFlags += listOf("-std=c++20", "-Wall", "-Wextra", "-Werror") }
         }
     }
     externalNativeBuild {
-        cmake {
-            path = file("src/main/cpp/CMakeLists.txt")
-            version = "3.22.1"
-        }
+        cmake { path = file("src/main/cpp/CMakeLists.txt"); version = "3.22.1" }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
 }
-
 dependencies {
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
 }
