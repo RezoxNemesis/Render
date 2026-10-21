@@ -92,7 +92,7 @@ public final class AgentActivity extends Activity {
         StudioUi.add(localBridge,StudioUi.text(this,"Connect & share\nwith ChatGPT.",22,StudioUi.WHITE,true));
         StudioUi.space(localBridge,8);
         StudioUi.add(localBridge,StudioUi.text(this,
-            "Connect Render as a separate Android Blender executor through the SAME VideoStudio MCP. No new key, cloud server or ChatGPT connector. Native Blender work stays on this phone.",
+            "Connect Render as a separate Blender executor through the SAME VideoStudio MCP. No extra relay, private app key, pairing code or cloud Start Session step. Native Blender work stays on your phone.",
             13,0xFFE2D5FF,false));
         StudioUi.space(localBridge,12);
         bridgeState=StudioUi.text(this,localBridgeStatus(),13,StudioUi.GREEN,true);
@@ -118,6 +118,21 @@ public final class AgentActivity extends Activity {
         StudioUi.add(page,localBridge);
         StudioUi.space(page,17);
 
+        // Keep legacy cloud modes supported but do not confuse them with
+        // the recommended single, direct VideoStudio MCP connection.
+        LinearLayout advanced=StudioUi.column(this);
+        advanced.setVisibility(View.GONE);
+        TextView advancedToggle=StudioUi.action(this,
+            "OPTIONAL CLOUD PAIRING / ADVANCED     ▾",StudioUi.SECONDARY);
+        StudioUi.add(page,advancedToggle);
+        StudioUi.space(page,8);
+        StudioUi.add(page,advanced);
+        advancedToggle.setOnClickListener(v->{
+            boolean expand=advanced.getVisibility()!=View.VISIBLE;
+            advanced.setVisibility(expand?View.VISIBLE:View.GONE);
+            advancedToggle.setText(expand?"HIDE ADVANCED CLOUD OPTIONS     ▴":
+                "OPTIONAL CLOUD PAIRING / ADVANCED     ▾");
+        });
         LinearLayout shared=StudioUi.violetCard(this);
         StudioUi.add(shared,StudioUi.label(this,"PREFERRED / EXISTING VIDEOSTUDIO MCP"));
         StudioUi.space(shared,10);
@@ -133,8 +148,8 @@ public final class AgentActivity extends Activity {
         addAction(shared,"PAIR VIA VIDEOSTUDIO MCP",StudioUi.PURPLE,()->pairWithVideoStudio());
         StudioUi.space(shared,10);
         addAction(shared,"CHECK VIDEOSTUDIO MCP WORKER",StudioUi.SECONDARY,()->verifyExistingMcp());
-        StudioUi.add(page,shared);
-        StudioUi.space(page,17);
+        StudioUi.add(advanced,shared);
+        StudioUi.space(advanced,17);
 
         LinearLayout pairPanel=StudioUi.card(this);
         StudioUi.add(pairPanel,StudioUi.label(this,"OPTIONAL / OLD INDEPENDENT RELAY"));
@@ -157,8 +172,8 @@ public final class AgentActivity extends Activity {
         addAction(pairPanel,"CHECK RELAY REACHABILITY",StudioUi.SECONDARY,()->testRelay());
         StudioUi.space(pairPanel,10);
         addAction(pairPanel,"GENERATE CHATGPT LINK CODE",StudioUi.SECONDARY,()->link());
-        StudioUi.add(page,pairPanel);
-        StudioUi.space(page,16);
+        StudioUi.add(advanced,pairPanel);
+        StudioUi.space(advanced,16);
 
         LinearLayout sessionPanel=StudioUi.card(this);
         StudioUi.add(sessionPanel,StudioUi.label(this,"02   /   AUTONOMOUS SESSION"));
@@ -179,8 +194,8 @@ public final class AgentActivity extends Activity {
                 .setMessage("This stops commands and revokes the phone's relay credential. Imported projects are preserved.")
                 .setNegativeButton("Keep",null)
                 .setPositiveButton("Revoke",(d,w)->revoke()).show());
-        StudioUi.add(page,sessionPanel);
-        StudioUi.space(page,16);
+        StudioUi.add(advanced,sessionPanel);
+        StudioUi.space(advanced,16);
 
         LinearLayout utility=StudioUi.card(this);
         StudioUi.add(utility,StudioUi.label(this,"03   /   LOCAL DIAGNOSTICS"));
