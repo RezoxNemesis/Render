@@ -159,6 +159,48 @@ public final class BlenderSpool {
                 throw new IllegalArgumentException("INVALID_RENDER_ENGINE");
             return;
         }
+
+        if("blender.scene.visual_audit".equals(action)){
+            if(args.length()!=0)throw new IllegalArgumentException("UNEXPECTED_ARGUMENT");
+            return;
+        }
+        if("blender.scene.batch_assembly".equals(action)){
+            if(args.length()!=2 || !args.has("assembly") || !args.has("parts"))
+                throw new IllegalArgumentException("INVALID_ASSEMBLY_FIELDS");
+            String assembly=args.getString("assembly");
+            if(!assembly.matches("[A-Za-z][A-Za-z0-9_-]{0,63}"))
+                throw new IllegalArgumentException("INVALID_ASSEMBLY_NAME");
+            JSONArray parts=args.getJSONArray("parts");
+            if(parts.length()<1 || parts.length()>96)
+                throw new IllegalArgumentException("INVALID_ASSEMBLY_SIZE");
+            java.util.Set<String> names=new java.util.HashSet<>();
+            java.util.Set<String> allowed=new java.util.HashSet<>(java.util.Arrays.asList(
+                "name","kind","location","scale","color","metallic","roughness","bevel"));
+            for(int i=0;i<parts.length();i++){
+                JSONObject part=parts.getJSONObject(i);
+                java.util.Set<String> fields=new java.util.HashSet<>();
+                part.keys().forEachRemaining(fields::add);
+                if(!allowed.containsAll(fields) ||
+                     !fields.containsAll(java.util.Arrays.asList(
+                        "name","kind","location","scale")))
+                    throw new IllegalArgumentException("INVALID_ASSEMBLY_PART");
+                String name=part.getString("name");
+                if(!name.matches("[A-Za-z][A-Za-z0-9_-]{0,63}") || !names.add(name))
+                    throw new IllegalArgumentException("INVALID_OR_DUPLICATE_PART_NAME");
+                if(!java.util.Arrays.asList(
+                    "CUBE","CYLINDER","CONE","UV_SPHERE","PLANE")
+                    .contains(part.getString("kind")))
+                    throw new IllegalArgumentException("INVALID_ASSEMBLY_KIND");
+                vector(part,"location",-10000,10000,"INVALID_PART_LOCATION");
+                vector(part,"scale",.001,1000,"INVALID_PART_SCALE");
+                if(part.has("color")) vector(part,"color",0,1,"INVALID_PART_COLOR");
+                for(String surface:new String[]{"metallic","roughness","bevel"})
+                    if(part.has(surface)&&!finite(part.get(surface),0,
+                        surface.equals("bevel")?.25:1))
+                        throw new IllegalArgumentException("INVALID_PART_SURFACE");
+            }
+            return;
+        }
         if("blender.scene.render_still".equals(action)){
             if(args.length()!=0)throw new IllegalArgumentException("UNEXPECTED_ARGUMENT");
             return;
@@ -199,6 +241,7 @@ public final class BlenderSpool {
         long timeoutMillis=action.equals("blender.scene.render_video") ? 1800000L :
             action.equals("blender.scene.create_lively_project") ? 120000L :
             action.equals("blender.scene.populate_lively") ? 120000L :
+            action.equals("blender.scene.batch_assembly") ? 120000L :
             action.equals("blender.scene.render_still") ? 480000L :
             action.equals("blender.project.save_copy") ? 120000L : 20000L;
         JSONObject envelope=new JSONObject().put("id",id).put("action",action)
