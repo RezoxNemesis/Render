@@ -3,6 +3,7 @@ plugins { id("com.android.application") }
 android {
     namespace = "com.rezox.render"
     compileSdk = 35
+    ndkVersion = "27.2.12479018"
 
     defaultConfig {
         applicationId = "com.rezox.render"
