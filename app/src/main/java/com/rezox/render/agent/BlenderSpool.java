@@ -26,26 +26,62 @@ public final class BlenderSpool {
         double number = ((Number)value).doubleValue();
         return Double.isFinite(number) && number >= low && number <= high;
     }
+    private static void vector(JSONObject args,String key,double low,double high,String code) throws Exception {
+        Object raw=args.get(key);
+        if(!(raw instanceof JSONArray))throw new IllegalArgumentException(code);
+        JSONArray triple=(JSONArray)raw;
+        if(triple.length()!=3)throw new IllegalArgumentException(code);
+        for(int i=0;i<3;i++)if(!finite(triple.get(i),low,high))
+            throw new IllegalArgumentException(code);
+    }
+    private static void name(JSONObject args,boolean required)throws Exception {
+        if(required&&!args.has("name"))throw new IllegalArgumentException("INVALID_OBJECT_NAME");
+        String n=args.optString("name","Cube");
+        if(!n.matches("[A-Za-z][A-Za-z0-9_-]{0,63}"))
+            throw new IllegalArgumentException("INVALID_OBJECT_NAME");
+    }
+    private static void frame(JSONObject args)throws Exception {
+        Object raw=args.get("frame");
+        if(!(raw instanceof Integer)||((Integer)raw)<1||((Integer)raw)>100000)
+            throw new IllegalArgumentException("INVALID_FRAME");
+    }
     private static void checkArguments(String action, JSONObject args) throws Exception {
-        if ("blender.scene.summary".equals(action)) {
-            if (args.length() != 0) throw new IllegalArgumentException("UNEXPECTED_ARGUMENT");
+        if("blender.scene.summary".equals(action)){
+            if(args.length()!=0)throw new IllegalArgumentException("UNEXPECTED_ARGUMENT");
             return;
         }
-        if (!"blender.object.add_cube".equals(action))
-            throw new IllegalArgumentException("NATIVE_BLENDER_ACTION_UNAVAILABLE");
-        String name = args.optString("name","Cube");
-        if (!name.matches("[A-Za-z][A-Za-z0-9_-]{0,63}"))
-            throw new IllegalArgumentException("INVALID_OBJECT_NAME");
-        if (args.has("size") && !finite(args.get("size"),0.001,10000))
-            throw new IllegalArgumentException("INVALID_CUBE_SIZE");
-        if (args.has("location")) {
-            Object raw=args.get("location");
-            if (!(raw instanceof JSONArray)) throw new IllegalArgumentException("INVALID_CUBE_LOCATION");
-            JSONArray xyz=(JSONArray)raw;
-            if (xyz.length()!=3) throw new IllegalArgumentException("INVALID_CUBE_LOCATION");
-            for(int i=0;i<3;i++) if(!finite(xyz.get(i),-100000,100000))
-                throw new IllegalArgumentException("INVALID_CUBE_LOCATION");
+        if("blender.scene.set_frame".equals(action)){
+            if(args.length()!=1)throw new IllegalArgumentException("UNEXPECTED_ARGUMENT");
+            frame(args);return;
         }
+        if("blender.object.add_cube".equals(action)){
+            name(args,false);
+            if(args.has("size")&&!finite(args.get("size"),0.001,10000))
+                throw new IllegalArgumentException("INVALID_CUBE_SIZE");
+            if(args.has("location"))vector(args,"location",-100000,100000,"INVALID_CUBE_LOCATION");
+            return;
+        }
+        if("blender.object.set_transform".equals(action)){
+            name(args,true);
+            if(!args.has("location")&&!args.has("rotation_euler")&&!args.has("scale"))
+                throw new IllegalArgumentException("TRANSFORM_FIELD_REQUIRED");
+            if(args.has("location"))vector(args,"location",-100000,100000,"INVALID_OBJECT_LOCATION");
+            if(args.has("rotation_euler"))vector(args,"rotation_euler",-1000,1000,"INVALID_OBJECT_ROTATION");
+            if(args.has("scale"))vector(args,"scale",0.001,10000,"INVALID_OBJECT_SCALE");
+            return;
+        }
+        if("blender.object.keyframe".equals(action)){
+            name(args,true);frame(args);
+            String path=args.getString("data_path");
+            if(!path.equals("location")&&!path.equals("rotation_euler")&&!path.equals("scale"))
+                throw new IllegalArgumentException("INVALID_KEYFRAME_PATH");
+            vector(args,"value",path.equals("scale")?0.001:
+                path.equals("rotation_euler")?-1000:-100000,
+                path.equals("scale")?10000:path.equals("rotation_euler")?1000:100000,
+                "INVALID_KEYFRAME_VALUE");
+            return;
+        }
+        throw new IllegalArgumentException("NATIVE_BLENDER_ACTION_UNAVAILABLE");
     }
     public JSONObject execute(String action, JSONObject args, AtomicBoolean cancelled) throws Exception {
         checkArguments(action,args);

@@ -47,19 +47,41 @@ public final class AgentActions {
                     prop.put("type","string").put("pattern","^[A-Za-z][A-Za-z0-9_-]{0,63}$");
                 }else if(field.equals("size")){
                     prop.put("type","number").put("minimum",0.001).put("maximum",10000);
-                }else if(field.equals("location")){
+                }else if(field.equals("frame")){
+                    prop.put("type","integer").put("minimum",1).put("maximum",100000);
+                }else if(field.equals("data_path")){
+                    prop.put("type","string").put("enum",new JSONArray(
+                        new String[]{"location","rotation_euler","scale"}));
+                }else if(field.equals("location") || field.equals("rotation_euler")
+                        || field.equals("scale") || field.equals("value")){
+                    double minimum = field.equals("scale") ? 0.001 :
+                        field.equals("rotation_euler") ? -1000 : -100000;
+                    double maximum = field.equals("scale") ? 10000 :
+                        field.equals("rotation_euler") ? 1000 : 100000;
                     prop.put("type","array").put("minItems",3).put("maxItems",3)
-                        .put("items",new JSONObject().put("type","number").put("minimum",-100000).put("maximum",100000));
+                        .put("items",new JSONObject().put("type","number")
+                        .put("minimum",minimum).put("maximum",maximum));
                 }else prop.put("type","string").put("pattern","^[a-f0-9]{64}$");
                 properties.put(field,prop);
             }
+            String[] required = id.equals("projects.inspect") ? new String[]{"project_id"} :
+                id.equals("blender.scene.set_frame") ? new String[]{"frame"} :
+                id.equals("blender.object.set_transform") ? new String[]{"name"} :
+                id.equals("blender.object.keyframe") ?
+                    new String[]{"name","frame","data_path","value"} : new String[]{};
             JSONObject schema = new JSONObject().put("type","object").put("properties",properties)
-                .put("additionalProperties",false).put("required",new JSONArray(
-                    id.equals("projects.inspect") ? new String[]{"project_id"} : new String[]{}));
+                .put("additionalProperties",false).put("required",new JSONArray(required));
+            if (id.equals("blender.object.set_transform")) {
+                JSONArray anyOf = new JSONArray();
+                for (String field : new String[]{"location","rotation_euler","scale"})
+                    anyOf.put(new JSONObject().put("required",new JSONArray(new String[]{field})));
+                schema.put("anyOf",anyOf);
+            }
             boolean bpy=id.startsWith("blender.");
             boolean available=!bpy||fullBlender;
             JSONObject descriptor=new JSONObject().put("id",id).put("available",available).put("api_version",1)
-                .put("read_only",!id.equals("blender.object.add_cube"))
+                .put("read_only",!(id.equals("blender.object.add_cube") || id.equals("blender.scene.set_frame")
+                    || id.equals("blender.object.set_transform") || id.equals("blender.object.keyframe")))
                 .put("cancellation","between_native_calls").put("input_schema",schema);
             if(bpy&&!available)descriptor.put("reason","Full native Blender editor not packaged in this Android build");
             if(bpy&&available)descriptor.put("requires","Open full Blender editor and wait for bpy timer startup");

@@ -5,6 +5,7 @@ on:
     paths:
       - "full-app/**"
       - "tools/test_blender_bpy_bridge.py"
+      - "tools/test_real_blender_bpy.py"
       - "tools/assemble_full_native.py"
       - "tools/test_assemble_full_native.py"
       - ".github/workflows/full-native-apk.yml"

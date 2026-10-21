@@ -22,6 +22,9 @@ public final class AgentPolicy {
         registry.put("gpu.info", Collections.emptySet());
         registry.put("blender.scene.summary", Collections.emptySet());
         registry.put("blender.object.add_cube", fields("name", "size", "location"));
+        registry.put("blender.scene.set_frame", fields("frame"));
+        registry.put("blender.object.set_transform", fields("name", "location", "rotation_euler", "scale"));
+        registry.put("blender.object.keyframe", fields("name", "frame", "data_path", "value"));
         ACTIONS = Collections.unmodifiableMap(registry);
     }
     private static Set<String> fields(String... values) {
@@ -48,6 +51,16 @@ public final class AgentPolicy {
         if (!ACTIONS.get(action).containsAll(fields)) throw new IllegalArgumentException("UNKNOWN_ARGUMENT");
         if (action.equals("projects.inspect") && !fields.contains("project_id"))
             throw new IllegalArgumentException("PROJECT_ID_REQUIRED");
+        if (action.equals("blender.scene.set_frame") && !fields.contains("frame"))
+            throw new IllegalArgumentException("FRAME_REQUIRED");
+        if ((action.equals("blender.object.set_transform") || action.equals("blender.object.keyframe"))
+            && !fields.contains("name")) throw new IllegalArgumentException("OBJECT_NAME_REQUIRED");
+        if (action.equals("blender.object.set_transform")
+            && !fields.contains("location") && !fields.contains("rotation_euler") && !fields.contains("scale"))
+            throw new IllegalArgumentException("TRANSFORM_FIELD_REQUIRED");
+        if (action.equals("blender.object.keyframe")
+            && !(fields.contains("data_path") && fields.contains("frame") && fields.contains("value")))
+            throw new IllegalArgumentException("KEYFRAME_FIELDS_REQUIRED");
     }
     public static String sha256(String value) {
         try { return hex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8))); }
