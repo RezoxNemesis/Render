@@ -18,7 +18,8 @@ public final class NativeWakeGuard implements AutoCloseable {
         if("blender.scene.render_still".equals(action))return 480_000L+SAFETY_MARGIN_MS;
         if("blender.project.save_copy".equals(action) ||
            "blender.scene.populate_lively".equals(action) ||
-           "blender.scene.create_lively_project".equals(action))
+           "blender.scene.create_lively_project".equals(action) ||
+           "blender.scene.batch_assembly".equals(action))
             return 120_000L+SAFETY_MARGIN_MS;
         return 20_000L+SAFETY_MARGIN_MS;
     }
