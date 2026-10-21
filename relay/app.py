@@ -288,4 +288,4 @@ def create_app(database,origin,enrollment_secret):
 
 
 def production():
-    return create_app(os.environ.get('DATABASE_PATH','/data/render-relay.sqlite'),os.environ['PUBLIC_URL'],os.environ['ENROLLMENT_SECRET'])
+    return create_app(os.environ.get('DATABASE_URL') or os.environ.get('DATABASE_PATH','/data/render-relay.sqlite'),os.environ['PUBLIC_URL'],os.environ['ENROLLMENT_SECRET'])

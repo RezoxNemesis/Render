@@ -12,6 +12,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from jsonschema import Draft202012Validator, ValidationError, SchemaError
+from storage import pg_session
 
 
 def canonical(value):
@@ -43,7 +44,9 @@ class Relay:
             raise ValueError('Enrollment secret must contain at least 32 random characters')
         self.origin, self.resource = origin.rstrip('/'), origin.rstrip('/') + '/mcp'
         self.database, self.clock, self.bootstrap = str(database), clock, hashed(enrollment_secret)
-        Path(self.database).parent.mkdir(parents=True, exist_ok=True)
+        self.use_postgres = self.database.startswith(('postgresql://', 'postgres://'))
+        if not self.use_postgres:
+            Path(self.database).parent.mkdir(parents=True, exist_ok=True)
         with self.db() as db:
             db.executescript('''
             CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT);
@@ -63,6 +66,12 @@ class Relay:
 
     @contextmanager
     def db(self):
+        if self.use_postgres:
+            # The entire command/authorization transaction is atomic even if
+            # several web workers retry or the phone reconnects simultaneously.
+            with pg_session(self.database) as db:
+                yield db
+            return
         db = sqlite3.connect(self.database, timeout=20, isolation_level=None)
         db.row_factory = sqlite3.Row
         db.execute('PRAGMA busy_timeout=20000')
@@ -245,7 +254,7 @@ class Relay:
             if db.execute("SELECT COUNT(*) FROM jobs WHERE device=? AND state='queued'",(a['device'],)).fetchone()[0]>=100:
                 raise Denied('QUEUE_FULL',429)
             job=secrets.token_hex(16)
-            db.execute('INSERT INTO jobs VALUES(?,?,?,?,?,?,?,?)',(job,request,a['device'],digest,payload,'queued',None,self.clock()))
+            db.execute('INSERT INTO jobs(id,request,device,digest,payload,state,result,updated) VALUES(?,?,?,?,?,?,?,?)',(job,request,a['device'],digest,payload,'queued',None,self.clock()))
             return {'job_id':job,'state':'queued','duplicate':False}
 
     def poll(self, device_token, enabled, caps, active_job_id):
