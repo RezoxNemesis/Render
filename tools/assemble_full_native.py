@@ -114,7 +114,7 @@ def merge_manifest(source):
     return ET.ElementTree(root)
 
 
-def attach_bpy_agent(runtime_zip, source_py):
+def attach_bpy_agent(runtime_zip, source_py, scene_py=None):
     """Startup timer executes typed bpy operations, never arbitrary Python code."""
     with zipfile.ZipFile(runtime_zip) as packed:
         names = packed.namelist()
@@ -122,9 +122,14 @@ def attach_bpy_agent(runtime_zip, source_py):
             raise ValueError("UPSTREAM_BLENDER_STARTUP_TREE_MISSING")
         if "scripts/startup/render_agent_startup.py" in names:
             raise ValueError("BLENDER_AGENT_SCRIPT_COLLISION")
+        if scene_py is not None and "scripts/startup/render_lively_scene.py" in names:
+            raise ValueError("BLENDER_LIVELY_SCRIPT_COLLISION")
     with zipfile.ZipFile(runtime_zip, "a") as packed:
         packed.write(source_py, "scripts/startup/render_agent_startup.py",
                      compress_type=zipfile.ZIP_DEFLATED)
+        if scene_py is not None:
+            packed.write(scene_py, "scripts/startup/render_lively_scene.py",
+                         compress_type=zipfile.ZIP_DEFLATED)
 
 def patch_native_activity(path):
     java = path.read_text(encoding="utf-8")
@@ -275,7 +280,8 @@ def stage(engine, bridge, source, destination, expected_size=ENGINE_BYTES,
     patch_native_activity(java_dst)
     shutil.copytree(res, destination / "res", dirs_exist_ok=True)
     startup = Path(__file__).resolve().parents[1] / "full-app/scripts/render_agent_startup.py"
-    attach_bpy_agent(assets / "blender_runtime.zip", startup)
+    lively = Path(__file__).resolve().parents[1] / "full-app/scripts/render_lively_scene.py"
+    attach_bpy_agent(assets / "blender_runtime.zip", startup, lively)
     merged = merge_manifest(manifest)
     merged.write(destination / "AndroidManifest.xml", encoding="utf-8", xml_declaration=True)
     notices = assets / "licenses"
