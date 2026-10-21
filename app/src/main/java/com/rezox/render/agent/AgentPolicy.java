@@ -34,6 +34,7 @@ public final class AgentPolicy {
         registry.put("blender.scene.render_settings", fields("resolution_x", "resolution_y", "samples", "engine", "denoising"));
         registry.put("blender.scene.render_still", Collections.emptySet());
         registry.put("blender.project.restore_scene", fields("project_id", "expected_sha256"));
+        registry.put("blender.scene.create_lively_project", Collections.emptySet());
         registry.put("blender.scene.populate_lively", Collections.emptySet());
         registry.put("blender.scene.render_video", Collections.emptySet());
         ACTIONS = Collections.unmodifiableMap(registry);
