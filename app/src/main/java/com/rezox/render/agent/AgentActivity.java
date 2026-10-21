@@ -225,7 +225,8 @@ public final class AgentActivity extends Activity {
         }
         if(e instanceof AgentHttp.RelayException){
             int status=((AgentHttp.RelayException)e).status;
-            if(status==403)return "The enrollment code was rejected or has already been used. Check the code and try again.";
+            if(status==404)return "Render channel not deployed on the existing VideoStudio MCP Worker yet. The Worker needs its additive Render update.";
+            if(status==403)return "Pairing code invalid, expired, already used or not authorized by VideoStudio.";
             if(status==409)return "This relay has already enrolled a phone. Generate a fresh authorized setup before retrying.";
             if(status==401)return "Authorization failed or expired. Pair with a fresh one-use enrollment code.";
             if(status==429)return "Too many attempts. Wait briefly before trying again.";
@@ -263,7 +264,8 @@ public final class AgentActivity extends Activity {
         });
     }
     private void link(){perform(()->{
-        JSONObject c=secrets.load();if(c==null)throw new IllegalStateException("Pair this phone first using the relay address and enrollment code, then generate a ChatGPT link code.");
+        JSONObject c=secrets.load();if(c==null)throw new IllegalStateException("Pair Render first using the VideoStudio MCP one-time code.");
+        if(VideoStudioMcpTransport.isSelected(c))return "Render uses your existing VideoStudio MCP. No new ChatGPT link code or connector is needed.";
         JSONObject r=AgentHttp.post(c.getString("relay"),"/v1/device/link",c.getString("device_token"),new JSONObject());
         return "New ChatGPT authorization code (10 minutes):\n"+r.getString("link_code")+"\n\nMCP endpoint: "+c.getString("relay")+"/mcp";
     });}
@@ -276,7 +278,10 @@ public final class AgentActivity extends Activity {
             if(!getSystemService(NotificationManager.class).areNotificationsEnabled()){
                 secrets.status("Enable Render notifications so the active connection and Stop control stay visible.");return;
             }
-            secrets.enabled(true);secrets.status("Connecting to relay; no command has executed yet.");
+            secrets.enabled(true);
+            secrets.status(VideoStudioMcpTransport.isSelected(secrets.load())
+                ?"Connecting through VideoStudio MCP. No Blender operation has executed yet."
+                :"Connecting to standalone relay. No command has executed yet.");
             startForegroundService(new Intent(this,AgentService.class));
         }catch(Exception e){secrets.enabled(false);secrets.status("Cannot start session: "+e.getClass().getSimpleName());}
     }
@@ -287,9 +292,10 @@ public final class AgentActivity extends Activity {
     private void revoke(){
         stopSession();perform(()->{
             JSONObject c=secrets.load();if(c==null)return "No connection is saved.";
-            AgentHttp.post(c.getString("relay"),"/v1/device/revoke",c.getString("device_token"),new JSONObject());
+            if(VideoStudioMcpTransport.isSelected(c))VideoStudioMcpTransport.unlink(c);
+            else AgentHttp.post(c.getString("relay"),"/v1/device/revoke",c.getString("device_token"),new JSONObject());
             secrets.clear();secrets.status("Connection revoked. Existing projects were preserved.");
-            return "Phone and ChatGPT credentials revoked at the relay. Local credential ciphertext removed.";
+            return "Render pairing was revoked. The original VideoStudio MCP connection and projects are preserved.";
         });
     }
     private void localCheck(){perform(()->{
