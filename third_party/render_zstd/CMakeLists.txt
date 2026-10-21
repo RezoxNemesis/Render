@@ -42,4 +42,4 @@ if(NOT TARGET libzstd_static)
   message(FATAL_ERROR "Pinned Zstd source did not supply libzstd_static")
 endif()
 set_target_properties(libzstd_static PROPERTIES POSITION_INDEPENDENT_CODE ON)
-target_include_directories(libzstd_static INTERFACE "${RENDER_ZSTD_CHECKOUT_DIR}/lib")
+# Upstream libzstd_static already exports its build-directory include path.
