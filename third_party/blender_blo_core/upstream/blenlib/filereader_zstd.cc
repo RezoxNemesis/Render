@@ -103,7 +103,7 @@ static bool zstd_read_seek_table(ZstdReader *zstd)
 
   size_t compressed_ofs = 0;
   size_t uncompressed_ofs = 0;
-  for (int i = 0; i < frames_num; i++) {
+  for (uint32_t i = 0; i < frames_num; i++) {
     uint32_t compressed_size, uncompressed_size;
     if (!zstd_read_u32(base, &compressed_size) || !zstd_read_u32(base, &uncompressed_size)) {
       break;
@@ -120,7 +120,8 @@ static bool zstd_read_seek_table(ZstdReader *zstd)
   zstd->seek.uncompressed_ofs[frames_num] = uncompressed_ofs;
 
   /* Seek to the end of the previous frame for the following #BHead frame detection. */
-  if (seek_frame_start != compressed_ofs || base->seek(base, seek_frame_start, SEEK_SET) < 0) {
+  if (seek_frame_start < 0 || static_cast<uint64_t>(seek_frame_start) != compressed_ofs ||
+      base->seek(base, seek_frame_start, SEEK_SET) < 0) {
     delete[] zstd->seek.compressed_ofs;
     delete[] zstd->seek.uncompressed_ofs;
     memset(&zstd->seek, 0, sizeof(zstd->seek));
@@ -174,7 +175,8 @@ static const char *zstd_ensure_cache(ZstdReader *zstd, int frame)
   char *uncompressed_data = MEM_new_array_uninitialized<char>(uncompressed_size, __func__);
   char *compressed_data = MEM_new_array_uninitialized<char>(compressed_size, __func__);
   if (zstd->base->seek(zstd->base, zstd->seek.compressed_ofs[frame], SEEK_SET) < 0 ||
-      zstd->base->read(zstd->base, compressed_data, compressed_size) < compressed_size)
+      zstd->base->read(zstd->base, compressed_data, compressed_size) !=
+          static_cast<int64_t>(compressed_size))
   {
     delete[] compressed_data;
     delete[] uncompressed_data;
@@ -198,8 +200,9 @@ static int64_t zstd_read_seekable(FileReader *reader, void *buffer, size_t size)
 {
   ZstdReader *zstd = reinterpret_cast<ZstdReader *>(reader);
 
-  size_t end_offset = zstd->reader.offset + size, read_len = 0;
-  while (zstd->reader.offset < end_offset) {
+  size_t end_offset = static_cast<size_t>(zstd->reader.offset) + size, read_len = 0;
+  while (zstd->reader.offset >= 0 &&
+         static_cast<size_t>(zstd->reader.offset) < end_offset) {
     int frame = zstd_frame_from_pos(zstd, zstd->reader.offset);
     if (frame < 0) {
       /* EOF is reached, so return as much as we can. */
@@ -238,7 +241,8 @@ static off64_t zstd_seek(FileReader *reader, off64_t offset, int whence)
     new_pos = zstd->reader.offset + offset;
   }
 
-  if (new_pos < 0 || new_pos > zstd->seek.uncompressed_ofs[zstd->seek.frames_num]) {
+  if (new_pos < 0 || static_cast<uint64_t>(new_pos) >
+                         zstd->seek.uncompressed_ofs[zstd->seek.frames_num]) {
     return -1;
   }
   zstd->reader.offset = new_pos;
