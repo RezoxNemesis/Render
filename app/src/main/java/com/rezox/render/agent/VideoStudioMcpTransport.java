@@ -1,5 +1,7 @@
 package com.rezox.render.agent;
 
+import android.content.Context;
+import android.content.pm.PackageManager;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.ByteArrayOutputStream;
@@ -71,12 +73,25 @@ public final class VideoStudioMcpTransport {
         return result;
     }
     public static JSONObject pair(String shortCode)throws Exception {
+        return pair(null,shortCode);
+    }
+    /** Read the actually installed Android version, never hard-code a stale
+     * Render feature level in the existing VideoStudio MCP pairing metadata. */
+    public static JSONObject pair(Context context,String shortCode)throws Exception {
         String code=pairingCode(shortCode);
         byte[] random=new byte[32];
         new SecureRandom().nextBytes(random);
         String renderKey=Base64.getUrlEncoder().withoutPadding().encodeToString(random);
         String renderId=UUID.randomUUID().toString();
-        JSONObject metadata=new JSONObject().put("appVersion","0.12.0")
+        String installedVersion="unknown";
+        if(context!=null){
+            try {
+                android.content.pm.PackageInfo installed=context.getPackageManager()
+                    .getPackageInfo(context.getPackageName(),0);
+                if(installed.versionName!=null)installedVersion=installed.versionName;
+            } catch(PackageManager.NameNotFoundException ignored) {}
+        }
+        JSONObject metadata=new JSONObject().put("appVersion",installedVersion)
             .put("protocolFamily","render-native").put("nativeAgent","render-native-v1")
             .put("protocolVersion",3).put("appGeneration",1)
             .put("galleryAccess",false);
