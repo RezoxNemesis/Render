@@ -169,7 +169,7 @@ public final class AgentActions {
                 File saved = projects.find(args.getString("project_id"));
                 File owned = new File(context.getFilesDir(),"Projects").getCanonicalFile();
                 if (!owned.equals(saved.getCanonicalFile().getParentFile())
-                        || !saved.getName().matches("Render_[a-f0-9]{32}\\\\.blend"))
+                        || !saved.getName().matches("Render_[a-f0-9]{32}\\.blend"))
                     throw new IllegalArgumentException("PROJECT_NOT_RENDER_CHECKPOINT");
                 if (args.has("expected_sha256")) {
                     String expected=args.getString("expected_sha256");
