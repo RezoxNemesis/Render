@@ -119,7 +119,7 @@ def merge_manifest(source):
     return ET.ElementTree(root)
 
 
-def attach_bpy_agent(runtime_zip, source_py, scene_py=None):
+def attach_bpy_agent(runtime_zip, source_py, scene_py=None, batch_py=None):
     """Startup timer executes typed bpy operations, never arbitrary Python code."""
     with zipfile.ZipFile(runtime_zip) as packed:
         names = packed.namelist()
@@ -129,11 +129,16 @@ def attach_bpy_agent(runtime_zip, source_py, scene_py=None):
             raise ValueError("BLENDER_AGENT_SCRIPT_COLLISION")
         if scene_py is not None and "scripts/startup/render_lively_scene.py" in names:
             raise ValueError("BLENDER_LIVELY_SCRIPT_COLLISION")
+        if batch_py is not None and "scripts/startup/render_batch_assembly.py" in names:
+            raise ValueError("BLENDER_BATCH_SCRIPT_COLLISION")
     with zipfile.ZipFile(runtime_zip, "a") as packed:
         packed.write(source_py, "scripts/startup/render_agent_startup.py",
                      compress_type=zipfile.ZIP_DEFLATED)
         if scene_py is not None:
             packed.write(scene_py, "scripts/startup/render_lively_scene.py",
+                         compress_type=zipfile.ZIP_DEFLATED)
+        if batch_py is not None:
+            packed.write(batch_py, "scripts/startup/render_batch_assembly.py",
                          compress_type=zipfile.ZIP_DEFLATED)
 
 def patch_native_activity(path):
@@ -286,7 +291,8 @@ def stage(engine, bridge, source, destination, expected_size=ENGINE_BYTES,
     shutil.copytree(res, destination / "res", dirs_exist_ok=True)
     startup = Path(__file__).resolve().parents[1] / "full-app/scripts/render_agent_startup.py"
     lively = Path(__file__).resolve().parents[1] / "full-app/scripts/render_lively_scene.py"
-    attach_bpy_agent(assets / "blender_runtime.zip", startup, lively)
+    assembly = Path(__file__).resolve().parents[1] / "full-app/scripts/render_batch_assembly.py"
+    attach_bpy_agent(assets / "blender_runtime.zip", startup, lively, assembly)
     merged = merge_manifest(manifest)
     merged.write(destination / "AndroidManifest.xml", encoding="utf-8", xml_declaration=True)
     notices = assets / "licenses"
