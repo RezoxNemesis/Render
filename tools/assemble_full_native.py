@@ -44,6 +44,17 @@ def valid_zip_entry(info):
 def merge_manifest(source):
     root = ET.parse(source).getroot()
     root.attrib.pop("package", None)   # AGP 8+ namespace comes from Gradle.
+    # Android 11+ package visibility: explicitly inspect only our known
+    # VideoStudio native Binder carrier, never scan unrelated installed apps.
+    queries = root.find("queries")
+    if queries is None:
+        queries = ET.Element("queries")
+        root.insert(0, queries)
+    if not any(p.get(ANDROID + "name") == "com.rezoxnemesis.videostudio"
+               for p in queries.findall("package")):
+        ET.SubElement(queries, "package", {
+            ANDROID + "name": "com.rezoxnemesis.videostudio"
+        })
     application = root.find("application")
     if application is None:
         raise ValueError("UPSTREAM_MANIFEST_NO_APPLICATION")

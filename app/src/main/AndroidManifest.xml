@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Explicit known app visibility for same-phone VideoStudio native MCP. -->
+    <queries>
+        <package android:name="com.rezoxnemesis.videostudio" />
+    </queries>
     <!-- Network is optional command transport; Blender computation remains local. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />

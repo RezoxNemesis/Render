@@ -76,6 +76,9 @@ class NativePackagingTests(unittest.TestCase):
         self.assertIn("render_editor_launch",java.read_text())
         self.assertTrue((self.output / "assets/licenses/Render-Full-Native-Sources.txt").exists())
         root = ET.parse(self.output / "AndroidManifest.xml").getroot()
+        assert root.find("queries") is not None
+        self.assertEqual("com.rezoxnemesis.videostudio",
+                         root.find("queries/package").get(A+"name"))
         self.assertNotIn("package", root.attrib)
         self.assertIn("android.permission.FOREGROUND_SERVICE_SPECIAL_USE",
                       [p.get(A+"name") for p in root.findall("uses-permission")])
