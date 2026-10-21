@@ -14,6 +14,29 @@ public final class AgentHttp {
         public final int status;
         RelayException(int status){super("RELAY_HTTP_"+status);this.status=status;}
     }
+    /** Public relay health check: never claims phone pairing or native command success. */
+    public static JSONObject checkHealth(String origin)throws Exception {
+        String base=AgentPolicy.relayUrl(origin);
+        HttpURLConnection connection=(HttpURLConnection)new URL(base+"/health").openConnection();
+        try {
+            connection.setRequestMethod("GET");
+            connection.setInstanceFollowRedirects(false);
+            connection.setConnectTimeout(7000);
+            connection.setReadTimeout(7000);
+            if(connection.getResponseCode()!=200)throw new RelayException(connection.getResponseCode());
+            try(InputStream in=connection.getInputStream();ByteArrayOutputStream out=new ByteArrayOutputStream()){
+                byte[] bytes=new byte[4096];int n;
+                while((n=in.read(bytes))!=-1) {
+                    if(out.size()+n>16384)throw new java.io.IOException("RELAY_HEALTH_TOO_LARGE");
+                    out.write(bytes,0,n);
+                }
+                JSONObject data=new JSONObject(out.toString("UTF-8"));
+                if(!data.optBoolean("ok") || !"chatgpt-render-relay".equals(data.optString("service")))
+                    throw new java.io.IOException("UNRECOGNIZED_RELAY_SERVICE");
+                return data;
+            }
+        } finally { connection.disconnect(); }
+    }
     public static JSONObject post(String base,String path,String token,JSONObject body)throws Exception{
         base=AgentPolicy.relayUrl(base);
         if(!path.matches("/v1/device/(enroll|link|poll|result|revoke)"))throw new IllegalArgumentException("INVALID_ROUTE");

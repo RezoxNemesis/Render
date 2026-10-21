@@ -17,6 +17,9 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import com.rezox.render.ui.StudioUi;
+import android.view.ViewGroup;
+import android.view.Gravity;
 import org.json.JSONObject;
 import java.util.UUID;
 import java.util.concurrent.Executors;
@@ -37,36 +40,129 @@ public final class AgentActivity extends Activity {
         status.setText(secrets.status());history.setText(journal.history());ui.postDelayed(this,2000);
     }};
     @Override public void onCreate(Bundle state){
-        super.onCreate(state); // Screen recording and screenshots are allowed by the owner.
+        super.onCreate(state);
+        // Explicitly allow owner screenshots and screen recordings.
+        // Enrollment remains masked; credentials are in Android Keystore.
+        getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
         secrets=new AgentSecrets(this);journal=new AgentJournal(this);
-        ScrollView scroll=new ScrollView(this);LinearLayout content=new LinearLayout(this);
-        content.setOrientation(LinearLayout.VERTICAL);int pad=(int)(20*getResources().getDisplayMetrics().density);
-        content.setPadding(pad,pad,pad,pad);content.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
-        scroll.addView(content);setContentView(scroll);
-        label(content,"ChatGPT × Render",26);
-        label(content,"All project work executes on this Android phone. The HTTPS relay carries commands and results only.",15);
-        status=label(content,secrets.status(),15);
-        relay=new EditText(this);relay.setHint("Relay origin, https://…");relay.setSingleLine(true);
-        relay.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_URI);content.addView(relay);
-        enrollment=new EditText(this);enrollment.setHint("One-use private enrollment code");enrollment.setSingleLine(true);
-        enrollment.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);content.addView(enrollment);
+        LinearLayout page=StudioUi.page(this);
+
+        LinearLayout header=StudioUi.row(this);
+        TextView back=StudioUi.action(this,"←",StudioUi.SECONDARY);
+        back.setMinWidth(StudioUi.dp(this,52));
+        header.addView(back,new LinearLayout.LayoutParams(StudioUi.dp(this,52),StudioUi.dp(this,50)));
+        back.setOnClickListener(v->finish());
+        LinearLayout heading=StudioUi.column(this);
+        heading.setPadding(StudioUi.dp(this,14),0,0,0);
+        StudioUi.add(heading,StudioUi.label(this,"RENDER  /  AGENT CONSOLE"));
+        StudioUi.add(heading,StudioUi.text(this,"Connection Control",17,StudioUi.WHITE,true));
+        header.addView(heading,new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1));
+        StudioUi.add(page,header);
+        StudioUi.space(page,28);
+        StudioUi.add(page,StudioUi.chip(this,"◉  NATIVE EXECUTION",StudioUi.VIOLET));
+        StudioUi.space(page,12);
+        StudioUi.add(page,StudioUi.text(this,"ChatGPT ×\nRender",34,StudioUi.WHITE,true));
+        StudioUi.space(page,10);
+        StudioUi.add(page,StudioUi.text(this,
+            "Give commands from ChatGPT. Render executes its registered native operations on this Android device.",
+            14,StudioUi.MUTED,false));
+        StudioUi.space(page,20);
+
+        LinearLayout statusPanel=StudioUi.violetCard(this);
+        StudioUi.add(statusPanel,StudioUi.label(this,"CONNECTION STATUS"));
+        StudioUi.space(statusPanel,9);
+        status=StudioUi.text(this,secrets.status(),15,StudioUi.WHITE,true);
+        StudioUi.add(statusPanel,status);
+        StudioUi.space(statusPanel,7);
+        StudioUi.add(statusPanel,StudioUi.text(this,
+            "Pairing and HTTPS relay authentication are required before remote commands can arrive.",
+            12,0xFFBBAFD4,false));
+        StudioUi.add(page,statusPanel);
+        StudioUi.space(page,17);
+
+        LinearLayout pairPanel=StudioUi.card(this);
+        StudioUi.add(pairPanel,StudioUi.label(this,"01   /   PRIVATE PAIRING"));
+        StudioUi.space(pairPanel,8);
+        StudioUi.add(pairPanel,StudioUi.text(this,"Connect your phone",21,StudioUi.WHITE,true));
+        StudioUi.space(pairPanel,7);
+        StudioUi.add(pairPanel,StudioUi.text(this,
+            "Use the HTTPS relay origin and one-use enrollment code. This is not your ChatGPT password.",
+            13,StudioUi.MUTED,false));
+        StudioUi.space(pairPanel,14);
+        relay=StudioUi.field(this,"Relay origin  ·  https://…",false);
+        StudioUi.add(pairPanel,relay);
+        StudioUi.space(pairPanel,10);
+        enrollment=StudioUi.field(this,"One-use enrollment code",true);
+        StudioUi.add(pairPanel,enrollment);
         try{JSONObject c=secrets.load();if(c!=null)relay.setText(c.optString("relay"));}catch(Exception ignored){}
-        button(content,"Pair this phone",()->pair());
-        button(content,"New ChatGPT link code",()->link());
-        button(content,"Start autonomous session",()->startSession());
-        button(content,"Stop native commands",()->stopSession());
-        button(content,"Revoke this connection",()->new AlertDialog.Builder(this)
-            .setTitle("Revoke remote control?").setMessage("Stops new work and revokes this phone's relay credential and ChatGPT access tokens. Existing imported projects are not deleted.")
-            .setNegativeButton("Keep connection",null).setPositiveButton("Revoke",(d,w)->revoke()).show());
-        button(content,"Check native agent locally",()->localCheck());
-        button(content,"Open Render project inspector",()->startActivity(new Intent(this,com.rezox.render.MainActivity.class)));
-        label(content,"Activity on this phone",20);history=label(content,journal.history(),14);
-        label(content,"Available on the full-engine APK when Blender is open: bpy scene summary and native cube creation. Also available: imported-project inventory, .blend inspection and GPU diagnostics. Other modeling, animation and rendering tools require tested native handlers.",14);
-        label(content,"Android may pause background execution. Work and outcomes are journaled; an unfinished native call is never silently replayed.",14);
+        StudioUi.space(pairPanel,13);
+        addAction(pairPanel,"PAIR THIS DEVICE     →",StudioUi.PURPLE,()->pair());
+        StudioUi.space(pairPanel,10);
+        addAction(pairPanel,"CHECK RELAY REACHABILITY",StudioUi.SECONDARY,()->testRelay());
+        StudioUi.space(pairPanel,10);
+        addAction(pairPanel,"GENERATE CHATGPT LINK CODE",StudioUi.SECONDARY,()->link());
+        StudioUi.add(page,pairPanel);
+        StudioUi.space(page,16);
+
+        LinearLayout sessionPanel=StudioUi.card(this);
+        StudioUi.add(sessionPanel,StudioUi.label(this,"02   /   AUTONOMOUS SESSION"));
+        StudioUi.space(sessionPanel,8);
+        StudioUi.add(sessionPanel,StudioUi.text(this,"Execution control",21,StudioUi.WHITE,true));
+        StudioUi.space(sessionPanel,8);
+        StudioUi.add(sessionPanel,StudioUi.text(this,
+            "Start only after pairing. Every native command is logged and can be stopped from this screen or the Android notification.",
+            13,StudioUi.MUTED,false));
+        StudioUi.space(sessionPanel,15);
+        addAction(sessionPanel,"START AGENT SESSION",StudioUi.PRIMARY,()->startSession());
+        StudioUi.space(sessionPanel,10);
+        addAction(sessionPanel,"STOP NATIVE COMMANDS",StudioUi.SECONDARY,()->stopSession());
+        StudioUi.space(sessionPanel,10);
+        addAction(sessionPanel,"REVOKE CONNECTION",StudioUi.DANGER,()->
+            new AlertDialog.Builder(this)
+                .setTitle("Revoke remote control?")
+                .setMessage("This stops commands and revokes the phone's relay credential. Imported projects are preserved.")
+                .setNegativeButton("Keep",null)
+                .setPositiveButton("Revoke",(d,w)->revoke()).show());
+        StudioUi.add(page,sessionPanel);
+        StudioUi.space(page,16);
+
+        LinearLayout utility=StudioUi.card(this);
+        StudioUi.add(utility,StudioUi.label(this,"03   /   LOCAL DIAGNOSTICS"));
+        StudioUi.space(utility,12);
+        addAction(utility,"CHECK AGENT LOCALLY",StudioUi.SECONDARY,()->localCheck());
+        StudioUi.space(utility,10);
+        addAction(utility,"OPEN PROJECT INSPECTOR",StudioUi.SECONDARY,
+            ()->startActivity(new Intent(this,com.rezox.render.MainActivity.class)));
+        StudioUi.add(page,utility);
+        StudioUi.space(page,16);
+
+        LinearLayout logs=StudioUi.card(this);
+        StudioUi.add(logs,StudioUi.label(this,"LAST 20 NATIVE COMMANDS"));
+        StudioUi.space(logs,10);
+        history=StudioUi.text(this,journal.history(),13,StudioUi.MUTED,false);
+        StudioUi.add(logs,history);
+        StudioUi.add(page,logs);
+        StudioUi.space(page,18);
+        StudioUi.add(page,StudioUi.text(this,
+            "SCREEN CAPTURE ENABLED  •  Secret fields remain masked. This connection never uses cloud Blender rendering. Device and permission limitations still apply.",
+            11,StudioUi.MUTED,false));
         ui.post(refresh);
     }
-    private TextView label(LinearLayout parent,String text,int size){TextView v=new TextView(this);v.setText(text);v.setTextSize(size);v.setPadding(0,10,0,10);parent.addView(v);return v;}
-    private void button(LinearLayout parent,String name,Runnable action){Button b=new Button(this);b.setText(name);parent.addView(b);b.setOnClickListener(v->action.run());}
+    private void addAction(LinearLayout parent,String title,int style,Runnable action) {
+        TextView view=StudioUi.action(this,title,style);
+        StudioUi.add(parent,view);
+        view.setOnClickListener(v->action.run());
+    }
+    private void testRelay(){
+        String requested=relay.getText().toString().trim();
+        perform(()->{
+            if(requested.isEmpty())
+                return "No relay origin is configured. Railway or another HTTPS host must be deployed first. The phone cannot connect to a repository URL.";
+            JSONObject health=AgentHttp.checkHealth(requested);
+            return "RELAY REACHABLE\n"+health.optString("service","Unknown server")
+                + "\n\nThis verifies HTTPS connectivity only. It does not mean the device is paired or ChatGPT can send commands.";
+        });
+    }
     private interface Task{String run()throws Exception;}
     private void perform(Task task){
         if(busy){secrets.status("A setup request is already running.");return;}busy=true;
