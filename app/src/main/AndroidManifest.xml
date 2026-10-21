@@ -18,5 +18,10 @@
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="User-started visible remote-command session for this app's native project operations, with persistent notification and Stop control; no control of unrelated apps" />
         </service>
+        <!-- Cross-app native bridge. Messenger checks caller's kernel-supplied UID
+             and local owner-enabled flag before accepting typed commands. -->
+        <service
+            android:name=".agent.VideoStudioNativeBridgeService"
+            android:exported="true" />
     </application>
 </manifest>

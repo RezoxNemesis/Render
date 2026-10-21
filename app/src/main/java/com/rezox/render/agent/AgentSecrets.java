@@ -41,9 +41,15 @@ public final class AgentSecrets {
         c.init(Cipher.DECRYPT_MODE,key(),new GCMParameterSpec(128,Base64.decode(prefs.getString("iv",""),Base64.NO_WRAP)));
         return new JSONObject(new String(c.doFinal(Base64.decode(encrypted,Base64.NO_WRAP)),StandardCharsets.UTF_8));
     }
-    public void clear(){prefs.edit().remove("secret").remove("iv").putBoolean("enabled",false).commit();}
+    public void clear(){prefs.edit().remove("secret").remove("iv").putBoolean("enabled",false).putBoolean("videostudio_ipc",false).commit();}
     public void enabled(boolean value){prefs.edit().putBoolean("enabled",value).commit();}
     public boolean enabled(){return prefs.getBoolean("enabled",false);}
+    public void videoStudioBridgeEnabled(boolean enabled){
+        prefs.edit().putBoolean("videostudio_ipc",enabled).commit();
+    }
+    public boolean videoStudioBridgeEnabled(){
+        return prefs.getBoolean("videostudio_ipc",false);
+    }
     public void status(String message){prefs.edit().putString("status",message).apply();}
     public String status(){return prefs.getString("status","Not paired. No live ChatGPT connection.");}
 }

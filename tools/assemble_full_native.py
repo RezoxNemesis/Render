@@ -90,6 +90,10 @@ def merge_manifest(source):
         ANDROID + "name": "android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE",
         ANDROID + "value": "User-started and visible remote native project-command session with notification, Stop and Revoke",
     })
+    ET.SubElement(application, "service", {
+        ANDROID + "name": "com.rezox.render.agent.VideoStudioNativeBridgeService",
+        ANDROID + "exported": "true",
+    })
     return ET.ElementTree(root)
 
 

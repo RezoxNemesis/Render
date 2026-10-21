@@ -55,6 +55,19 @@ public final class AgentJournal extends SQLiteOpenHelper {
                 .put("state",c.getString(2)).put("result",new JSONObject(c.getString(3))));
         }return out;
     }
+    /** Durable IPC idempotency receipt, never blind replay after process death. */
+    public synchronized JSONObject snapshot(String id,String digest)throws Exception{
+        try(Cursor c=getReadableDatabase().rawQuery(
+                "SELECT digest,state,result FROM jobs WHERE id=?",new String[]{id})){
+            if(!c.moveToFirst())return null;
+            if(!digest.equals(c.getString(0)))throw new IllegalArgumentException("JOB_DIGEST_CONFLICT");
+            String state=c.getString(1);
+            String raw=c.getString(2);
+            JSONObject result=raw==null?new JSONObject().put("ok",false)
+                .put("error","NATIVE_RESULT_RECOVERY_REQUIRED"):new JSONObject(raw);
+            return new JSONObject().put("state",state).put("result",result);
+        }
+    }
     public synchronized void acknowledge(String id){
         ContentValues v=new ContentValues();v.put("acked",1);getWritableDatabase().update("jobs",v,"id=?",new String[]{id});
     }

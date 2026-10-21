@@ -93,6 +93,8 @@ class NativePackagingTests(unittest.TestCase):
                          launch.find("intent-filter/action").get(A+"name"))
         self.assertEqual("com.rezox.render.agent.AgentService",
                          app.find("service").get(A+"name"))
+        services=[s.get(A+"name") for s in app.findall("service")]
+        self.assertIn("com.rezox.render.agent.VideoStudioNativeBridgeService",services)
 
     def test_refuses_tampered_engine(self):
         with self.assertRaisesRegex(ValueError,"SHA256_MISMATCH"):

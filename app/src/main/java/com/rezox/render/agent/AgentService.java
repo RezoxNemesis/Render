@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class AgentService extends Service {
     public static final String STOP="com.rezox.render.agent.STOP";
     private static final String CHANNEL="render-agent";
-    private static final AtomicBoolean PROCESS_BUSY=new AtomicBoolean(false);
+    private static final AtomicBoolean PROCESS_BUSY=AgentExecutionLock.BUSY;
     private AgentSecrets secrets;
     private AgentJournal journal;
     private AgentActions actions;
