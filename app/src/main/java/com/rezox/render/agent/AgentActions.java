@@ -96,6 +96,7 @@ public final class AgentActions {
                 properties.put(field,prop);
             }
             String[] required = id.equals("projects.inspect") ? new String[]{"project_id"} :
+                id.equals("blender.project.restore_scene") ? new String[]{"project_id"} :
                 id.equals("blender.scene.set_frame") ? new String[]{"frame"} :
                 id.equals("blender.object.set_transform") ? new String[]{"name"} :
                 id.equals("blender.object.keyframe") ?
@@ -164,6 +165,31 @@ public final class AgentActions {
             .put("is_renderer",false).put("executed_by","android-native");
         if (action.startsWith("blender.")) {
             if (!hasFullBlender(context)) throw new IllegalStateException("BLENDER_ENGINE_NOT_INSTALLED");
+            if (action.equals("blender.project.restore_scene")) {
+                File saved = projects.find(args.getString("project_id"));
+                File owned = new File(context.getFilesDir(),"Projects").getCanonicalFile();
+                if (!owned.equals(saved.getCanonicalFile().getParentFile())
+                        || !saved.getName().matches("Render_[a-f0-9]{32}\\.blend"))
+                    throw new IllegalArgumentException("PROJECT_NOT_RENDER_CHECKPOINT");
+                if (args.has("expected_sha256")) {
+                    String expected=args.getString("expected_sha256");
+                    if (!expected.matches("[a-f0-9]{64}"))
+                        throw new IllegalArgumentException("INVALID_PROJECT_HASH");
+                    MessageDigest md=MessageDigest.getInstance("SHA-256");
+                    try(FileInputStream stream=new FileInputStream(saved)) {
+                        byte[] buffer=new byte[65536]; int n;
+                        while((n=stream.read(buffer))!=-1) {
+                            checkCancelled(cancelled);
+                            md.update(buffer,0,n);
+                        }
+                    }
+                    if (!AgentPolicy.hex(md.digest()).equals(expected))
+                        throw new IllegalArgumentException("PROJECT_REVISION_CONFLICT");
+                }
+                JSONObject internal=new JSONObject().put("filename",saved.getName());
+                JSONObject restored=new BlenderSpool(context).execute(action,internal,cancelled);
+                return restored.put("restored_project_id",args.getString("project_id"));
+            }
             JSONObject result = new BlenderSpool(context).execute(action,args,cancelled);
             if (action.equals("blender.project.save_copy")) {
                 for (ProjectScope.Entry entry : projects.entries()) {
@@ -173,6 +199,14 @@ public final class AgentActions {
                     }
                 }
                 throw new IllegalStateException("SAVED_PROJECT_NOT_INDEXED");
+            }
+            if (action.equals("blender.scene.render_video")) {
+                try { return RenderVideoExport.publish(context,result); }
+                catch (Exception exportError) {
+                    // The native MP4 still exists. Report export failure without
+                    // lying about whether Blender rendered it.
+                    return result.put("android_downloads_export_warning","DOWNLOAD_EXPORT_FAILED");
+                }
             }
             return result;
         }

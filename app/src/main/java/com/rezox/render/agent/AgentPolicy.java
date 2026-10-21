@@ -33,6 +33,10 @@ public final class AgentPolicy {
         registry.put("blender.material.assign", fields("name", "material_name", "color", "metallic", "roughness"));
         registry.put("blender.scene.render_settings", fields("resolution_x", "resolution_y", "samples", "engine", "denoising"));
         registry.put("blender.scene.render_still", Collections.emptySet());
+        registry.put("blender.project.restore_scene", fields("project_id", "expected_sha256"));
+        registry.put("blender.scene.create_lively_project", Collections.emptySet());
+        registry.put("blender.scene.populate_lively", Collections.emptySet());
+        registry.put("blender.scene.render_video", Collections.emptySet());
         ACTIONS = Collections.unmodifiableMap(registry);
     }
     private static Set<String> fields(String... values) {
@@ -59,6 +63,8 @@ public final class AgentPolicy {
         if (version != 1) throw new IllegalArgumentException("UNSUPPORTED_PROTOCOL_VERSION");
         if (!ACTIONS.containsKey(action)) throw new IllegalArgumentException("NATIVE_ACTION_UNAVAILABLE");
         if (!ACTIONS.get(action).containsAll(fields)) throw new IllegalArgumentException("UNKNOWN_ARGUMENT");
+        if (action.equals("blender.project.restore_scene") && !fields.contains("project_id"))
+            throw new IllegalArgumentException("PROJECT_ID_REQUIRED");
         if (action.equals("projects.inspect") && !fields.contains("project_id"))
             throw new IllegalArgumentException("PROJECT_ID_REQUIRED");
         if (action.equals("blender.scene.set_frame") && !fields.contains("frame"))

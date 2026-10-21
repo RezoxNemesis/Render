@@ -161,6 +161,18 @@ public final class BlenderSpool {
             if(args.length()!=0)throw new IllegalArgumentException("UNEXPECTED_ARGUMENT");
             return;
         }
+        if ("blender.scene.create_lively_project".equals(action) ||
+            "blender.scene.populate_lively".equals(action) ||
+            "blender.scene.render_video".equals(action)) {
+            if (args.length()!=0) throw new IllegalArgumentException("UNEXPECTED_ARGUMENT");
+            return;
+        }
+        if ("blender.project.restore_scene".equals(action)) {
+            if (args.length()!=1 || !args.has("filename") ||
+                    !args.getString("filename").matches("Render_[a-f0-9]{32}\\.blend"))
+                throw new IllegalArgumentException("INVALID_SAVED_PROJECT_FILENAME");
+            return;
+        }
         throw new IllegalArgumentException("NATIVE_BLENDER_ACTION_UNAVAILABLE");
     }
     public JSONObject execute(String action, JSONObject args, AtomicBoolean cancelled) throws Exception {
@@ -179,7 +191,10 @@ public final class BlenderSpool {
         File request=new File(pending,id+".json");
         File claimed=new File(working,id+".json");
         File resultFile=new File(results,id+".json");
-        long timeoutMillis=action.equals("blender.scene.render_still") ? 480000L :
+        long timeoutMillis=action.equals("blender.scene.render_video") ? 1800000L :
+            action.equals("blender.scene.create_lively_project") ? 120000L :
+            action.equals("blender.scene.populate_lively") ? 120000L :
+            action.equals("blender.scene.render_still") ? 480000L :
             action.equals("blender.project.save_copy") ? 120000L : 20000L;
         JSONObject envelope=new JSONObject().put("id",id).put("action",action)
             .put("args",args).put("deadline",System.currentTimeMillis()/1000+timeoutMillis/1000);
