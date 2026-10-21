@@ -288,4 +288,10 @@ def create_app(database,origin,enrollment_secret):
 
 
 def production():
-    return create_app(os.environ.get('DATABASE_URL') or os.environ.get('DATABASE_PATH','/data/render-relay.sqlite'),os.environ['PUBLIC_URL'],os.environ['ENROLLMENT_SECRET'])
+    database = os.environ.get('DATABASE_URL')
+    # Hosted pairing and authorization cannot depend on a disposable container.
+    if os.environ.get('RENDER') and not database:
+        raise RuntimeError('PERSISTENT_DATABASE_URL_REQUIRED_ON_RENDER')
+    if not database:
+        database = os.environ.get('DATABASE_PATH', '/data/render-relay.sqlite')
+    return create_app(database, os.environ['PUBLIC_URL'], os.environ['ENROLLMENT_SECRET'])
