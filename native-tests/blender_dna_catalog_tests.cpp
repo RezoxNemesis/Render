@@ -34,6 +34,32 @@ Bytes Dna(){
   Num(b,2,2);Num(b,0,2); // Sample *next
   return b;
 }
+// Blender 5.x's genuine SDNA writer starts STRC with a synthetic raw_data
+// type and ZERO members. This is explicitly valid in upstream makesdna.cc.
+Bytes DnaBlender503(bool valid_raw_data = true) {
+  Bytes b;
+  Str(b,"SDNA");Str(b,"NAME");Num(b,3,4);
+  for(const std::string &name : {"*next","value","label[4]"}) {
+    Str(b,name);b.push_back(0);
+  }
+  Align(b);
+  Str(b,"TYPE");Num(b,4,4);
+  for(const std::string &type : {"int","char",
+                                 valid_raw_data ? "raw_data" : "not_data","Sample"}) {
+    Str(b,type);b.push_back(0);
+  }
+  Align(b);
+  Str(b,"TLEN");
+  Num(b,4,2);Num(b,1,2);Num(b,0,2);Num(b,16,2);
+  Align(b);
+  Str(b,"STRC");Num(b,2,4);
+  Num(b,2,2);Num(b,0,2); // synthetic raw_data: ZERO fields
+  Num(b,3,2);Num(b,3,2); // Sample's three fields
+  Num(b,0,2);Num(b,1,2);
+  Num(b,1,2);Num(b,2,2);
+  Num(b,3,2);Num(b,0,2);
+  return b;
+}
 void Block(Bytes &file,int format,int pointer,const std::string &code,const Bytes &data,uint64_t old_token=0){
   CHECK(code.size()==4);Str(file,code);
   if(format==1){Num(file,0,4);Num(file,old_token,8);Num(file,data.size(),8);Num(file,1,8);}
@@ -49,6 +75,12 @@ Bytes Fixture(int format,int pointer,const Bytes &dna= Dna(),bool include_dna=tr
   Block(b,format,pointer,std::string("ME\0\0",4),{},0x3000);
   if(include_dna)Block(b,format,pointer,"DNA1",dna);
   Block(b,format,pointer,"ENDB",{});
+  return b;
+}
+Bytes Fixture503(const Bytes &dna = DnaBlender503()) {
+  Bytes b = Fixture(1,8,dna);
+  // The modern 17-byte Blender file header stores Blender version as 0503.
+  b[13]='0';b[14]='5';b[15]='0';b[16]='3';
   return b;
 }
 Bytes Gzip(const Bytes &input){
@@ -112,6 +144,22 @@ void Valid(int fmt,int ptr){
 }
 int main(){
   Valid(0,4);Valid(0,8);Valid(1,8);
+  // Regression for actual Blender 5.3 saved files:
+  // raw_data has zero members by design. Do not reject valid SDNA.
+  for(const Bytes &bytes: {Fixture503(),Gzip(Fixture503()),Zstd(Fixture503())}) {
+    const auto indexed=Inspect(bytes);
+    CHECK(indexed.status==render::DnaCatalogStatus::Indexed);
+    CHECK(indexed.blender_version==503);
+    CHECK(indexed.types==4);
+    CHECK(indexed.structures==2);
+    CHECK(indexed.structure_fields==3);
+    CHECK(indexed.sample_structures[0]=="raw_data");
+    CHECK(indexed.sample_structures[1]=="Sample");
+  }
+  // No arbitrary empty structs: only raw_data is permitted to be empty.
+  CHECK(Inspect(Fixture503(DnaBlender503(false))).status==
+        render::DnaCatalogStatus::InvalidSchema);
+
   {
     Bytes repeated;
     Str(repeated,"BLENDER17-01v0500");
