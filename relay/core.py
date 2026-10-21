@@ -273,7 +273,7 @@ class Relay:
                 if not isinstance(active_job_id,str) or not running or running['id']!=active_job_id:
                     raise Denied('ACTIVE_JOB_MISMATCH',409)
             elif enabled:
-                candidate=running or db.execute("SELECT * FROM jobs WHERE device=? AND state='queued' ORDER BY updated,id LIMIT 1",(d['id'],)).fetchone()
+                candidate=running or db.execute("SELECT * FROM jobs WHERE device=? AND state='queued' ORDER BY rowid LIMIT 1",(d['id'],)).fetchone()
                 if candidate:
                     if candidate['state']=='queued': db.execute("UPDATE jobs SET state='running_on_device',updated=? WHERE id=?",(self.clock(),candidate['id']))
                     delivery={'job_id':candidate['id'],'digest':candidate['digest'],'payload':candidate['payload']}

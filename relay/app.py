@@ -55,6 +55,14 @@ class BoundedBody:
         await self.app(scope,replay,send)
 
 
+def unique_object(pairs):
+    value={}
+    for key,item in pairs:
+        if key in value:raise ValueError('Duplicate JSON field')
+        value[key]=item
+    return value
+
+
 def create_app(database,origin,enrollment_secret):
     relay=Relay(database,origin,enrollment_secret)
     api=FastAPI(docs_url=None,redoc_url=None,openapi_url=None)
@@ -90,10 +98,10 @@ def create_app(database,origin,enrollment_secret):
                 if any(len(x)!=1 for x in pairs.values()):raise ValueError()
                 value={k:v[0] for k,v in pairs.items()}
             else:
-                value=json.loads(raw.decode('utf-8'),parse_constant=lambda x:(_ for _ in ()).throw(ValueError()))
+                value=json.loads(raw.decode('utf-8'),object_pairs_hook=unique_object,parse_constant=lambda x:(_ for _ in ()).throw(ValueError()))
             if not isinstance(value,dict) or not set(value).issubset(fields):raise ValueError()
             return value
-        except (ValueError,UnicodeDecodeError):raise Denied('INVALID_REQUEST_BODY')
+        except (ValueError,UnicodeDecodeError,RecursionError):raise Denied('INVALID_REQUEST_BODY')
 
     def bearer(request):
         value=request.headers.get('authorization','')
