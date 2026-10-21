@@ -173,6 +173,7 @@ public final class VideoStudioNativeBridgeService extends Service {
                 }
                 catch(Exception error){
                     outcome=error("RENDER_JOURNAL_WRITE_FAILED");
+                    state="recovery_required";
                     secrets.videoStudioBridgeEnabled(false);
                 }
             }
