@@ -1,0 +1,35 @@
+name: Full native Blender engine audit
+on:
+  push:
+    branches: ["feature/android-native-foundation-20261021"]
+    paths: ["tools/audit_full_android_engine.py", ".github/workflows/full-engine-audit.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect-full-native-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Verify pinned full APK and inspect matching original Android source
+        run: python tools/audit_full_android_engine.py --output "$RUNNER_TEMP/full-engine-audit"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: full-native-engine-source-audit
+          path: |
+            ${{ runner.temp }}/full-engine-audit/*.json
+            ${{ runner.temp }}/full-engine-audit/*.txt
+            ${{ runner.temp }}/full-engine-audit/source/
+          retention-days: 7
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pinned-upstream-full-engine-apk
+          path: ${{ runner.temp }}/full-engine-audit/blender-full.apk
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error

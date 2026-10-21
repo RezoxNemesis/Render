@@ -1,0 +1,84 @@
+plugins { id 'com.android.application' }
+
+// Release keystore and passphrase are supplied ONLY by the owner's private
+// Gradle environment / GitHub Actions secrets. Never commit the keystore,
+// credentials, or signing password to this repository.
+def releaseKeystore = System.getenv('RENDER_ANDROID_SIGNING_STORE_FILE')
+def releaseStorePassword = System.getenv('RENDER_ANDROID_SIGNING_STORE_PASSWORD')
+def releaseKeyPassword = System.getenv('RENDER_ANDROID_SIGNING_KEY_PASSWORD')
+def releaseAlias = System.getenv('RENDER_ANDROID_SIGNING_KEY_ALIAS')
+def signingReady = releaseKeystore && releaseStorePassword &&
+                   releaseKeyPassword && releaseAlias &&
+                   new File(releaseKeystore).isFile()
+
+
+android {
+    // Keeps Blender's original R resource namespace and JNI class paths intact.
+    namespace 'org.blender.blender'
+    compileSdk 35
+    defaultConfig {
+        // Render's actual application ID, distinct from the upstream project's install.
+        applicationId 'com.rezox.render'
+        // A side-by-side install option for owners whose old debug APK uses a
+        // different signer. This does not touch or uninstall the old app.
+        if(project.hasProperty('renderSideBySide')) {
+            applicationIdSuffix '.preview'
+            versionNameSuffix '-side-by-side'
+        }
+        minSdk 31
+        targetSdk 34
+        versionCode 19
+        versionName '0.16.0-native-scene-creation-materials-render'
+        ndk { abiFilters 'arm64-v8a' }
+    }
+    sourceSets {
+        main {
+            manifest.srcFile '../stage/AndroidManifest.xml'
+            java.srcDirs = ['src/main/java', '../../app/src/main/java', '../stage/java']
+            jniLibs.srcDirs = ['../stage/lib']
+            assets.srcDirs = ['../stage/assets']
+            res.srcDirs = ['../stage/res', 'src/main/res']
+        }
+    }
+    packagingOptions { jniLibs { useLegacyPackaging = true } }
+    androidResources { noCompress 'zip' }
+    signingConfigs {
+        stableRelease {
+            if(signingReady) {
+                storeFile file(releaseKeystore)
+                storeType 'pkcs12'
+                storePassword releaseStorePassword
+                keyAlias releaseAlias
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
+    buildTypes {
+        debug { debuggable true }
+        release {
+            debuggable false
+            minifyEnabled false
+            shrinkResources false
+            if(signingReady) signingConfig signingConfigs.stableRelease
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+
+// A release build without the registered owner key is a HARD FAILURE, never
+// an unsigned APK accidentally presented as an upgrade. Existing installations
+// will only update if certificate, package and versionCode are compatible.
+tasks.configureEach { task ->
+    if(task.name == 'preReleaseBuild') {
+        doFirst {
+            if(!signingReady) {
+                throw new GradleException(
+                    'Release signing is not configured. Supply the protected Render Studio PKCS12 keystore and all four signing environment variables.')
+            }
+        }
+    }
+}
