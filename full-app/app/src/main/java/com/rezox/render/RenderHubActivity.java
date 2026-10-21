@@ -2,48 +2,113 @@ package com.rezox.render;
 
 import android.app.Activity;
 import android.content.Intent;
-import android.graphics.Typeface;
+import android.graphics.Color;
 import android.os.Bundle;
+import android.view.Gravity;
+import android.view.View;
 import android.view.ViewGroup;
-import android.widget.Button;
 import android.widget.LinearLayout;
-import android.widget.ScrollView;
 import android.widget.TextView;
 
-/** One APK: real upstream Blender editor plus Render's native ChatGPT agent. */
+import com.rezox.render.ui.StudioUi;
+import com.rezox.render.ui.StudioViewportArt;
+
+/**
+ * Render Studio's native mobile dashboard. Every CTA opens a real installed
+ * Android Activity; no inert promotional tiles or unsupported capabilities.
+ */
 public final class RenderHubActivity extends Activity {
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
-        ScrollView scroll = new ScrollView(this);
-        LinearLayout content = new LinearLayout(this);
-        content.setOrientation(LinearLayout.VERTICAL);
-        int pad = (int)(24 * getResources().getDisplayMetrics().density);
-        content.setPadding(pad,pad,pad,pad);
-        scroll.addView(content);
-        setContentView(scroll);
+        LinearLayout page=StudioUi.page(this);
+        LinearLayout brand=StudioUi.row(this);
+        TextView mark=StudioUi.text(this,"R",20,0xFF191218,true);
+        mark.setGravity(Gravity.CENTER);
+        mark.setBackground(StudioUi.gradient(this,0xFFFFAF73,StudioUi.ORANGE,0,15));
+        brand.addView(mark,new LinearLayout.LayoutParams(StudioUi.dp(this,48),StudioUi.dp(this,48)));
+        LinearLayout wordmark=StudioUi.column(this);
+        wordmark.setPadding(StudioUi.dp(this,12),0,0,0);
+        StudioUi.add(wordmark,StudioUi.text(this,"RENDER",18,StudioUi.WHITE,true));
+        StudioUi.add(wordmark,StudioUi.label(this,"Studio / Native Android"));
+        brand.addView(wordmark,new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1));
+        brand.addView(StudioUi.chip(this,"●  LOCAL",StudioUi.GREEN));
+        StudioUi.add(page,brand);
+        StudioUi.space(page,30);
 
-        TextView title = label(content, "Render Studio", 28);
-        title.setTypeface(null, Typeface.BOLD);
-        label(content, "Full native Blender engine on Android — Experimental", 16);
-        label(content, "Real modeling, sculpting, animation, Python and rendering use the GPL-licensed Blender Android full engine. Performance and feature support depend on Android GPU drivers and available memory.", 14);
-        button(content, "Open full Blender editor", () ->
-            startActivity(new Intent().setClassName(this,"org.blender.blender.BlenderActivity")));
-        button(content, "ChatGPT × Render agent", () ->
-            startActivity(new Intent(this,com.rezox.render.agent.AgentActivity.class)));
-        button(content, "Project import and file inspection", () ->
-            startActivity(new Intent(this,MainActivity.class)));
-        label(content, "The agent can inspect Blender scenes, add cubes, change transforms, insert animation keyframes and save a new local .blend snapshot using Blender bpy. Render and export automation still require further native integration and phone testing.", 14);
-        label(content, "Back up projects before testing experimental APKs. This is not an official Blender Foundation product.", 13);
-    }
-    private TextView label(LinearLayout content,String value,int size) {
-        TextView view = new TextView(this);
-        view.setText(value); view.setTextSize(size); view.setPadding(0,10,0,16);
-        content.addView(view); return view;
-    }
-    private void button(LinearLayout content,String label,Runnable action) {
-        Button button = new Button(this);button.setText(label);
-        content.addView(button,new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT));
-        button.setOnClickListener(v -> action.run());
+        StudioUi.add(page,StudioUi.label(this,"CREATION SPACE  /  V 0.11"));
+        StudioUi.space(page,10);
+        StudioUi.add(page,StudioUi.text(this,"Your 3D studio.\nNow in your pocket.",31,StudioUi.WHITE,true));
+        StudioUi.space(page,9);
+        StudioUi.add(page,StudioUi.text(this,
+            "Design, animate and create with a genuine on-device Blender engine. Tools and performance depend on your phone's GPU and memory.",
+            14,StudioUi.MUTED,false));
+        StudioUi.space(page,22);
+
+        // App-native 3D illustration, not a flat stock image or an unrelated editor.
+        LinearLayout visual=StudioUi.column(this);
+        visual.setBackground(StudioUi.gradient(this,0xFF2A2632,0xFF10151E,StudioUi.BORDER,22));
+        TextView visualTitle=StudioUi.text(this,"NATIVE VIEWPORT  /  3D",11,StudioUi.WHITE,true);
+        visualTitle.setLetterSpacing(.09f);
+        visualTitle.setPadding(StudioUi.dp(this,16),StudioUi.dp(this,15),0,0);
+        StudioUi.add(visual,visualTitle);
+        StudioViewportArt artwork=new StudioViewportArt(this);
+        visual.addView(artwork,new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,StudioUi.dp(this,218)));
+        StudioUi.add(page,visual);
+        StudioUi.space(page,20);
+
+        LinearLayout editor=StudioUi.card(this);
+        LinearLayout editorHead=StudioUi.row(this);
+        TextView editorIcon=StudioUi.chip(this,"◈",StudioUi.ORANGE);
+        editorHead.addView(editorIcon);
+        TextView editorTop=StudioUi.text(this,"  FULL 3D WORKSPACE",13,StudioUi.WHITE,true);
+        editorHead.addView(editorTop,new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1));
+        editorHead.addView(StudioUi.chip(this,"EXPERIMENTAL",StudioUi.ORANGE));
+        StudioUi.add(editor,editorHead);
+        StudioUi.space(editor,15);
+        StudioUi.add(editor,StudioUi.text(this,"Blender Editor",24,StudioUi.WHITE,true));
+        StudioUi.space(editor,5);
+        StudioUi.add(editor,StudioUi.text(this,
+            "Model  •  Sculpt  •  Rig  •  Animate  •  Render",13,StudioUi.MUTED,false));
+        StudioUi.space(editor,17);
+        TextView open=StudioUi.action(this,"LAUNCH & CHECK ENGINE     ↗",StudioUi.PRIMARY);
+        StudioUi.add(editor,open);
+        open.setOnClickListener(v->startActivity(new Intent(this,EditorLaunchActivity.class)));
+        StudioUi.add(page,editor);
+        StudioUi.space(page,14);
+
+        LinearLayout agent=StudioUi.violetCard(this);
+        StudioUi.add(agent,StudioUi.label(this,"AUTOMATION  /  AI ASSISTANT"));
+        StudioUi.space(agent,8);
+        StudioUi.add(agent,StudioUi.text(this,"ChatGPT × Render",22,StudioUi.WHITE,true));
+        StudioUi.space(agent,5);
+        StudioUi.add(agent,StudioUi.text(this,
+            "Pair your private relay, inspect native actions, run approved tasks and view activity history.",
+            13,0xFFC1B8DA,false));
+        StudioUi.space(agent,15);
+        TextView bridge=StudioUi.action(this,"OPEN AGENT CONTROL     →",StudioUi.PURPLE);
+        StudioUi.add(agent,bridge);
+        bridge.setOnClickListener(v->startActivity(new Intent(this,com.rezox.render.agent.AgentActivity.class)));
+        StudioUi.add(page,agent);
+        StudioUi.space(page,14);
+
+        LinearLayout projects=StudioUi.card(this);
+        StudioUi.add(projects,StudioUi.label(this,"WORKFLOW  /  FILES"));
+        StudioUi.space(projects,7);
+        StudioUi.add(projects,StudioUi.text(this,"Project Library",21,StudioUi.WHITE,true));
+        StudioUi.space(projects,4);
+        StudioUi.add(projects,StudioUi.text(this,
+            "Import a .blend file, inspect scene data and check device Vulkan capability.",
+            13,StudioUi.MUTED,false));
+        StudioUi.space(projects,15);
+        TextView library=StudioUi.action(this,"IMPORT / INSPECT PROJECTS     →",StudioUi.SECONDARY);
+        StudioUi.add(projects,library);
+        library.setOnClickListener(v->startActivity(new Intent(this,MainActivity.class)));
+        StudioUi.add(page,projects);
+        StudioUi.space(page,24);
+        StudioUi.add(page,StudioUi.label(this,"LOCAL FIRST   /   FILES STAY ON DEVICE"));
+        StudioUi.space(page,6);
+        StudioUi.add(page,StudioUi.text(this,
+            "Render is an independent experimental Android port. The real editor requires compatible Vulkan drivers; the agent's relay only transfers commands and results.",
+            12,StudioUi.MUTED,false));
     }
 }
