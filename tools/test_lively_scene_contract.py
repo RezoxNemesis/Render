@@ -75,6 +75,10 @@ class NativeLivelySceneContractTests(unittest.TestCase):
         self.assertIn("walking_dogs", source)
         self.assertIn("RoofCap", source)
         self.assertIn("EntryCanopy", source)
+        self.assertIn("has_architectural_part", source)
+        self.assertIn("render_environment_tag", source)
+        self.assertIn("NATIVE_EEVEE_ENGINE_UNAVAILABLE", source)
+        self.assertIn("BLENDER_EEVEE_NEXT", source)
 
     def test_apk_runtime_archive_includes_scene_helper(self):
         spec = importlib.util.spec_from_file_location("assemble_full_native_test", ASSEMBLER)
