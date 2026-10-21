@@ -1,23 +1,24 @@
 # Asset and project storage architecture
 
-## Actual created Google Drive folders
+## Optional Google Drive folder structure
 
-Root: https://drive.google.com/drive/folders/1pKA6P9kqQmw1Y37n-jePqUXxHgk9v4I0
+The user's private Drive workspace has been created with the following folder hierarchy:
 
-- AssetLibrary: https://drive.google.com/drive/folders/18d3w6BF49Jk1L6PfRzuwdp_XQgr1Luko
-  - Characters-and-Rigs
-  - Animations-and-Mocap
-  - Environments-and-Props
-  - Materials-and-Textures
-  - HDRI-and-Lighting
-  - Geometry-Nodes-and-Brushes
-  - Audio-and-Video
-- Projects: https://drive.google.com/drive/folders/14F-0osE79qMhpzvDs7iqkwof-6A-z8oO
-- Renders: https://drive.google.com/drive/folders/1tLpmiVbkSHp_gQfDSTPaBhkJ1kUnrRas
-- Backups: https://drive.google.com/drive/folders/1pDwPKTViJbOtau25jj49T9L6kWtzwjjx
-- Licenses-and-Manifests: https://drive.google.com/drive/folders/1CcG5_NkBjXvlr3nC1gYoP-JFUgDfK97m
+- Render/
+  - AssetLibrary/
+    - Characters-and-Rigs/
+    - Animations-and-Mocap/
+    - Environments-and-Props/
+    - Materials-and-Textures/
+    - HDRI-and-Lighting/
+    - Geometry-Nodes-and-Brushes/
+    - Audio-and-Video/
+  - Projects/
+  - Renders/
+  - Backups/
+  - Licenses-and-Manifests/
 
-These folders have been created; NO Blender factory assets have been uploaded and automatic synchronization is not yet implemented.
+**Do not hardcode real Drive folder IDs, URLs, tokens, or private storage metadata in this public repository.** The optional sync module must let the user choose their Drive folder and store the resulting ID in private app configuration. Empty folder structure exists; NO Blender factory assets have been uploaded and automatic synchronization is not yet implemented.
 
 ## Storage tiers
 
