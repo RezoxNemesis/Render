@@ -18,6 +18,9 @@ class CompatibleRow(dict):
 
 
 def rows(cursor):
+    # CREATE/UPDATE/INSERT without RETURNING has no description in psycopg.
+    if cursor.description is None:
+        return tuple
     columns = [column.name for column in cursor.description]
     return lambda values: CompatibleRow(zip(columns, values))
 
