@@ -21,6 +21,11 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+# A stream of autonomous commits must not leave multiple expensive 300MB
+# Blender APK builds running concurrently for obsolete branch revisions.
+concurrency:
+  group: render-native-debug-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   stage-tests:
     runs-on: ubuntu-latest
