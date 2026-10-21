@@ -55,3 +55,6 @@ Render can reuse the existing VideoStudio v3 Cloudflare Worker and ChatGPT plugi
 
 ## v0.14 VideoStudio-style Connect / Share with ChatGPT
 Render's UI now offers a direct on-phone bridge using the SAME VideoStudio MCP v3 connection, with a one-tap Connect / Share action and a stable NON-SECRET Render app UUID. A command result includes target_app=Render Studio, target_package=com.rezox.render and render_public_id, so ChatGPT can distinguish Blender work from VideoStudio timeline work. No second relay, developer key or Cloudflare redeployment is needed for this direct native mode; on-phone APK pairing and actual result verification remain outstanding. See docs/AGENT_ACTIVATION.md.
+
+## Permanent signing and backup-first updates
+The private Render Studio release PKCS12 keystore and recovery record are stored in the owner’s private ChatGPT Library /Render/Signing (NEVER in this public source repository). Stable owner-signed release APKs require configuring four protected GitHub Actions secrets, detailed in docs/RELEASE_SIGNING_AND_BACKUP.md. Earlier CI debug-signatures may not be upgradeable in place; export saved .blend projects with the new Project Inspector ZIP backup feature before uninstalling.
