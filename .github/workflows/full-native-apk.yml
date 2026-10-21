@@ -11,6 +11,7 @@ on:
       - "tools/test_lively_scene_contract.py"
       - "tools/test_lively_scene_mock.py"
       - "tools/test_native_autonomy_security.py"
+      - "tools/test_blender_batch_assembly.py"
       - "tools/configure_owner_signing.py"
       - "tools/assemble_full_native.py"
       - "app/src/test/java/**"
@@ -36,7 +37,7 @@ jobs:
         with:
           python-version: "3.13"
       - name: Verify full-engine staging rejects tampered files
-        run: PYTHONPATH=tools python -m unittest tools/test_assemble_full_native.py tools/test_blender_bpy_bridge.py tools/test_lively_scene_contract.py tools/test_lively_scene_mock.py tools/test_native_autonomy_security.py -v
+        run: PYTHONPATH=tools python -m unittest tools/test_assemble_full_native.py tools/test_blender_bpy_bridge.py tools/test_lively_scene_contract.py tools/test_lively_scene_mock.py tools/test_native_autonomy_security.py tools/test_blender_batch_assembly.py -v
 
   blender-bpy-integration:
     runs-on: ubuntu-24.04
