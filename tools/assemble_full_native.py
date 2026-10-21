@@ -111,6 +111,10 @@ def merge_manifest(source):
         ANDROID + "name": "com.rezox.render.agent.VideoStudioNativeBridgeService",
         ANDROID + "exported": "true",
     })
+    ET.SubElement(application, "receiver", {
+        ANDROID + "name": "com.rezox.render.agent.NativeWorkStopReceiver",
+        ANDROID + "exported": "false",
+    })
     return ET.ElementTree(root)
 
 
