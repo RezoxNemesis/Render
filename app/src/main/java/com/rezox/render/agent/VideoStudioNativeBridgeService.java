@@ -69,13 +69,11 @@ public final class VideoStudioNativeBridgeService extends Service {
             if(caller == null) return;
             // Only the Android system-supplied sendingUid is trusted.
             if(!trustedCallerPackages(getPackageManager().getPackagesForUid(inbound.sendingUid))) {
-                send(caller,"",new JSONObject().put("ok",false)
-                    .put("error","VIDEOSTUDIO_APP_NOT_AUTHORIZED"));
+                send(caller,"",error("VIDEOSTUDIO_APP_NOT_AUTHORIZED"));
                 return;
             }
             if(!secrets.videoStudioBridgeEnabled()) {
-                send(caller,"",new JSONObject().put("ok",false)
-                    .put("error","RENDER_DIRECT_BRIDGE_DISABLED_ON_PHONE"));
+                send(caller,"",error("RENDER_DIRECT_BRIDGE_DISABLED_ON_PHONE"));
                 return;
             }
             Bundle data = inbound.getData();
@@ -84,14 +82,12 @@ public final class VideoStudioNativeBridgeService extends Service {
             final String raw=data == null ? "{}" : data.getString("args","{}");
             if(!id.matches("[A-Za-z0-9_-]{8,128}") || raw.length()>32768 ||
                 !action.matches("[A-Za-z0-9._-]{1,80}")) {
-                send(caller,id,new JSONObject().put("ok",false)
-                    .put("error","INVALID_RENDER_IPC_ENVELOPE"));
+                send(caller,id,error("INVALID_RENDER_IPC_ENVELOPE"));
                 return;
             }
             try { worker.execute(() -> executeNative(caller,id,action,raw)); }
             catch(RejectedExecutionException ex) {
-                send(caller,id,new JSONObject().put("ok",false)
-                    .put("error","RENDER_AGENT_STOPPING"));
+                send(caller,id,error("RENDER_AGENT_STOPPING"));
             }
         }
     });
@@ -102,13 +98,12 @@ public final class VideoStudioNativeBridgeService extends Service {
 
     private void executeNative(Messenger caller,String id,String action,String raw) {
         if(!AgentExecutionLock.BUSY.compareAndSet(false,true)){
-            send(caller,id,new JSONObject().put("ok",false)
-                .put("error","RENDER_NATIVE_EXECUTOR_BUSY"));
+            send(caller,id,error("RENDER_NATIVE_EXECUTOR_BUSY"));
             return;
         }
         AtomicBoolean cancel=new AtomicBoolean(false);
         runningCancellation=cancel;
-        JSONObject outcome=new JSONObject().put("ok",false);
+        JSONObject outcome=error("RENDER_NATIVE_ACTION_FAILED");
         String state="failed";
         boolean journaled=false;
         try {
@@ -151,8 +146,7 @@ public final class VideoStudioNativeBridgeService extends Service {
             if(journaled) {
                 try {journal.finish(id,state,outcome);}
                 catch(Exception error){
-                    outcome=new JSONObject().put("ok",false)
-                        .put("error","RENDER_JOURNAL_WRITE_FAILED");
+                    outcome=error("RENDER_JOURNAL_WRITE_FAILED");
                     secrets.videoStudioBridgeEnabled(false);
                 }
             }
@@ -160,6 +154,12 @@ public final class VideoStudioNativeBridgeService extends Service {
             runningCancellation=null;
             AgentExecutionLock.BUSY.set(false);
         }
+    }
+
+    private static JSONObject error(String code) {
+        JSONObject result=new JSONObject();
+        try {result.put("ok",false).put("error",code);}catch(Exception ignored){}
+        return result;
     }
 
     private static void send(Messenger replyTo,String id,JSONObject output) {
