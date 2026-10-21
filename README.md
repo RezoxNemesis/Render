@@ -11,7 +11,7 @@
 - Downloadable Google Drive asset libraries and backup are optional; active resources must be local when offline.
 - Do not advertise feature parity until real Android device tests against upstream Blender show it.
 
-**Current status: Android application/NDK foundation with native .blend framing preflight, Vulkan capability probing, and real upstream Blender BLI FP16 and BLO header/BHead decoding modules cross-compiled for Android. The full Blender scene engine is not integrated: only a genuine upstream math module is compiled. This is not a full Blender port or a render-capable APK; no BKE/Main scene reconstruction.**
+**Current status: Android application/NDK foundation with native .blend framing preflight, Vulkan capability probing, and real upstream Blender BLI FP16 and BLO header/BHead decoding modules cross-compiled for Android. The full Blender scene engine is not integrated: only a genuine upstream math module is compiled. This is not a full Blender port or a render-capable APK. No BKE/Main scene reconstruction.**
 
 ## Repository layout
 
