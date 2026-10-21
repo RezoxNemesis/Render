@@ -222,6 +222,7 @@ DnaCatalogResult InspectDnaCatalog(const std::string &path)
 {
   DnaCatalogResult r;
   bool is_gzip = false;
+  bool is_zstd = false;
   {
     std::ifstream magic(path, std::ios::binary);
     if (!magic) return Fail(r, DnaCatalogStatus::IoError, "Cannot open local file");
@@ -231,8 +232,7 @@ DnaCatalogResult InspectDnaCatalog(const std::string &path)
       is_gzip = true;
     if (magic.gcount() == 4 && prefix[0] == 0x28 && prefix[1] == 0xB5 &&
         prefix[2] == 0x2F && prefix[3] == 0xFD)
-      return Fail(r, DnaCatalogStatus::CompressedNeedsUpstreamReader,
-                  "Zstd file requires genuine Blender decompressing FileReader");
+      is_zstd = true;
   }
 
   LocalBlendReader local(path);
@@ -243,10 +243,11 @@ DnaCatalogResult InspectDnaCatalog(const std::string &path)
   };
   ReaderOwner gzip_owner;
   blender::FileReader *reader = local.Raw();
-  if (is_gzip) {
-    gzip_owner.owned = blender::BLI_filereader_new_gzip(local.Raw());
+  if (is_gzip || is_zstd) {
+    gzip_owner.owned = is_gzip ? blender::BLI_filereader_new_gzip(local.Raw())
+                              : blender::BLI_filereader_new_zstd(local.Raw());
     if (!gzip_owner.owned)
-      return Fail(r, DnaCatalogStatus::IoError, "Blender upstream gzip FileReader failed to initialize");
+      return Fail(r, DnaCatalogStatus::IoError, "Blender upstream compressed FileReader initialization failed");
     reader = gzip_owner.owned;
   }
   const auto decoded = blender::BLO_readfile_blender_header_decode(reader);
@@ -278,7 +279,7 @@ DnaCatalogResult InspectDnaCatalog(const std::string &path)
         return Fail(r, DnaCatalogStatus::NoSchema, "No DNA1 schema block");
       r.unique_id_tokens = id_tokens.size();
       r.status = DnaCatalogStatus::Indexed;
-      const SavedIdNames previews = PreviewSavedIdNames(path, is_gzip, id_layout);
+      const SavedIdNames previews = PreviewSavedIdNames(path, is_gzip, is_zstd, id_layout);
       r.sample_object_names = previews.objects;
       r.sample_scene_names = previews.scenes;
       r.sample_mesh_names = previews.meshes;
@@ -309,10 +310,10 @@ DnaCatalogResult InspectDnaCatalog(const std::string &path)
         return Fail(r, DnaCatalogStatus::InvalidBlock, "Truncated DNA1 payload");
       if (!DecodeSchema(dna, r, static_cast<uint32_t>(header->pointer_size), id_layout))
         return Fail(r, DnaCatalogStatus::InvalidSchema, "Invalid SDNA NAME/TYPE/TLEN/STRC");
-      if (is_gzip) inflated += static_cast<uint64_t>(b.len);
+      if (is_gzip || is_zstd) inflated += static_cast<uint64_t>(b.len);
       found_dna = true;
     }
-    else if (is_gzip) {
+    else if (is_gzip || is_zstd) {
       // Blender's upstream gzip FileReader is forward-only. Stream past payloads
       // instead of passing a null seek callback. Keep decompression bounded.
       constexpr uint64_t kMaxDiagnosticInflation = 512ull * 1024ull * 1024ull;

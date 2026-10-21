@@ -30,6 +30,6 @@ bool AdvanceIdLayout(const std::string &member, const std::string &type,
 
 // Re-read a .blend to extract bounded saved ID.name previews.
 // Uses real Blender blenloader_core. NEVER evaluates or dereferences a saved pointer.
-SavedIdNames PreviewSavedIdNames(const std::string &path, bool gzip,
+SavedIdNames PreviewSavedIdNames(const std::string &path, bool gzip, bool zstd,
                                 const IdNameLayout &layout);
 }  // namespace render

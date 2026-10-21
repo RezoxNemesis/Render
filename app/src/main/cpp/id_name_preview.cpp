@@ -82,7 +82,7 @@ std::string ExtractName(const std::vector<unsigned char> &bytes,
 }
 }  // namespace
 
-SavedIdNames PreviewSavedIdNames(const std::string &path, bool gzip,
+SavedIdNames PreviewSavedIdNames(const std::string &path, bool gzip, bool zstd,
                                 const IdNameLayout &layout)
 {
   SavedIdNames out;
@@ -94,8 +94,9 @@ SavedIdNames PreviewSavedIdNames(const std::string &path, bool gzip,
     ~ScopedCompressed() { if (reader) reader->close(reader); }
   } compressed;
   blender::FileReader *reader = local.Raw();
-  if (gzip) {
-    compressed.reader = blender::BLI_filereader_new_gzip(local.Raw());
+  if (gzip || zstd) {
+    compressed.reader = gzip ? blender::BLI_filereader_new_gzip(local.Raw())
+                             : blender::BLI_filereader_new_zstd(local.Raw());
     if (!compressed.reader) return out;
     reader = compressed.reader;
   }
@@ -138,7 +139,7 @@ SavedIdNames PreviewSavedIdNames(const std::string &path, bool gzip,
       if (!name.empty()) names->push_back(std::move(name));
     }
     if (remaining == 0) continue;
-    if (!gzip) {
+    if (!gzip && !zstd) {
       if (reader->seek(reader, static_cast<off64_t>(remaining), SEEK_CUR) < 0) return out;
     }
     else {

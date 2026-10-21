@@ -55,3 +55,6 @@ or animation playback are thereby completed.
 
 ## Saved ID-name previews
 The diagnostic now reads Object, Scene, and Mesh names using the original on-disk SDNA field layout. This handles older 66-byte and newer 258-byte `ID.name` fields, with bounded sampled payloads rather than unbounded project copies. The data remains read-only; Blender `Main`, BKE Object instances, scene evaluation, and rendering are NOT yet implemented. Real Blender fixture CI checks compressed and raw files produce matching saved names.
+
+## Native Zstandard support
+Blender's upstream Zstd FileReader and exact-revision pinned Zstandard 1.5.7 library now decode ordinary Zstd-compressed Blender streams and Blender-native compressed projects in the Android C++ layer. The CI suite tests both artificial framing fixtures and actual Blender-generated files. The source is obtained during application *build*, not on the Android phone at runtime; a developer can supply a cached source checkout for offline builds. This is still a read-only catalog, not a BKE scene loader.

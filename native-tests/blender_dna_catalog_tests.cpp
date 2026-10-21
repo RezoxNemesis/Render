@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 #include <zlib.h>
+#include <zstd.h>
 #define CHECK(expr) do { if(!(expr)) throw std::runtime_error("SDNA catalog: " #expr); } while(false)
 namespace {
 using Bytes=std::vector<uint8_t>;
@@ -65,6 +66,15 @@ Bytes Gzip(const Bytes &input){
   CHECK(deflateEnd(&s) == Z_OK);
   return compressed;
 }
+Bytes Zstd(const Bytes &input) {
+  const size_t capacity = ZSTD_compressBound(input.size());
+  Bytes compressed(capacity);
+  const size_t bytes = ZSTD_compress(
+      compressed.data(), compressed.size(), input.data(), input.size(), 4);
+  CHECK(!ZSTD_isError(bytes));
+  compressed.resize(bytes);
+  return compressed;
+}
 std::string Write(const Bytes &bytes){
   static unsigned serial=0;
   const auto path=(std::filesystem::temp_directory_path() /
@@ -117,6 +127,8 @@ int main(){
   }
   CHECK(Inspect(Gzip(Fixture(0,8))).status == render::DnaCatalogStatus::Indexed);
   CHECK(Inspect(Gzip(Fixture(1,8))).status == render::DnaCatalogStatus::Indexed);
+  CHECK(Inspect(Zstd(Fixture(0,8))).status == render::DnaCatalogStatus::Indexed);
+  CHECK(Inspect(Zstd(Fixture(1,8))).status == render::DnaCatalogStatus::Indexed);
   CHECK(Inspect(Gzip(Fixture(0,8,Dna(),false))).status == render::DnaCatalogStatus::NoSchema);
   CHECK(Inspect(Fixture(0,8,Dna(),false)).status==render::DnaCatalogStatus::NoSchema);
   {
@@ -151,7 +163,7 @@ int main(){
     CHECK(Inspect(big).status==render::DnaCatalogStatus::UnsupportedEndian);
   }
   CHECK(Inspect({0x1f,0x8b,0x08,0}).status==render::DnaCatalogStatus::UnrecognizedHeader);
-  CHECK(Inspect({0x28,0xb5,0x2f,0xfd}).status==render::DnaCatalogStatus::CompressedNeedsUpstreamReader);
+  CHECK(Inspect({0x28,0xb5,0x2f,0xfd}).status==render::DnaCatalogStatus::UnrecognizedHeader);
   CHECK(Inspect({}).status==render::DnaCatalogStatus::UnrecognizedHeader);
   std::puts("PASS: SDNA catalog diagnostics (synthetic fixtures)");
   return 0;

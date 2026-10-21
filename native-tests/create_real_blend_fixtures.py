@@ -60,6 +60,8 @@ def main():
     extra.frame_end = 48
     advanced = destination / "render_animated_scene.blend"
     bpy.ops.wm.save_as_mainfile(filepath=str(advanced), compress=False, check_existing=False)
+    native_compressed = destination / "render_blender_compressed_scene.blend"
+    bpy.ops.wm.save_as_mainfile(filepath=str(native_compressed), compress=True, check_existing=False)
 
     gzip_file = destination / "render_real_scene.blend.gz"
     with plain.open("rb") as stream:
@@ -78,12 +80,13 @@ def main():
         "raw": plain.name,
         "animated": advanced.name,
         "gzip_envelope": gzip_file.name,
+        "blender_native_compressed": native_compressed.name,
         "expected_minimum": {"objects": 2, "meshes": 2, "scenes": 1},
     }
     (destination / "fixture_manifest.json").write_text(
         json.dumps(manifest, indent=2), encoding="utf-8")
     print("Render test fixtures generated:", json.dumps(manifest))
-    for p in (plain, advanced, gzip_file):
+    for p in (plain, advanced, gzip_file, native_compressed):
         assert p.is_file() and p.stat().st_size > 1024, f"Invalid output: {p}"
 
 

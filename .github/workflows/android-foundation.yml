@@ -46,7 +46,7 @@ jobs:
       - name: Install desktop Blender only for generating genuine test fixtures
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends blender
+          sudo apt-get install -y --no-install-recommends blender zstd
           blender --version | head -n 2
       - name: Generate genuine .blend scenes using Blender's own bpy
         env:
@@ -54,16 +54,22 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/real-blender"
           blender -b -noaudio --python native-tests/create_real_blend_fixtures.py -- --output "$RUNNER_TEMP/real-blender"
+      - name: Produce standard Zstd envelope around genuine Blender scene
+        run: |
+          zstd --quiet --force -o "$RUNNER_TEMP/real-blender/render_real_scene.blend.zst" \
+            "$RUNNER_TEMP/real-blender/render_real_scene.blend"
       - name: Build Render's native scene-file diagnostic
         run: |
           cmake -S native-tests -B "$RUNNER_TEMP/native-compat" -DCMAKE_BUILD_TYPE=Release
           cmake --build "$RUNNER_TEMP/native-compat" --target blender_real_fixture_tests --parallel 2
-      - name: Verify uncompressed, animated and gzip Blender files
+      - name: Verify uncompressed, animated, gzip, Zstd and Blender-native compressed files
         run: |
           "$RUNNER_TEMP/native-compat/blender_real_fixture_tests" \
             "$RUNNER_TEMP/real-blender/render_real_scene.blend" \
             "$RUNNER_TEMP/real-blender/render_animated_scene.blend" \
-            "$RUNNER_TEMP/real-blender/render_real_scene.blend.gz"
+            "$RUNNER_TEMP/real-blender/render_real_scene.blend.gz" \
+            "$RUNNER_TEMP/real-blender/render_real_scene.blend.zst" \
+            "$RUNNER_TEMP/real-blender/render_blender_compressed_scene.blend"
       - name: Archive fixture manifest (not production application assets)
         if: always()
         uses: actions/upload-artifact@v4

@@ -41,10 +41,12 @@ render::DnaCatalogResult CheckReal(const char *path, const bool animated)
 
 int main(int argc, char **argv)
 {
-  VERIFY(argc == 4, "Usage: blender_real_fixture_tests PLAIN ADVANCED GZIP");
+  VERIFY(argc == 6, "Usage: blender_real_fixture_tests PLAIN ADVANCED GZIP ZSTD BLENDER_COMPRESSED");
   const auto basic = CheckReal(argv[1], false);
   const auto advanced = CheckReal(argv[2], true);
   const auto gzip = CheckReal(argv[3], false);
+  const auto zstd = CheckReal(argv[4], false);
+  const auto blender_compressed = CheckReal(argv[5], true);
   VERIFY(gzip.object_blocks == basic.object_blocks,
          "Gzip fixture changed native object block indexing");
   VERIFY(gzip.mesh_blocks == basic.mesh_blocks,
@@ -53,6 +55,12 @@ int main(int argc, char **argv)
          "Gzip changed on-disk saved Object ID names");
   VERIFY(gzip.structures == basic.structures,
          "Gzip fixture changed SDNA schema parsing");
+  VERIFY(zstd.sample_object_names == basic.sample_object_names,
+         "Standard Zstd compression changed Blender object names");
+  VERIFY(zstd.structures == basic.structures,
+         "Standard Zstd compression changed SDNA schema");
+  VERIFY(blender_compressed.scene_blocks >= basic.scene_blocks,
+         "Blender-native compressed file lost additional scene");
   VERIFY(advanced.scene_blocks >= basic.scene_blocks,
          "Additional Blender scene was lost");
   std::puts("PASS genuine Blender-generated scene metadata compatibility (NOT rendering)");
