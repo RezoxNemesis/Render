@@ -50,6 +50,22 @@ public final class AgentSecrets {
     public boolean videoStudioBridgeEnabled(){
         return prefs.getBoolean("videostudio_ipc",false);
     }
+    /** Publicly shareable ID only. No authentication is derived from this UUID. */
+    public synchronized String renderPublicId() {
+        String id=prefs.getString("render_public_id","");
+        if(RenderConnectionCard.validPublicId(id))return id;
+        id=java.util.UUID.randomUUID().toString();
+        if(!prefs.edit().putString("render_public_id",id).commit())
+            throw new IllegalStateException("PUBLIC_ID_SAVE_FAILED");
+        return id;
+    }
+    public void recordVideoStudioNativeResult() {
+        prefs.edit().putLong("videostudio_last_native_result",System.currentTimeMillis()).apply();
+    }
+    public long lastVideoStudioNativeResult() {
+        return prefs.getLong("videostudio_last_native_result",0);
+    }
+
     public void status(String message){prefs.edit().putString("status",message).apply();}
     public String status(){return prefs.getString("status","Not paired. No live ChatGPT connection.");}
 }
