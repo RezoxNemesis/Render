@@ -12,7 +12,7 @@ import re
 import bpy
 from mathutils import Vector
 
-_PROJECT_NAME = re.compile(r"Render_[a-f0-9]{32}\\.blend\\Z")
+_PROJECT_NAME = re.compile(r"Render_[a-f0-9]{32}\.blend\Z")
 _PREFIX = "RS_"
 
 
