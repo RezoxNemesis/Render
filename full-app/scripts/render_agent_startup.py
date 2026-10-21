@@ -528,6 +528,7 @@ def _dispatch(command):
             "warning": "Referenced external textures and libraries are not automatically packed",
         }
     if action in ("blender.project.restore_scene",
+                  "blender.scene.create_lively_project",
                   "blender.scene.populate_lively",
                   "blender.scene.render_video"):
         import importlib.util
@@ -539,6 +540,8 @@ def _dispatch(command):
         spec.loader.exec_module(module)
         if action == "blender.project.restore_scene":
             return module.restore_scene(args, ROOT)
+        if action == "blender.scene.create_lively_project":
+            return module.create_lively_project(args)
         if action == "blender.scene.populate_lively":
             return module.populate_lively(scene, args)
         return module.render_video(scene, args, command.get("id"), ROOT)
