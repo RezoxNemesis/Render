@@ -74,6 +74,78 @@ def _dispatch(command):
             "scene": bpy.context.scene.name,
             "executed_by": "bpy-main-thread-on-android",
         }
+    if action == "blender.scene.set_frame":
+        if set(args) != {"frame"} or type(args.get("frame")) is not int or not 1 <= args["frame"] <= 100000:
+            raise ValueError("INVALID_FRAME")
+        scene.frame_set(args["frame"])
+        return {
+            "scene": scene.name,
+            "frame": int(scene.frame_current),
+            "executed_by": "bpy-main-thread-on-android",
+        }
+    if action in ("blender.object.set_transform", "blender.object.keyframe"):
+        name = args.get("name")
+        if not isinstance(name, str) or not _OBJECT_PATTERN.fullmatch(name):
+            raise ValueError("INVALID_OBJECT_NAME")
+        ob = scene.objects.get(name)
+        if ob is None:
+            raise ValueError("OBJECT_NOT_FOUND")
+        if action == "blender.object.set_transform":
+            if set(args) - {"name", "location", "rotation_euler", "scale"}:
+                raise ValueError("UNEXPECTED_ARGUMENT")
+            if not any(path in args for path in ("location", "rotation_euler", "scale")):
+                raise ValueError("TRANSFORM_FIELD_REQUIRED")
+            for path, low, high, error in (
+                ("location", -100000, 100000, "INVALID_OBJECT_LOCATION"),
+                ("rotation_euler", -1000, 1000, "INVALID_OBJECT_ROTATION"),
+                ("scale", 0.001, 10000, "INVALID_OBJECT_SCALE"),
+            ):
+                if path in args:
+                    raw = args[path]
+                    if not isinstance(raw, list) or len(raw) != 3 or not all(
+                        _number(value, low, high) for value in raw
+                    ):
+                        raise ValueError(error)
+            # Validate every field before mutating any property.
+            for path in ("location", "rotation_euler", "scale"):
+                if path in args:
+                    setattr(ob, path, args[path])
+            bpy.context.view_layer.update()
+            return {
+                "name": ob.name,
+                "location": [float(v) for v in ob.location],
+                "rotation_euler": [float(v) for v in ob.rotation_euler],
+                "scale": [float(v) for v in ob.scale],
+                "executed_by": "bpy-main-thread-on-android",
+            }
+        if set(args) != {"name", "data_path", "frame", "value"}:
+            raise ValueError("INVALID_KEYFRAME_ARGUMENTS")
+        frame = args.get("frame")
+        if type(frame) is not int or not 1 <= frame <= 100000:
+            raise ValueError("INVALID_FRAME")
+        path = args.get("data_path")
+        if path not in ("location", "rotation_euler", "scale"):
+            raise ValueError("INVALID_KEYFRAME_PATH")
+        lower, upper = (0.001, 10000) if path == "scale" else (
+            (-1000, 1000) if path == "rotation_euler" else (-100000, 100000)
+        )
+        value = args.get("value")
+        if not isinstance(value, list) or len(value) != 3 or not all(
+            _number(v, lower, upper) for v in value
+        ):
+            raise ValueError("INVALID_KEYFRAME_VALUE")
+        setattr(ob, path, value)
+        inserted = bool(ob.keyframe_insert(data_path=path, frame=frame))
+        if not inserted:
+            raise RuntimeError("KEYFRAME_INSERT_FAILED")
+        return {
+            "name": ob.name,
+            "data_path": path,
+            "frame": frame,
+            "value": [float(v) for v in getattr(ob, path)],
+            "inserted": True,
+            "executed_by": "bpy-main-thread-on-android",
+        }
     raise ValueError("NATIVE_BLENDER_ACTION_UNAVAILABLE")
 
 def _write_result(path, report):
