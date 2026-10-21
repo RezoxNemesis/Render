@@ -1,0 +1,109 @@
+"""Synthetic unit tests for full-engine APK staging; no internet or engine files."""
+import hashlib
+from pathlib import Path
+import tempfile
+import unittest
+from xml.etree import ElementTree as ET
+import zipfile
+from assemble_full_native import stage, verify_apk
+
+A = "{http://schemas.android.com/apk/res/android}"
+
+class NativePackagingTests(unittest.TestCase):
+    def setUp(self):
+        self.working = tempfile.TemporaryDirectory()
+        self.base = Path(self.working.name)
+        self.source = self.base / "source"
+        java = self.source / "build_files/android/apk/app/src/main/java/org/blender/blender"
+        java.mkdir(parents=True)
+        (java / "BlenderActivity.java").write_text("package org.blender.blender; class BlenderActivity {}")
+        main = self.source / "build_files/android/apk/app/src/main"
+        (main / "res/values").mkdir(parents=True)
+        (main / "res/values/strings.xml").write_text("<resources/>")
+        self.manifest = main / "AndroidManifest.xml"
+        self.manifest.write_text(
+            '<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="org.blender.blender">'
+            '<application android:label="Blender">'
+            '<activity android:name="org.blender.blender.BlenderActivity" android:exported="true">'
+            '<intent-filter><action android:name="android.intent.action.MAIN"/>'
+            '<category android:name="android.intent.category.LAUNCHER"/></intent-filter>'
+            '<intent-filter><action android:name="android.intent.action.VIEW"/></intent-filter>'
+            '</activity></application></manifest>'
+        )
+        self.engine = self.base / "engine.apk"
+        self.bridge = self.base / "foundation.apk"
+        self.output = self.base / "stage"
+        self.make_engine()
+        with zipfile.ZipFile(self.bridge, "w") as z:
+            z.writestr("lib/arm64-v8a/librender_bridge.so", b"bridge")
+
+    def tearDown(self):
+        self.working.cleanup()
+
+    def make_engine(self, additions=None):
+        with zipfile.ZipFile(self.engine, "w") as z:
+            z.writestr("lib/arm64-v8a/libblender.so", b"original actual native engine")
+            z.writestr("lib/arm64-v8a/libc++_shared.so", b"native STL")
+            z.writestr("assets/blender_runtime.zip", b"Python scripts factory resources")
+            for name, data in (additions or {}).items():
+                z.writestr(name, data)
+        self.digest = hashlib.sha256(self.engine.read_bytes()).hexdigest()
+        self.size = self.engine.stat().st_size
+
+    def build(self):
+        stage(self.engine, self.bridge, self.source, self.output,
+              expected_size=self.size, expected_digest=self.digest,
+              verify_source=False)
+
+    def test_combines_full_blender_agent_and_manifest(self):
+        self.build()
+        self.assertEqual(b"original actual native engine",
+                         (self.output / "lib/arm64-v8a/libblender.so").read_bytes())
+        self.assertEqual(b"bridge", (self.output / "lib/arm64-v8a/librender_bridge.so").read_bytes())
+        self.assertTrue((self.output / "assets/blender_runtime.zip").exists())
+        self.assertTrue((self.output / "java/org/blender/blender/BlenderActivity.java").exists())
+        self.assertTrue((self.output / "assets/licenses/Render-Full-Native-Sources.txt").exists())
+        root = ET.parse(self.output / "AndroidManifest.xml").getroot()
+        self.assertNotIn("package", root.attrib)
+        self.assertIn("android.permission.FOREGROUND_SERVICE_SPECIAL_USE",
+                      [p.get(A+"name") for p in root.findall("uses-permission")])
+        app = root.find("application")
+        self.assertEqual("Render Studio", app.get(A+"label"))
+        activities = {p.get(A+"name"):p for p in app.findall("activity")}
+        self.assertIn("com.rezox.render.RenderHubActivity", activities)
+        self.assertIn("com.rezox.render.agent.AgentActivity", activities)
+        self.assertIn("com.rezox.render.MainActivity", activities)
+        blender = activities["org.blender.blender.BlenderActivity"]
+        self.assertEqual(1, len(blender.findall("intent-filter")))
+        launch = activities["com.rezox.render.RenderHubActivity"]
+        self.assertEqual("android.intent.action.MAIN",
+                         launch.find("intent-filter/action").get(A+"name"))
+        self.assertEqual("com.rezox.render.agent.AgentService",
+                         app.find("service").get(A+"name"))
+
+    def test_refuses_tampered_engine(self):
+        with self.assertRaisesRegex(ValueError,"SHA256_MISMATCH"):
+            verify_apk(self.engine,self.size,"0"*64)
+        with self.assertRaisesRegex(ValueError,"SIZE_MISMATCH"):
+            verify_apk(self.engine,self.size+1,self.digest)
+
+    def test_refuses_path_traversal(self):
+        self.make_engine({"assets/../../escape": b"bad"})
+        with self.assertRaisesRegex(ValueError,"UNSAFE_ENGINE_APK_MEMBER"):
+            self.build()
+
+    def test_refuses_agent_library_collision(self):
+        self.make_engine({"lib/arm64-v8a/librender_bridge.so": b"collision"})
+        with self.assertRaisesRegex(ValueError,"UPSTREAM_AGENT_LIBRARY_COLLISION"):
+            self.build()
+
+    def test_refuses_missing_engine_runtime(self):
+        with zipfile.ZipFile(self.engine,"w") as z:
+            z.writestr("lib/arm64-v8a/libblender.so",b"blender")
+        self.digest = hashlib.sha256(self.engine.read_bytes()).hexdigest()
+        self.size = self.engine.stat().st_size
+        with self.assertRaisesRegex(ValueError,"INCOMPLETE"):
+            self.build()
+
+if __name__ == "__main__":
+    unittest.main()

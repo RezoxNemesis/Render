@@ -1,0 +1,102 @@
+name: Render Full Native Blender + Agent APK
+on:
+  push:
+    branches: ["feature/android-native-foundation-20261021"]
+    paths:
+      - "full-app/**"
+      - "tools/assemble_full_native.py"
+      - "tools/test_assemble_full_native.py"
+      - ".github/workflows/full-native-apk.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  stage-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Verify full-engine staging rejects tampered files
+        run: PYTHONPATH=tools python -m unittest tools/test_assemble_full_native.py -v
+
+  build-native-full:
+    needs: stage-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Install Android SDK, NDK and CMake
+        shell: bash
+        run: |
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -path "*/bin/sdkmanager" -type f | sort -V | tail -1)"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" --install "platforms;android-35" "build-tools;35.0.0" "cmake;3.22.1" "ndk;27.2.12479018"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+      - name: Build Render native JNI and ChatGPT agent first
+        run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
+      - name: Download and verify pinned full native Blender engine APK
+        shell: bash
+        run: |
+          curl -fL --retry 3 --connect-timeout 15 \
+            "https://github.com/simfeo/blender/releases/download/android-alpha-4/blender-full.apk" \
+            -o "$RUNNER_TEMP/blender-full.apk"
+          echo "3fe775a1e14470ebfcd3c25ae32b57003433f04552f896880631ae98b1f18aea  $RUNNER_TEMP/blender-full.apk" | sha256sum --check --status
+          test "$(stat -c%s "$RUNNER_TEMP/blender-full.apk")" = "286561495"
+      - name: Retrieve pinned upstream Android Java and resources
+        shell: bash
+        run: |
+          mkdir "$RUNNER_TEMP/full-blender-src"
+          git -C "$RUNNER_TEMP/full-blender-src" init -q
+          git -C "$RUNNER_TEMP/full-blender-src" remote add origin https://github.com/simfeo/blender.git
+          git -C "$RUNNER_TEMP/full-blender-src" sparse-checkout init --cone
+          git -C "$RUNNER_TEMP/full-blender-src" sparse-checkout set build_files/android/apk/app/src/main
+          git -C "$RUNNER_TEMP/full-blender-src" -c protocol.version=2 fetch --depth=1 --filter=blob:none origin d93bd33cba768e19ee4387a31c0ea137ee2f0047
+          git -C "$RUNNER_TEMP/full-blender-src" checkout --detach -q FETCH_HEAD
+          test "$(git -C "$RUNNER_TEMP/full-blender-src" rev-parse HEAD)" = "d93bd33cba768e19ee4387a31c0ea137ee2f0047"
+      - name: Stage Render full engine plus native agent
+        run: |
+          python tools/assemble_full_native.py \
+            --engine-apk "$RUNNER_TEMP/blender-full.apk" \
+            --bridge-apk "app/build/outputs/apk/debug/app-debug.apk" \
+            --upstream-source "$RUNNER_TEMP/full-blender-src" \
+            --output "full-app/stage"
+      - name: Compile full native engine + agent Android APK
+        run: gradle -p full-app --no-daemon :app:assembleDebug
+      - name: Verify engine, agent, runtime and signature
+        shell: bash
+        run: |
+          APK=full-app/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          unzip -tqq "$APK"
+          unzip -Z -1 "$APK" | grep -Fx 'lib/arm64-v8a/libblender.so'
+          unzip -Z -1 "$APK" | grep -Fx 'lib/arm64-v8a/librender_bridge.so'
+          unzip -Z -1 "$APK" | grep -Fx 'assets/blender_runtime.zip'
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" > "$RUNNER_TEMP/render-full-badging.txt"
+          grep -q "package: name='com.rezox.render'" "$RUNNER_TEMP/render-full-badging.txt"
+          grep -q "launchable-activity: name='com.rezox.render.RenderHubActivity'" "$RUNNER_TEMP/render-full-badging.txt"
+          sha256sum "$APK" | tee "$RUNNER_TEMP/render-full-sha256.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: render-full-native-blender-and-chatgpt-agent-debug
+          path: full-app/app/build/outputs/apk/debug/app-debug.apk
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: render-full-native-build-provenance
+          path: |
+            ${{ runner.temp }}/render-full-badging.txt
+            ${{ runner.temp }}/render-full-sha256.txt
+          retention-days: 7
