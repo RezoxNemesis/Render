@@ -5,6 +5,8 @@ Every operation runs from Render's existing Blender bpy main-thread timer.
 This module is packaged alongside render_agent_startup.py in the native APK.
 """
 import hashlib
+import json
+import os
 import math
 from pathlib import Path
 import re
@@ -418,6 +420,30 @@ def render_video(scene, args, uid, spool):
     if any(output_dir.glob(prefix.name+"*")):
         raise ValueError("RENDER_OUTPUT_ALREADY_EXISTS")
     render=scene.render
+    total=scene.frame_end-scene.frame_start+1
+    progress_dir=Path(spool).resolve()/"progress"
+    progress_dir.mkdir(mode=0o700,parents=True,exist_ok=True)
+    progress_file=progress_dir/(uid+".json")
+    # Render handlers report actual frame numbers; this is native Blender
+    # evidence, not an estimated animation percentage.
+    def report_progress(current,stage):
+        try:
+            percent=max(0,min(100,int((current-scene.frame_start+1)*100/total)))
+            data=json.dumps({"id":uid,"stage":stage,"percent":percent})
+            temporary=progress_dir/(uid+".partial")
+            with temporary.open("w",encoding="utf-8") as stream:
+                stream.write(data)
+            os.replace(temporary,progress_file)
+        except OSError:
+            pass  # Rendering takes priority; notification progress is optional.
+
+    def on_native_frame(render_scene):
+        current=int(render_scene.frame_current)
+        report_progress(current,"Rendering frame %d of %d" %
+                        (current-scene.frame_start+1,total))
+
+    handlers=bpy.app.handlers.render_pre
+    handler_registered=False
     old=(render.filepath,render.image_settings.file_format,
          render.resolution_percentage,render.engine)
     try:
@@ -428,10 +454,16 @@ def render_video(scene, args, uid, spool):
         render.ffmpeg.format="MPEG4"
         render.ffmpeg.codec="H264"
         render.ffmpeg.constant_rate_factor="MEDIUM"
+        report_progress(scene.frame_start-1,"Native video render starting")
+        handlers.append(on_native_frame)
+        handler_registered=True
         result=bpy.ops.render.render(animation=True)
+        report_progress(scene.frame_end,"Encoding completed")
         if "FINISHED" not in result:
             raise RuntimeError("BLENDER_VIDEO_RENDER_FAILED")
     finally:
+        if handler_registered and on_native_frame in handlers:
+            handlers.remove(on_native_frame)
         render.filepath,render.image_settings.file_format,render.resolution_percentage,render.engine=old
     files=[f for f in output_dir.glob(prefix.name+"*") if f.is_file() and f.suffix.lower()==".mp4"]
     if len(files)!=1 or files[0].stat().st_size<1000:
