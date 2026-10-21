@@ -6,6 +6,7 @@ An app-private, one-way file spool accepts typed commands only. No eval/exec,
 shell commands, arbitrary bpy operator IDs, or network listener are exposed.
 """
 import json
+import hashlib
 import math
 import os
 from pathlib import Path
@@ -145,6 +146,46 @@ def _dispatch(command):
             "value": [float(v) for v in getattr(ob, path)],
             "inserted": True,
             "executed_by": "bpy-main-thread-on-android",
+        }
+    if action == "blender.project.save_copy":
+        if args:
+            raise ValueError("UNEXPECTED_ARGUMENT")
+        ident = command.get("id")
+        if not ROOT or not isinstance(ident, str) or not _ID_PATTERN.fullmatch(ident):
+            raise ValueError("INVALID_SNAPSHOT_ID")
+        project_folder = Path(ROOT).resolve().parent / "Projects"
+        project_folder.mkdir(parents=True, mode=0o700, exist_ok=True)
+        filename = "Render_" + ident + ".blend"
+        destination = project_folder / filename
+        if destination.exists():
+            raise ValueError("SNAPSHOT_ALREADY_EXISTS")
+        current_project = bpy.data.filepath
+        finished = bpy.ops.wm.save_as_mainfile(
+            filepath=str(destination),
+            check_existing=False,
+            compress=True,
+            copy=True,
+            relative_remap=True,
+        )
+        if "FINISHED" not in finished or not destination.is_file():
+            raise RuntimeError("BLENDER_SAVE_FAILED")
+        if bpy.data.filepath != current_project:
+            raise RuntimeError("OPEN_PROJECT_PATH_CHANGED")
+        byte_count = destination.stat().st_size
+        if byte_count < 256:
+            raise RuntimeError("SAVED_FILE_TOO_SMALL")
+        digest = hashlib.sha256()
+        with destination.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1048576), b""):
+                digest.update(chunk)
+        return {
+            "filename": filename,
+            "bytes": byte_count,
+            "sha256": digest.hexdigest(),
+            "scene": bpy.context.scene.name,
+            "copied_without_changing_open_project": True,
+            "executed_by": "bpy-main-thread-on-android",
+            "warning": "Referenced external textures and libraries are not automatically packed",
         }
     raise ValueError("NATIVE_BLENDER_ACTION_UNAVAILABLE")
 

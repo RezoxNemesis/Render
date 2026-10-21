@@ -50,6 +50,10 @@ public final class BlenderSpool {
             if(args.length()!=0)throw new IllegalArgumentException("UNEXPECTED_ARGUMENT");
             return;
         }
+        if("blender.project.save_copy".equals(action)){
+            if(args.length()!=0)throw new IllegalArgumentException("UNEXPECTED_ARGUMENT");
+            return;
+        }
         if("blender.scene.set_frame".equals(action)){
             if(args.length()!=1)throw new IllegalArgumentException("UNEXPECTED_ARGUMENT");
             frame(args);return;
@@ -99,8 +103,9 @@ public final class BlenderSpool {
         File request=new File(pending,id+".json");
         File claimed=new File(working,id+".json");
         File resultFile=new File(results,id+".json");
+        long timeoutMillis=action.equals("blender.project.save_copy") ? 120000L : 20000L;
         JSONObject envelope=new JSONObject().put("id",id).put("action",action)
-            .put("args",args).put("deadline",System.currentTimeMillis()/1000+20);
+            .put("args",args).put("deadline",System.currentTimeMillis()/1000+timeoutMillis/1000);
         byte[] contents=envelope.toString().getBytes(StandardCharsets.UTF_8);
         if(contents.length>16384)throw new IllegalArgumentException("NATIVE_COMMAND_TOO_LARGE");
         File temporary=File.createTempFile("render-",".part",pending);
@@ -111,7 +116,7 @@ public final class BlenderSpool {
         catch(java.nio.file.AtomicMoveNotSupportedException e) {
             Files.move(temporary.toPath(),request.toPath());
         }
-        long deadline=SystemClock.elapsedRealtime()+20000;
+        long deadline=SystemClock.elapsedRealtime()+timeoutMillis;
         while(SystemClock.elapsedRealtime()<deadline){
             if(resultFile.isFile()){
                 if(resultFile.length()>65536)throw new IllegalStateException("BLENDER_RESULT_TOO_LARGE");

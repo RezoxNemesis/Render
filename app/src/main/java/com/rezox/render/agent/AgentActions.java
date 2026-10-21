@@ -81,7 +81,8 @@ public final class AgentActions {
             boolean available=!bpy||fullBlender;
             JSONObject descriptor=new JSONObject().put("id",id).put("available",available).put("api_version",1)
                 .put("read_only",!(id.equals("blender.object.add_cube") || id.equals("blender.scene.set_frame")
-                    || id.equals("blender.object.set_transform") || id.equals("blender.object.keyframe")))
+                    || id.equals("blender.object.set_transform") || id.equals("blender.object.keyframe")
+                    || id.equals("blender.project.save_copy")))
                 .put("cancellation","between_native_calls").put("input_schema",schema);
             if(bpy&&!available)descriptor.put("reason","Full native Blender editor not packaged in this Android build");
             if(bpy&&available)descriptor.put("requires","Open full Blender editor and wait for bpy timer startup");
@@ -108,7 +109,17 @@ public final class AgentActions {
             .put("is_renderer",false).put("executed_by","android-native");
         if (action.startsWith("blender.")) {
             if (!hasFullBlender(context)) throw new IllegalStateException("BLENDER_ENGINE_NOT_INSTALLED");
-            return new BlenderSpool(context).execute(action,args,cancelled);
+            JSONObject result = new BlenderSpool(context).execute(action,args,cancelled);
+            if (action.equals("blender.project.save_copy")) {
+                for (ProjectScope.Entry entry : projects.entries()) {
+                    if (entry.file.getName().equals(result.getString("filename"))) {
+                        result.put("project_id",entry.id);
+                        return result;
+                    }
+                }
+                throw new IllegalStateException("SAVED_PROJECT_NOT_INDEXED");
+            }
+            return result;
         }
         if (action.equals("projects.list")) {
             int offset = args.has("offset") ? strictInt(args,"offset") : 0;

@@ -32,7 +32,7 @@ public final class RenderHubActivity extends Activity {
             startActivity(new Intent(this,com.rezox.render.agent.AgentActivity.class)));
         button(content, "Project import and file inspection", () ->
             startActivity(new Intent(this,MainActivity.class)));
-        label(content, "The agent can inspect Blender scenes, add cubes, adjust transforms, change frames and insert animation keyframes through native bpy after the editor opens. Saving, rendering and extensive operations require further native integration and phone testing.", 14);
+        label(content, "The agent can inspect Blender scenes, add cubes, change transforms, insert animation keyframes and save a new local .blend snapshot using Blender bpy. Render and export automation still require further native integration and phone testing.", 14);
         label(content, "Back up projects before testing experimental APKs. This is not an official Blender Foundation product.", 13);
     }
     private TextView label(LinearLayout content,String value,int size) {

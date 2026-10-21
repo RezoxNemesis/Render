@@ -25,6 +25,7 @@ public final class AgentPolicy {
         registry.put("blender.scene.set_frame", fields("frame"));
         registry.put("blender.object.set_transform", fields("name", "location", "rotation_euler", "scale"));
         registry.put("blender.object.keyframe", fields("name", "frame", "data_path", "value"));
+        registry.put("blender.project.save_copy", Collections.emptySet());
         ACTIONS = Collections.unmodifiableMap(registry);
     }
     private static Set<String> fields(String... values) {
