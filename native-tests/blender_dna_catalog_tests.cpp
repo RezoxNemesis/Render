@@ -33,19 +33,19 @@ Bytes Dna(){
   Num(b,2,2);Num(b,0,2); // Sample *next
   return b;
 }
-void Block(Bytes &file,int format,int pointer,const std::string &code,const Bytes &data){
+void Block(Bytes &file,int format,int pointer,const std::string &code,const Bytes &data,uint64_t old_token=0){
   CHECK(code.size()==4);Str(file,code);
-  if(format==1){Num(file,0,4);Num(file,0,8);Num(file,data.size(),8);Num(file,1,8);}
-  else{Num(file,data.size(),4);Num(file,0,pointer);Num(file,0,4);Num(file,1,4);}
+  if(format==1){Num(file,0,4);Num(file,old_token,8);Num(file,data.size(),8);Num(file,1,8);}
+  else{Num(file,data.size(),4);Num(file,old_token,pointer);Num(file,0,4);Num(file,1,4);}
   file.insert(file.end(),data.begin(),data.end());
 }
 Bytes Fixture(int format,int pointer,const Bytes &dna= Dna(),bool include_dna=true){
   Bytes b;
   if(format==1)Str(b,"BLENDER17-01v0500");
   else{Str(b,"BLENDER");b.push_back(pointer==8?'-':'_');Str(b,"v405");}
-  Block(b,format,pointer,std::string("OB\0\0",4),{});
-  Block(b,format,pointer,std::string("SC\0\0",4),{});
-  Block(b,format,pointer,std::string("ME\0\0",4),{});
+  Block(b,format,pointer,std::string("OB\0\0",4),{},0x1000);
+  Block(b,format,pointer,std::string("SC\0\0",4),{},0x2000);
+  Block(b,format,pointer,std::string("ME\0\0",4),{},0x3000);
   if(include_dna)Block(b,format,pointer,"DNA1",dna);
   Block(b,format,pointer,"ENDB",{});
   return b;
@@ -89,6 +89,9 @@ void Valid(int fmt,int ptr){
   CHECK(a.structures==1);
   CHECK(a.member_names==3);
   CHECK(a.types==3);
+  CHECK(a.id_blocks==3);
+  CHECK(a.unique_id_tokens==3);
+  CHECK(a.duplicate_id_tokens==0);
   CHECK(a.structure_fields==3);
   CHECK(a.sample_structures.size()==1);
   CHECK(a.sample_structures[0]=="Sample");
@@ -99,6 +102,19 @@ void Valid(int fmt,int ptr){
 }
 int main(){
   Valid(0,4);Valid(0,8);Valid(1,8);
+  {
+    Bytes repeated;
+    Str(repeated,"BLENDER17-01v0500");
+    Block(repeated,1,8,std::string("OB\0\0",4),{},0x9000);
+    Block(repeated,1,8,std::string("ME\0\0",4),{},0x9000);
+    Block(repeated,1,8,"DNA1",Dna());
+    Block(repeated,1,8,"ENDB",{});
+    auto info=Inspect(repeated);
+    CHECK(info.status==render::DnaCatalogStatus::Indexed);
+    CHECK(info.id_blocks==2);
+    CHECK(info.unique_id_tokens==1);
+    CHECK(info.duplicate_id_tokens==1);
+  }
   CHECK(Inspect(Gzip(Fixture(0,8))).status == render::DnaCatalogStatus::Indexed);
   CHECK(Inspect(Gzip(Fixture(1,8))).status == render::DnaCatalogStatus::Indexed);
   CHECK(Inspect(Gzip(Fixture(0,8,Dna(),false))).status == render::DnaCatalogStatus::NoSchema);

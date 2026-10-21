@@ -26,6 +26,10 @@ struct DnaCatalogResult {
   uint64_t object_blocks = 0;
   uint64_t scene_blocks = 0;
   uint64_t mesh_blocks = 0;
+  // Unique ID pointer tokens are on-disk identifiers, NEVER process addresses.
+  uint64_t id_blocks = 0;
+  uint64_t unique_id_tokens = 0;
+  uint64_t duplicate_id_tokens = 0;
   uint32_t member_names = 0;
   uint32_t types = 0;
   uint32_t structures = 0;

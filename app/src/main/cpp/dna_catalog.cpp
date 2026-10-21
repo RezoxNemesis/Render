@@ -20,6 +20,7 @@
 #include <utility>
 #include <variant>
 #include <vector>
+#include <unordered_set>
 
 namespace render {
 namespace {
@@ -244,6 +245,7 @@ DnaCatalogResult InspectDnaCatalog(const std::string &path)
 
   bool found_dna = false;
   uint64_t inflated = 0;
+  std::unordered_set<uintptr_t> id_tokens;
   for (uint64_t i = 0; i < kMaxDiagnosticBlocks; ++i) {
     const auto next = blender::BLO_readfile_read_bhead(reader, header->bhead_type());
     if (!next)
@@ -257,6 +259,7 @@ DnaCatalogResult InspectDnaCatalog(const std::string &path)
         return Fail(r, DnaCatalogStatus::InvalidBlock, "ENDB with a payload");
       if (!found_dna)
         return Fail(r, DnaCatalogStatus::NoSchema, "No DNA1 schema block");
+      r.unique_id_tokens = id_tokens.size();
       r.status = DnaCatalogStatus::Indexed;
       return r;
     }
@@ -265,6 +268,14 @@ DnaCatalogResult InspectDnaCatalog(const std::string &path)
     if (code[0] == 'O' && code[1] == 'B') ++r.object_blocks;
     if (code[0] == 'S' && code[1] == 'C') ++r.scene_blocks;
     if (code[0] == 'M' && code[1] == 'E') ++r.mesh_blocks;
+    // Blender's two-byte ID codes are distinct from four-byte DATA/GLOB/DNA1.
+    // The saved old-pointer token is NOT dereferenced and may not be trusted.
+    if ((static_cast<uint32_t>(b.code) & 0xffff0000u) == 0u) {
+      ++r.id_blocks;
+      const uintptr_t old_token = reinterpret_cast<uintptr_t>(b.old);
+      if (old_token != 0 && !id_tokens.insert(old_token).second)
+        ++r.duplicate_id_tokens;
+    }
 
     if (b.code == blender::BLO_CODE_DNA1) {
       if (found_dna) return Fail(r, DnaCatalogStatus::InvalidSchema, "Duplicate DNA1 block");
@@ -316,6 +327,9 @@ std::string DnaCatalogJson(const DnaCatalogResult &r)
     << ",\"objectBlocks\":" << r.object_blocks
     << ",\"sceneBlocks\":" << r.scene_blocks
     << ",\"meshBlocks\":" << r.mesh_blocks
+    << ",\"idBlocks\":" << r.id_blocks
+    << ",\"uniqueIdTokens\":" << r.unique_id_tokens
+    << ",\"duplicateIdTokens\":" << r.duplicate_id_tokens
     << ",\"memberNames\":" << r.member_names
     << ",\"types\":" << r.types
     << ",\"structures\":" << r.structures

@@ -35,3 +35,6 @@ after successful schema indexing.
 
 ## gzip preflight support
 Gzip input is now passed through Blender's original GPL-licensed `filereader_gzip.cc`, with a narrowly adapted guardedalloc shim and ARM/host libz. The scoped patch uses `delete[]` for the buffer allocated by the shim; this is NOT the full Blender memory allocator. The upstream gzip reader is forward-only, so the diagnostic parser streams over file blocks with a 512-MiB diagnostic decompression-work budget. This is not a feature limitation in the planned Blender engine. Zstd still requires the genuine upstream reader and an Android zstd build.
+
+## Top-level ID pointer-token inventory
+A bounded diagnostic set now tracks distinct **saved** ID block pointer tokens (as hexadecimal-like address identifiers, never dereferenced as Android pointers). Four-byte control/data blocks are excluded. The report includes top-level ID block counts and repeated nonzero tokens, helping establish an initial mapping before full Blender Main/BKE pointer reconstruction. These tokens are not usable native memory addresses, and this index is **not** Blender's original OldNewMap or linked-library logic.
