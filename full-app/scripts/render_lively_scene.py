@@ -271,7 +271,13 @@ def populate_lively(scene, args):
     if args:
         raise ValueError("UNEXPECTED_ARGUMENT")
     # Never populate the accidental empty Blender tab. Require the saved building.
-    if "RoofCap" not in scene.objects or "EntryCanopy" not in scene.objects:
+    # Blender object names are globally unique across scenes, so a fresh
+    # building may have RoofCap.001 / EntryCanopy.001 when an older scene exists.
+    # Inspect only objects in the requested scene, not other open projects.
+    def has_architectural_part(prefix):
+        return any(ob.name == prefix or ob.name.startswith(prefix + ".")
+                   for ob in scene.objects)
+    if not has_architectural_part("RoofCap") or not has_architectural_part("EntryCanopy"):
         raise ValueError("BUILDING_MODEL_NOT_LOADED")
     existing = scene.collection.children.get(_PREFIX+"LivelyEnvironment")
     if existing is not None:
