@@ -17,7 +17,7 @@ add_executable(blender_upstream_blo_tests blender_upstream_blo_tests.cpp)
 target_link_libraries(blender_upstream_blo_tests PRIVATE blender_upstream_blo_core)
 add_test(NAME blender_upstream_blo_tests COMMAND blender_upstream_blo_tests)
 
-add_executable(blender_dna_catalog_tests blender_dna_catalog_tests.cpp ../app/src/main/cpp/dna_catalog.cpp)
+add_executable(blender_dna_catalog_tests blender_dna_catalog_tests.cpp ../app/src/main/cpp/dna_catalog.cpp ../app/src/main/cpp/id_name_preview.cpp)
 target_include_directories(blender_dna_catalog_tests PRIVATE ../app/src/main/cpp)
 target_link_libraries(blender_dna_catalog_tests PRIVATE blender_upstream_blo_core)
 target_compile_features(blender_dna_catalog_tests PRIVATE cxx_std_20)
@@ -25,7 +25,7 @@ add_test(NAME blender_dna_catalog_tests COMMAND blender_dna_catalog_tests)
 
 # This CLI is intentionally not a ctest target: it needs Blender-generated
 # production-format inputs, created by the separate real-fixture CI job.
-add_executable(blender_real_fixture_tests blender_real_fixture_tests.cpp ../app/src/main/cpp/dna_catalog.cpp)
+add_executable(blender_real_fixture_tests blender_real_fixture_tests.cpp ../app/src/main/cpp/dna_catalog.cpp ../app/src/main/cpp/id_name_preview.cpp)
 target_include_directories(blender_real_fixture_tests PRIVATE ../app/src/main/cpp)
 target_link_libraries(blender_real_fixture_tests PRIVATE blender_upstream_blo_core)
 target_compile_features(blender_real_fixture_tests PRIVATE cxx_std_20)
