@@ -21,7 +21,7 @@ public class AgentPolicyTest {
         }
     }
     @Test public void registryExposesOnlyRealHandlers(){
-        assertEquals(17,AgentPolicy.ACTIONS.size());
+        assertEquals(20,AgentPolicy.ACTIONS.size());
         assertFalse(AgentPolicy.ACTIONS.containsKey("cycles.render"));
         assertFalse(AgentPolicy.ACTIONS.containsKey("shell.exec"));
         assertTrue(AgentPolicy.ACTIONS.containsKey("blender.scene.summary"));
@@ -37,6 +37,9 @@ public class AgentPolicyTest {
         assertTrue(AgentPolicy.ACTIONS.containsKey("blender.material.assign"));
         assertTrue(AgentPolicy.ACTIONS.containsKey("blender.scene.render_settings"));
         assertTrue(AgentPolicy.ACTIONS.containsKey("blender.scene.render_still"));
+        assertTrue(AgentPolicy.ACTIONS.containsKey("blender.project.restore_scene"));
+        assertTrue(AgentPolicy.ACTIONS.containsKey("blender.scene.populate_lively"));
+        assertTrue(AgentPolicy.ACTIONS.containsKey("blender.scene.render_video"));
     }
     @Test public void validReadCommand(){AgentPolicy.validate("command-1",1,"engine.status",Collections.emptySet());}
     @Test public void acceptsTypedBpyCommandsButNoPythonShell(){
@@ -48,6 +51,18 @@ public class AgentPolicyTest {
         AgentPolicy.validate("move-1",1,"blender.object.set_transform",new HashSet<>(Arrays.asList("name","location","scale")));
         AgentPolicy.validate("frame-1",1,"blender.scene.set_frame",Collections.singleton("frame"));
         AgentPolicy.validate("snapshot-1",1,"blender.project.save_copy",Collections.emptySet());
+        AgentPolicy.validate("restore-1",1,"blender.project.restore_scene",
+            new HashSet<>(Arrays.asList("project_id","expected_sha256")));
+        AgentPolicy.validate("scenery-1",1,"blender.scene.populate_lively",Collections.emptySet());
+        AgentPolicy.validate("video-1",1,"blender.scene.render_video",Collections.emptySet());
+        try {
+            AgentPolicy.validate("restore-2",1,"blender.project.restore_scene",Collections.emptySet());
+            fail("Must require an opaque project ID");
+        } catch(IllegalArgumentException expected){}
+        try {
+            AgentPolicy.validate("video-2",1,"blender.scene.render_video",Collections.singleton("shell"));
+            fail("No arbitrary paths/commands allowed");
+        } catch(IllegalArgumentException expected){} 
         try{AgentPolicy.validate("id-4",1,"python.eval",Collections.emptySet());fail();}
         catch(IllegalArgumentException expected){}
     }
