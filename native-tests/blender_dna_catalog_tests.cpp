@@ -8,6 +8,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <zlib.h>
 #define CHECK(expr) do { if(!(expr)) throw std::runtime_error("SDNA catalog: " #expr); } while(false)
 namespace {
 using Bytes=std::vector<uint8_t>;
@@ -49,6 +50,21 @@ Bytes Fixture(int format,int pointer,const Bytes &dna= Dna(),bool include_dna=tr
   Block(b,format,pointer,"ENDB",{});
   return b;
 }
+Bytes Gzip(const Bytes &input){
+  z_stream s{};
+  CHECK(deflateInit2(&s, Z_DEFAULT_COMPRESSION, Z_DEFLATED, MAX_WBITS + 16,
+                     8, Z_DEFAULT_STRATEGY) == Z_OK);
+  Bytes compressed(compressBound(static_cast<uLong>(input.size())) + 128);
+  s.next_in = const_cast<Bytef *>(input.data());
+  s.avail_in = static_cast<uInt>(input.size());
+  s.next_out = compressed.data();
+  s.avail_out = static_cast<uInt>(compressed.size());
+  const int code = deflate(&s, Z_FINISH);
+  CHECK(code == Z_STREAM_END);
+  compressed.resize(s.total_out);
+  CHECK(deflateEnd(&s) == Z_OK);
+  return compressed;
+}
 std::string Write(const Bytes &bytes){
   static unsigned serial=0;
   const auto path=(std::filesystem::temp_directory_path() /
@@ -83,6 +99,9 @@ void Valid(int fmt,int ptr){
 }
 int main(){
   Valid(0,4);Valid(0,8);Valid(1,8);
+  CHECK(Inspect(Gzip(Fixture(0,8))).status == render::DnaCatalogStatus::Indexed);
+  CHECK(Inspect(Gzip(Fixture(1,8))).status == render::DnaCatalogStatus::Indexed);
+  CHECK(Inspect(Gzip(Fixture(0,8,Dna(),false))).status == render::DnaCatalogStatus::NoSchema);
   CHECK(Inspect(Fixture(0,8,Dna(),false)).status==render::DnaCatalogStatus::NoSchema);
   {
     Bytes bad=Dna();bad[0]='X';
@@ -115,7 +134,7 @@ int main(){
     big[8]='V';
     CHECK(Inspect(big).status==render::DnaCatalogStatus::UnsupportedEndian);
   }
-  CHECK(Inspect({0x1f,0x8b,0x08,0}).status==render::DnaCatalogStatus::CompressedNeedsUpstreamReader);
+  CHECK(Inspect({0x1f,0x8b,0x08,0}).status==render::DnaCatalogStatus::UnrecognizedHeader);
   CHECK(Inspect({0x28,0xb5,0x2f,0xfd}).status==render::DnaCatalogStatus::CompressedNeedsUpstreamReader);
   CHECK(Inspect({}).status==render::DnaCatalogStatus::UnrecognizedHeader);
   std::puts("PASS: SDNA catalog diagnostics (synthetic fixtures)");

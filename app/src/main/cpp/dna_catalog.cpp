@@ -204,14 +204,14 @@ bool DecodeSchema(const std::vector<uint8_t> &dna, DnaCatalogResult &result)
 DnaCatalogResult InspectDnaCatalog(const std::string &path)
 {
   DnaCatalogResult r;
+  bool is_gzip = false;
   {
     std::ifstream magic(path, std::ios::binary);
     if (!magic) return Fail(r, DnaCatalogStatus::IoError, "Cannot open local file");
     std::array<unsigned char, 4> prefix{};
     magic.read(reinterpret_cast<char *>(prefix.data()), prefix.size());
     if (magic.gcount() >= 2 && prefix[0] == 0x1F && prefix[1] == 0x8B)
-      return Fail(r, DnaCatalogStatus::CompressedNeedsUpstreamReader,
-                  "Gzip file requires genuine Blender decompressing FileReader");
+      is_gzip = true;
     if (magic.gcount() == 4 && prefix[0] == 0x28 && prefix[1] == 0xB5 &&
         prefix[2] == 0x2F && prefix[3] == 0xFD)
       return Fail(r, DnaCatalogStatus::CompressedNeedsUpstreamReader,
@@ -220,7 +220,18 @@ DnaCatalogResult InspectDnaCatalog(const std::string &path)
 
   LocalBlendReader local(path);
   if (!local.IsOpen()) return Fail(r, DnaCatalogStatus::IoError, "Cannot open local .blend");
+  struct ReaderOwner {
+    blender::FileReader *owned = nullptr;
+    ~ReaderOwner() { if (owned) owned->close(owned); }
+  };
+  ReaderOwner gzip_owner;
   blender::FileReader *reader = local.Raw();
+  if (is_gzip) {
+    gzip_owner.owned = blender::BLI_filereader_new_gzip(local.Raw());
+    if (!gzip_owner.owned)
+      return Fail(r, DnaCatalogStatus::IoError, "Blender upstream gzip FileReader failed to initialize");
+    reader = gzip_owner.owned;
+  }
   const auto decoded = blender::BLO_readfile_blender_header_decode(reader);
   const auto *header = std::get_if<blender::BlenderHeader>(&decoded);
   if (!header)
@@ -232,6 +243,7 @@ DnaCatalogResult InspectDnaCatalog(const std::string &path)
                 "Upstream BHead reader cannot decode cross-endian raw blocks yet");
 
   bool found_dna = false;
+  uint64_t inflated = 0;
   for (uint64_t i = 0; i < kMaxDiagnosticBlocks; ++i) {
     const auto next = blender::BLO_readfile_read_bhead(reader, header->bhead_type());
     if (!next)
@@ -265,7 +277,27 @@ DnaCatalogResult InspectDnaCatalog(const std::string &path)
         return Fail(r, DnaCatalogStatus::InvalidBlock, "Truncated DNA1 payload");
       if (!DecodeSchema(dna, r))
         return Fail(r, DnaCatalogStatus::InvalidSchema, "Invalid SDNA NAME/TYPE/TLEN/STRC");
+      if (is_gzip) inflated += static_cast<uint64_t>(b.len);
       found_dna = true;
+    }
+    else if (is_gzip) {
+      // Blender's upstream gzip FileReader is forward-only. Stream past payloads
+      // instead of passing a null seek callback. Keep decompression bounded.
+      constexpr uint64_t kMaxDiagnosticInflation = 512ull * 1024ull * 1024ull;
+      if (static_cast<uint64_t>(b.len) > kMaxDiagnosticInflation - inflated)
+        return Fail(r, DnaCatalogStatus::DiagnosticLimit,
+                    "Diagnostic decompression budget reached; no engine file-size limit implied");
+      std::array<uint8_t, 65536> scratch{};
+      uint64_t remaining = static_cast<uint64_t>(b.len);
+      while (remaining > 0) {
+        const size_t read_size = static_cast<size_t>(
+            std::min<uint64_t>(scratch.size(), remaining));
+        const int64_t received = reader->read(reader, scratch.data(), read_size);
+        if (received <= 0 || static_cast<uint64_t>(received) > remaining)
+          return Fail(r, DnaCatalogStatus::InvalidBlock, "Truncated gzip block payload");
+        remaining -= static_cast<uint64_t>(received);
+      }
+      inflated += static_cast<uint64_t>(b.len);
     }
     else if (reader->seek(reader, static_cast<off64_t>(b.len), SEEK_CUR) < 0) {
       return Fail(r, DnaCatalogStatus::InvalidBlock, "Block length beyond local file bounds");

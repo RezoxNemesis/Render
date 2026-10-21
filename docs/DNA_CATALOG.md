@@ -23,7 +23,7 @@ rejects malformed data and leaves the original file untouched.
 block and table entries. They DO NOT reduce engine scene capability; the
 full upstream data loader must handle larger Blender files independently.
 
-**Unimplemented:** Gzip/Zstd FileReader decompression, cross-endian BHead
+**Unimplemented:** Zstd FileReader decompression, cross-endian BHead
 parsing, structural renames/legacy workarounds, nested DNA field offsets,
 pointer remapping, scene graph and asset linking, BKE/depsgraph, all
 modeling/animation/rendering functions. Real Blender-generated .blend file
@@ -32,3 +32,6 @@ acceptance tests and on-device runtime validation are still required.
 The host tests synthesize SDNA payloads and do not demonstrate scene loading.
 The catalog emits \`sceneLoaded:false\` and \`engineIntegrated:false\` even
 after successful schema indexing.
+
+## gzip preflight support
+Gzip input is now passed through Blender's original GPL-licensed `filereader_gzip.cc`, with a narrowly adapted guardedalloc shim and ARM/host libz. The scoped patch uses `delete[]` for the buffer allocated by the shim; this is NOT the full Blender memory allocator. The upstream gzip reader is forward-only, so the diagnostic parser streams over file blocks with a 512-MiB diagnostic decompression-work budget. This is not a feature limitation in the planned Blender engine. Zstd still requires the genuine upstream reader and an Android zstd build.
