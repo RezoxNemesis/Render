@@ -203,6 +203,7 @@ public final class AgentActions {
             .put("is_renderer",false).put("executed_by","android-native");
         if (action.startsWith("blender.")) {
             if (!hasFullBlender(context)) throw new IllegalStateException("BLENDER_ENGINE_NOT_INSTALLED");
+            try (NativeWakeGuard wake=NativeWakeGuard.acquire(context,action)) {
             if (action.equals("blender.project.restore_scene")) {
                 File saved = projects.find(args.getString("project_id"));
                 File owned = new File(context.getFilesDir(),"Projects").getCanonicalFile();
@@ -247,6 +248,7 @@ public final class AgentActions {
                 }
             }
             return result;
+            } // Native CPU wake lock is always released, including timeouts.
         }
         if (action.equals("projects.list")) {
             int offset = args.has("offset") ? strictInt(args,"offset") : 0;
