@@ -52,7 +52,7 @@ public final class RenderHubActivity extends Activity {
         StudioUi.add(page,brand);
         StudioUi.space(page,30);
 
-        StudioUi.add(page,StudioUi.label(this,"CREATION SPACE  /  V 0.15"));
+        StudioUi.add(page,StudioUi.label(this,"CREATION SPACE  /  V 0.19"));
         StudioUi.space(page,10);
         StudioUi.add(page,StudioUi.text(this,"Your 3D studio.\nNow in your pocket.",31,StudioUi.WHITE,true));
         StudioUi.space(page,9);
