@@ -73,6 +73,7 @@ class NativePackagingTests(unittest.TestCase):
         java = self.output / "java/org/blender/blender/BlenderActivity.java"
         self.assertTrue(java.exists())
         self.assertIn("RENDER_AGENT_SPOOL",java.read_text())
+        self.assertIn("render_editor_launch",java.read_text())
         self.assertTrue((self.output / "assets/licenses/Render-Full-Native-Sources.txt").exists())
         root = ET.parse(self.output / "AndroidManifest.xml").getroot()
         self.assertNotIn("package", root.attrib)
@@ -84,6 +85,7 @@ class NativePackagingTests(unittest.TestCase):
         self.assertIn("com.rezox.render.RenderHubActivity", activities)
         self.assertIn("com.rezox.render.agent.AgentActivity", activities)
         self.assertIn("com.rezox.render.MainActivity", activities)
+        self.assertIn("com.rezox.render.EditorLaunchActivity", activities)
         blender = activities["org.blender.blender.BlenderActivity"]
         self.assertEqual(1, len(blender.findall("intent-filter")))
         launch = activities["com.rezox.render.RenderHubActivity"]

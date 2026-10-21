@@ -74,7 +74,8 @@ def merge_manifest(source):
     filter_ = ET.SubElement(hub, "intent-filter")
     ET.SubElement(filter_, "action", {ANDROID + "name": "android.intent.action.MAIN"})
     ET.SubElement(filter_, "category", {ANDROID + "name": "android.intent.category.LAUNCHER"})
-    for klass in ("com.rezox.render.MainActivity", "com.rezox.render.agent.AgentActivity"):
+    for klass in ("com.rezox.render.MainActivity", "com.rezox.render.agent.AgentActivity",
+                  "com.rezox.render.EditorLaunchActivity"):
         ET.SubElement(application, "activity", {
             ANDROID + "name": klass,
             ANDROID + "exported": "false",
@@ -110,6 +111,10 @@ def patch_native_activity(path):
     if java.count(original) != 1:
         raise ValueError("PINNED_BLENDER_ACTIVITY_HOOK_CHANGED")
     patch = original + """
+    /* Startup breadcrumb visible in Render Editor Diagnostics even if the GPU fails. */
+    getSharedPreferences("render_editor_launch", MODE_PRIVATE).edit()
+        .putString("stage", "Blender NativeActivity initialized; preparing native viewport")
+        .putLong("updated", System.currentTimeMillis()).apply();
     /* Render's app-private command spool, read by Blender's bpy startup timer.
        No Android listening port, no remote render process. */
     try {
@@ -123,7 +128,15 @@ def patch_native_activity(path):
       Log.w(TAG, "Render native bpy bridge unavailable", exception);
     }
 """
-    path.write_text(java.replace(original, patch), encoding="utf-8")
+    java = java.replace(original, patch)
+    final_init = "    super.onCreate(state);"
+    if final_init in java:
+        java = java.replace(final_init, final_init + """
+    getSharedPreferences("render_editor_launch", MODE_PRIVATE).edit()
+        .putString("stage", "Blender NativeActivity created; awaiting Vulkan frames")
+        .putLong("updated", System.currentTimeMillis()).apply();
+""",1)
+    path.write_text(java, encoding="utf-8")
 
 def check_source(source, verify):
     path = Path(source)
