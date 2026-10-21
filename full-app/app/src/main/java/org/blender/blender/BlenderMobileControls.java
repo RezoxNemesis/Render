@@ -186,6 +186,8 @@ public final class BlenderMobileControls {
             .setTitle("Return to Render Studio?")
             .setMessage("Blender may have unsaved changes. Save your scene before leaving the native editor.")
             .setNegativeButton("Stay in Blender",null)
+            .setNeutralButton("Save a .blend copy",(dialog,which)->
+                send(a,"blender.project.save_copy",new JSONObject()))
             .setPositiveButton("Return to Studio",(dialog,which)->{
                 Intent home=new Intent().setClassName(a,"com.rezox.render.RenderHubActivity");
                 home.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);
@@ -215,7 +217,8 @@ public final class BlenderMobileControls {
                     throw new java.io.IOException("NATIVE_UI_QUEUE_UNAVAILABLE");
                 JSONObject command=new JSONObject()
                     .put("id",id).put("action",action).put("args",args)
-                    .put("deadline",System.currentTimeMillis()/1000+15);
+                    .put("deadline",System.currentTimeMillis()/1000+
+                        ("blender.project.save_copy".equals(action)?120:15));
                 File temporary=File.createTempFile("render-control-",".part",pending);
                 try(FileOutputStream stream=new FileOutputStream(temporary)){
                     stream.write(command.toString().getBytes(StandardCharsets.UTF_8));
@@ -226,7 +229,8 @@ public final class BlenderMobileControls {
                 catch(java.nio.file.AtomicMoveNotSupportedException e){
                     Files.move(temporary.toPath(),ready.toPath());
                 }
-                long until=System.nanoTime()+ TimeUnit.SECONDS.toNanos(12);
+                long until=System.nanoTime()+ TimeUnit.SECONDS.toNanos(
+                    "blender.project.save_copy".equals(action)?120:12);
                 while(System.nanoTime()<until){
                     if(result.isFile()) {
                         JSONObject response=new JSONObject(
@@ -234,6 +238,9 @@ public final class BlenderMobileControls {
                         result.delete();
                         if(!"succeeded".equals(response.optString("state")))
                             toast(a,"Blender: "+response.optString("error","Control unavailable"));
+                        else if("blender.project.save_copy".equals(action))
+                            toast(a,"Saved local .blend copy: "+
+                                response.optJSONObject("result").optString("filename","Render project"));
                         return;
                     }
                     Thread.sleep(180);
