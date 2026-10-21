@@ -161,7 +161,8 @@ public final class BlenderSpool {
             if(args.length()!=0)throw new IllegalArgumentException("UNEXPECTED_ARGUMENT");
             return;
         }
-        if ("blender.scene.populate_lively".equals(action) ||
+        if ("blender.scene.create_lively_project".equals(action) ||
+            "blender.scene.populate_lively".equals(action) ||
             "blender.scene.render_video".equals(action)) {
             if (args.length()!=0) throw new IllegalArgumentException("UNEXPECTED_ARGUMENT");
             return;
@@ -191,6 +192,7 @@ public final class BlenderSpool {
         File claimed=new File(working,id+".json");
         File resultFile=new File(results,id+".json");
         long timeoutMillis=action.equals("blender.scene.render_video") ? 1800000L :
+            action.equals("blender.scene.create_lively_project") ? 120000L :
             action.equals("blender.scene.populate_lively") ? 120000L :
             action.equals("blender.scene.render_still") ? 480000L :
             action.equals("blender.project.save_copy") ? 120000L : 20000L;
