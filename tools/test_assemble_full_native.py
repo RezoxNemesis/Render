@@ -106,6 +106,8 @@ public class BlenderActivity extends NativeActivity {
                       [p.get(A+"name") for p in root.findall("uses-permission")])
         app = root.find("application")
         self.assertEqual("Render Studio", app.get(A+"label"))
+        self.assertEqual("true", app.get(A+"enableOnBackInvokedCallback"))
+        self.assertEqual("true", app.get(A+"resizeableActivity"))
         activities = {p.get(A+"name"):p for p in app.findall("activity")}
         self.assertIn("com.rezox.render.RenderHubActivity", activities)
         self.assertIn("com.rezox.render.agent.AgentActivity", activities)

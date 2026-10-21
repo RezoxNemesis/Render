@@ -81,6 +81,8 @@ def merge_manifest(source):
     application.set(ANDROID + "label", "Render Studio")
     application.set(ANDROID + "allowBackup", "false")
     application.set(ANDROID + "usesCleartextTraffic", "false")
+    application.set(ANDROID + "enableOnBackInvokedCallback", "true")
+    application.set(ANDROID + "resizeableActivity", "true")
     hub = ET.SubElement(application, "activity", {
         ANDROID + "name": "com.rezox.render.RenderHubActivity",
         ANDROID + "exported": "true",
