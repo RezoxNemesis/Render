@@ -1,13 +1,14 @@
 name: Render Full Native Blender + Agent APK
 on:
   push:
-    branches: ["feature/android-native-foundation-20261021"]
+    branches: ["feature/android-native-foundation-20261021", "feature/lively-building-native-animation-20261022"]
     paths:
       - "full-app/**"
       - "app/src/main/java/**"
       - "app/src/main/cpp/**"
       - "app/build.gradle.kts"
       - "tools/test_blender_bpy_bridge.py"
+      - "tools/test_lively_scene_contract.py"
       - "tools/test_real_blender_bpy.py"
       - "tools/assemble_full_native.py"
       - "tools/test_assemble_full_native.py"
@@ -25,7 +26,7 @@ jobs:
         with:
           python-version: "3.13"
       - name: Verify full-engine staging rejects tampered files
-        run: PYTHONPATH=tools python -m unittest tools/test_assemble_full_native.py tools/test_blender_bpy_bridge.py -v
+        run: PYTHONPATH=tools python -m unittest tools/test_assemble_full_native.py tools/test_blender_bpy_bridge.py tools/test_lively_scene_contract.py -v
 
   blender-bpy-integration:
     runs-on: ubuntu-24.04
