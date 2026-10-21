@@ -281,7 +281,11 @@ def populate_lively(scene, args):
                    for ob in scene.objects)
     if not has_architectural_part("RoofCap") or not has_architectural_part("EntryCanopy"):
         raise ValueError("BUILDING_MODEL_NOT_LOADED")
-    existing = scene.collection.children.get(_PREFIX+"LivelyEnvironment")
+    # Data-block names are unique across the entire .blend, not per scene.
+    # Match this scene's own environment even if Blender adds a .001 suffix.
+    existing = next((c for c in scene.collection.children
+                     if c.name == _PREFIX+"LivelyEnvironment" or
+                     c.name.startswith(_PREFIX+"LivelyEnvironment.")), None)
     if existing is not None:
         if existing.get("render_populate_complete", False):
             raise ValueError("LIVELY_SCENERY_ALREADY_PRESENT")
@@ -297,6 +301,7 @@ def populate_lively(scene, args):
     collection = bpy.data.collections.new(_PREFIX+"LivelyEnvironment")
     scene.collection.children.link(collection)
     collection["render_populate_complete"] = False
+    collection["render_environment_tag"] = "lively-v1"
 
     grass = _mat("GardenGrass",(.22,.43,.16))
     road = _mat("Road",(.22,.23,.26))
@@ -405,7 +410,10 @@ def render_video(scene, args, uid, spool):
     """Render native MP4 in app-owned Renders; no cloud process or upload."""
     if args:
         raise ValueError("UNEXPECTED_ARGUMENT")
-    completed = scene.collection.children.get(_PREFIX+"LivelyEnvironment")
+    completed = next((c for c in scene.collection.children
+                      if (c.name == _PREFIX+"LivelyEnvironment" or
+                          c.name.startswith(_PREFIX+"LivelyEnvironment.")) and
+                         c.get("render_environment_tag") == "lively-v1"), None)
     if completed is None or not completed.get("render_populate_complete", False):
         raise ValueError("SCENERY_NOT_READY")
     if not spool or not re.fullmatch(r"[a-f0-9]{32}",str(uid)):
@@ -447,7 +455,13 @@ def render_video(scene, args, uid, spool):
     old=(render.filepath,render.image_settings.file_format,
          render.resolution_percentage,render.engine)
     try:
-        render.engine="BLENDER_EEVEE"
+        engines = {item.identifier for item in
+                   bpy.types.RenderSettings.bl_rna.properties["engine"].enum_items}
+        engine = next((key for key in ("BLENDER_EEVEE_NEXT", "BLENDER_EEVEE")
+                       if key in engines), None)
+        if engine is None:
+            raise RuntimeError("NATIVE_EEVEE_ENGINE_UNAVAILABLE")
+        render.engine = engine
         render.filepath=str(prefix)
         render.resolution_percentage=100
         render.image_settings.file_format="FFMPEG"
