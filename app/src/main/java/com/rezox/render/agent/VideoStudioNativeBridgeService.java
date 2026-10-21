@@ -119,7 +119,9 @@ public final class VideoStudioNativeBridgeService extends Service {
             if(!journal.begin(id,digest,command)) {
                 JSONObject prior=journal.snapshot(id,digest);
                 if(prior!=null && !"running_on_device".equals(prior.optString("state"))) {
-                    send(caller,id,prior.getJSONObject("result"));
+                    // The finally block will send exactly one native receipt.
+                    // No Blender operation or journal replay occurs.
+                    outcome=prior.getJSONObject("result");
                     return;
                 }
                 throw new IllegalStateException("NATIVE_RESULT_RECOVERY_REQUIRED");
