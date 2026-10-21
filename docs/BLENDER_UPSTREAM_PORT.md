@@ -43,3 +43,6 @@ legacy 32-bit, legacy 64-bit and modern 64-bit synthetic files.
 **Not implemented:** full blenlib, GZip/Zstd streaming through Blender's
 FileReader, DNA/BKE scene reconstruction, versioning, depsgraph, viewport,
 EEVEE, Cycles, or any Blender animation or editing operation.
+
+## SDNA catalog preflight (diagnostic layer)
+The Android JNI shell now calls a bounded read-only parser for the genuine SDNA NAME/TYPE/TLEN/STRC table from a DNA1 block. It uses upstream Blender's BLO BHead reader and does not decode original scene data or replace DNA_sdna_from_data. This is not a scene loader or depsgraph. Details: docs/DNA_CATALOG.md.

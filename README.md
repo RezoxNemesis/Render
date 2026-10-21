@@ -11,13 +11,14 @@
 - Downloadable Google Drive asset libraries and backup are optional; active resources must be local when offline.
 - Do not advertise feature parity until real Android device tests against upstream Blender show it.
 
-**Current status: Android application/NDK foundation with native .blend framing preflight, Vulkan capability probing, and real upstream Blender BLI FP16 and BLO header/BHead decoding modules cross-compiled for Android. The full Blender scene engine is not integrated: only a genuine upstream math module is compiled. This is not a full Blender port or a render-capable APK. No BKE/Main scene reconstruction.**
+**Current status: Android application/NDK foundation with native .blend framing preflight, Vulkan capability probing, and real upstream Blender BLI FP16 and BLO header/BHead decoding modules cross-compiled for Android. The full Blender scene engine is not integrated: only a genuine upstream math module is compiled. This is not a full Blender port or a render-capable APK. No BKE/Main scene reconstruction or dependency-graph evaluation.**
 
 ## Repository layout
 
 - `app/` — native Android shell, Storage Access Framework `.blend` import, JNI bridge, native file-format preflight, Vulkan hardware probe (not a renderer).
 - `docs/ENGINE_PORT_CONTRACT.md` — technical port plan and release gates.
 - `docs/BLEND_FILE_PREFLIGHT.md` — detailed v0/v1 binary format coverage and strict limitations.
+- `docs/DNA_CATALOG.md` — diagnostic SDNA schema indexing, limits, and remaining full engine blockers.
 - `native-tests/` — host C++ tests for structural file preflight and Blender FP16 math.
 - `third_party/blender_half/` — actual version-pinned upstream Blender math code (GPL) plus narrow Android guard patch.
 - `docs/BLENDER_UPSTREAM_PORT.md` — upstream source provenance and next core engine integration.

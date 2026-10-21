@@ -5,6 +5,7 @@
 #include "blender_reader_adapter.hh"
 
 #include "blend_probe.h"
+#include "dna_catalog.h"
 #include "vulkan_capability.h"
 
 extern "C" JNIEXPORT jstring JNICALL
@@ -58,4 +59,17 @@ Java_com_rezox_render_MainActivity_nativeRealBlenderHeader(
   env->ReleaseStringUTFChars(java_path,raw);
   const std::string status=render::ProbeRealBlenderCoreHeader(path);
   return env->NewStringUTF(status.c_str());
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_rezox_render_MainActivity_nativeDnaCatalog(
+    JNIEnv *env, jobject /*self*/, jstring java_path)
+{
+  if (!java_path) return env->NewStringUTF("{\"status\":\"IO_ERROR\",\"sceneLoaded\":false}");
+  const char *raw = env->GetStringUTFChars(java_path, nullptr);
+  if (!raw) return env->NewStringUTF("{\"status\":\"IO_ERROR\",\"sceneLoaded\":false}");
+  const std::string path(raw);
+  env->ReleaseStringUTFChars(java_path, raw);
+  const std::string report=render::DnaCatalogJson(render::InspectDnaCatalog(path));
+  return env->NewStringUTF(report.c_str());
 }

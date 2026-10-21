@@ -37,6 +37,7 @@ public final class MainActivity extends Activity {
     private native boolean nativeBlenderCoreReady();
     private native String nativeInspectBlend(String absolutePath);
     private native String nativeRealBlenderHeader(String absolutePath);
+    private native String nativeDnaCatalog(String absolutePath);
     private native String nativeGpuReport();
 
     private TextView status;
@@ -180,7 +181,8 @@ public final class MainActivity extends Activity {
             return String.format(Locale.ROOT,
                 "Imported %s (%d bytes) locally. SHA-256: %s.\nLow-level format preflight: %s\nBlender scene editing and rendering remain unavailable.",
                 name, total, hex, nativeInspectBlend(destination.getAbsolutePath())
-                    + "\n" + nativeRealBlenderHeader(destination.getAbsolutePath()));
+                    + "\n" + nativeRealBlenderHeader(destination.getAbsolutePath())
+                    + "\n" + nativeDnaCatalog(destination.getAbsolutePath()));
         } finally {
             if (!completed) pending.delete();
         }
