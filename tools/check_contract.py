@@ -12,7 +12,7 @@ store = (root / "docs/ASSETS_AND_STORAGE.md").read_text()
 
 required = {
     "no network permission required": "android.permission.INTERNET" not in manifest,
-    "engine must not pretend ready": "JNI_FALSE" in jni and "NOT integrated" not in jni.replace("NOT integrated", ""),
+    "engine must not pretend ready": "JNI_FALSE" in jni and "NOT integrated" in jni,
     "SAF import": "ACTION_OPEN_DOCUMENT" in activity,
     "local streaming": "InputStream" in activity and "OutputStream" in activity,
     "honest scaffold status": "does not yet contain or execute Blender itself" in readme,
