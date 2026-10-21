@@ -177,8 +177,13 @@ bool DecodeSchema(const std::vector<uint8_t> &dna, DnaCatalogResult &result,
     uint16_t type_index = 0;
     uint16_t member_count = 0;
     if (!in.U16(type_index) || !in.U16(member_count)) return false;
-    if (type_index >= types.size() || member_count == 0 || member_count > 32767 ||
+    if (type_index >= types.size() || member_count > 32767 ||
         seen_struct_type[type_index]) return false;
+    // Blender 5.x puts an intentional synthetic raw_data struct FIRST,
+    // with zero fields. Genuine upstream makesdna.cc writes exactly this.
+    // Other zero-member structs are not expected in supported SDNA.
+    if (member_count == 0 && !(i == 0 && types[type_index] == "raw_data"))
+      return false;
     seen_struct_type[type_index] = true;
     if (!in.Fits(static_cast<size_t>(member_count) * 4)) return false;
     if (preview.size() < kMaxPreviewTypes) preview.push_back(types[type_index]);

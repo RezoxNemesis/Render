@@ -102,9 +102,20 @@ public final class AgentActions {
         String action = command.getString("action");
         AgentPolicy.validate(command.getString("request_id"),command.getInt("api_version"),action,fields);
         checkCancelled(cancelled);
-        if (action.equals("engine.status")) return new JSONObject().put("native_status",RenderNative.engineStatus())
-            .put("engineIntegrated",false).put("fullBlenderEditorBundled",hasFullBlender(context))
-            .put("executed_by","android-native");
+        if (action.equals("engine.status")) {
+            JSONObject result=new JSONObject().put("native_status",RenderNative.engineStatus())
+                .put("engineIntegrated",false).put("fullBlenderEditorBundled",hasFullBlender(context))
+                .put("executed_by","android-native");
+            try {
+                android.content.pm.PackageInfo installed=context.getPackageManager()
+                    .getPackageInfo(context.getPackageName(),0);
+                result.put("installedVersionName",installed.versionName);
+                result.put("installedVersionCode",installed.getLongVersionCode());
+            } catch(PackageManager.NameNotFoundException missing) {
+                result.put("installedVersionName","unavailable");
+            }
+            return result;
+        }
         if (action.equals("gpu.info")) return new JSONObject().put("native_status",RenderNative.gpuInfo())
             .put("is_renderer",false).put("executed_by","android-native");
         if (action.startsWith("blender.")) {
