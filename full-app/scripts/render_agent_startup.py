@@ -21,7 +21,7 @@ _UI_FOCUSED = False
 _LAST_HEARTBEAT = 0.0
 _ID_PATTERN = re.compile(r"^[a-f0-9]{32}$")
 _OBJECT_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,63}$")
-_MAX_BYTES = 16384
+_MAX_BYTES = 65536
 
 def _number(value, lower, upper):
     return type(value) in (int, float) and math.isfinite(value) and lower <= value <= upper
