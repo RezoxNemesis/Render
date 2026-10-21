@@ -168,7 +168,7 @@ public final class BlenderSpool {
         }
         if ("blender.project.restore_scene".equals(action)) {
             if (args.length()!=1 || !args.has("filename") ||
-                    !args.getString("filename").matches("Render_[a-f0-9]{32}\\\\.blend"))
+                    !args.getString("filename").matches("Render_[a-f0-9]{32}\\.blend"))
                 throw new IllegalArgumentException("INVALID_SAVED_PROJECT_FILENAME");
             return;
         }
