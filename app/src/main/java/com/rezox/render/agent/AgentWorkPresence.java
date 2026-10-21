@@ -56,7 +56,8 @@ public final class AgentWorkPresence {
             SharedPreferences p=prefs(ctx);
             String state=p.getString("state","idle");
             long last=p.getLong("updated",0L);
-            if("running".equals(state) && System.currentTimeMillis()-last>MAX_STALE_MS){
+            if("running".equals(state) && System.currentTimeMillis()-last>MAX_STALE_MS &&
+                    !AgentExecutionLock.BUSY.get()){
                 state="recovery_required";
             }
             return new Snapshot(state,p.getString("action",""),p.getString("stage",""),
