@@ -101,11 +101,17 @@ class BlenderBridgeTests(unittest.TestCase):
                                          "args":{"mode":"landscape"}})
         self.assertEqual("landscape",landscape["orientation"])
         self.assertEqual(1.18,landscape["ui_scale"])
+        self.assertFalse(landscape["focused"])
         portrait=self.module._dispatch({"action":"blender.ui.set_mode",
                                         "args":{"mode":"portrait"}})
         self.assertEqual(1.34,portrait["ui_scale"])
+        self.assertTrue(portrait["focused"])
+        restored=self.module._dispatch({"action":"blender.ui.set_mode",
+                                        "args":{"mode":"landscape"}})
+        self.assertFalse(restored["focused"])
         focused=self.module._dispatch({"action":"blender.ui.focus_viewport","args":{}})
         self.assertTrue(focused["preserves_other_editors"])
+        self.assertTrue(focused["focused"])
         self.assertEqual("CYCLES",self.scene.render.engine)
         self.assertEqual(1,len(self.objects))
 

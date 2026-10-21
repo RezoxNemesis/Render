@@ -94,6 +94,7 @@ public class BlenderActivity extends NativeActivity {
         self.assertIn("RENDER_AGENT_SPOOL",java.read_text())
         self.assertIn("render_editor_launch",java.read_text())
         self.assertIn("BlenderMobileControls.attach(this)",java.read_text())
+        self.assertIn("RENDER_MOBILE_UI_MODE",java.read_text())
         self.assertIn("BlenderMobileControls.confirmHome(this)",java.read_text())
         self.assertIn("BlenderMobileControls.applySafeInsets(this)",java.read_text())
         self.assertTrue((self.output / "assets/licenses/Render-Full-Native-Sources.txt").exists())

@@ -133,6 +133,14 @@ def patch_native_activity(path):
         raise ValueError("PINNED_BLENDER_ACTIVITY_HOOK_CHANGED")
     patch = original + """
     setRequestedOrientation(BlenderMobileControls.preferredOrientation(this));
+    /* Native GHOST starts during super.onCreate. Publish the exact
+       Android owner-selected mobile mode BEFORE libblender reads argv. */
+    try {
+      String mobileMode=getSharedPreferences("render_mobile_ui", MODE_PRIVATE)
+          .getString("mode","portrait");
+      Os.setenv("RENDER_MOBILE_UI_MODE", mobileMode, true);
+    }
+    catch (Exception ex) { Log.w(TAG,"mobile screen mode unavailable",ex); }
     /* Startup breadcrumb visible in Render Editor Diagnostics even if the GPU fails. */
     getSharedPreferences("render_editor_launch", MODE_PRIVATE).edit()
         .putString("stage", "Blender NativeActivity initialized; preparing native viewport")

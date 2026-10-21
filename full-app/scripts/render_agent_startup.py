@@ -17,6 +17,7 @@ import bpy
 
 ROOT = os.environ.get("RENDER_AGENT_SPOOL", "")
 MOBILE_MODE = os.environ.get("RENDER_MOBILE_UI_MODE", "")
+_UI_FOCUSED = False
 _LAST_HEARTBEAT = 0.0
 _ID_PATTERN = re.compile(r"^[a-f0-9]{32}$")
 _OBJECT_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,63}$")
@@ -40,6 +41,7 @@ def _ui_scale(value=None, delta=None):
 
 
 def _focus_viewport():
+    global _UI_FOCUSED
     window = bpy.context.window
     screen = window.screen if window else None
     if not window or not screen:
@@ -51,14 +53,23 @@ def _focus_viewport():
         outcome = bpy.ops.screen.screen_full_area(use_hide_panels=False)
     if "FINISHED" not in outcome:
         raise RuntimeError("FOCUS_VIEWPORT_NOT_READY")
-    return {"action": "toggle_fullscreen_area", "preserves_other_editors": True}
+    _UI_FOCUSED = not _UI_FOCUSED
+    return {"action": "toggle_fullscreen_area", "focused": _UI_FOCUSED,
+            "preserves_other_editors": True}
 
 
 def _mobile_mode(mode):
     if mode not in ("portrait", "landscape"):
         raise ValueError("INVALID_MOBILE_MODE")
     size = _ui_scale(value=1.34 if mode == "portrait" else 1.18)
+    if mode == "landscape" and _UI_FOCUSED:
+        # Restore Blender's original complete multi-editor workspace.
+        _focus_viewport()
+    elif mode == "portrait" and not _UI_FOCUSED:
+        # Prefer the existing VIEW_3D; don't invent a reduced editor.
+        _focus_viewport()
     return {"orientation": mode, "ui_scale": size,
+            "focused": _UI_FOCUSED,
             "render_quality_unchanged": True, "engine": "native-blender"}
 
 
@@ -67,8 +78,6 @@ def _initial_mobile_setup():
         return None
     try:
         _mobile_mode(MOBILE_MODE)
-        if MOBILE_MODE == "portrait":
-            _focus_viewport()
         return None
     except Exception as error:
         retries = getattr(_initial_mobile_setup, "attempts", 0) + 1
