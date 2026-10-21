@@ -53,7 +53,7 @@ jobs:
           LIBGL_ALWAYS_SOFTWARE: "1"
         run: |
           mkdir -p "$RUNNER_TEMP/real-blender"
-          blender -b -noaudio --python native-tests/create_real_blend_fixtures.py -- --output "$RUNNER_TEMP/real-blender"
+          blender -b -noaudio --python-exit-code 1 --python native-tests/create_real_blend_fixtures.py -- --output "$RUNNER_TEMP/real-blender"
       - name: Produce standard Zstd envelope around genuine Blender scene
         run: |
           zstd --quiet --force -o "$RUNNER_TEMP/real-blender/render_real_scene.blend.zst" \

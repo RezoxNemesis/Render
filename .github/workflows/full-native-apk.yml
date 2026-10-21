@@ -36,7 +36,7 @@ jobs:
       - name: Verify typed native bpy commands with real Blender context
         env:
           LIBGL_ALWAYS_SOFTWARE: "1"
-        run: blender -b -noaudio --python tools/test_real_blender_bpy.py
+        run: blender -b -noaudio --python-exit-code 1 --python tools/test_real_blender_bpy.py
 
   build-native-full:
     needs: stage-tests
