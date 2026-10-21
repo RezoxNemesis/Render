@@ -66,6 +66,7 @@ public final class AgentActivity extends Activity {
         // Enrollment remains masked; credentials are in Android Keystore.
         getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
         secrets=new AgentSecrets(this);journal=new AgentJournal(this);
+        if(!AgentExecutionLock.BUSY.get())AgentWorkPresence.recoverIfInterrupted(this);
         LinearLayout page=StudioUi.page(this);
 
         LinearLayout header=StudioUi.row(this);
