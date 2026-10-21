@@ -9,6 +9,8 @@ on:
       - "app/build.gradle.kts"
       - "tools/test_blender_bpy_bridge.py"
       - "tools/test_lively_scene_contract.py"
+      - "tools/test_lively_scene_mock.py"
+      - "app/src/test/java/**"
       - "tools/test_real_blender_bpy.py"
       - "tools/assemble_full_native.py"
       - "tools/test_assemble_full_native.py"
@@ -26,7 +28,7 @@ jobs:
         with:
           python-version: "3.13"
       - name: Verify full-engine staging rejects tampered files
-        run: PYTHONPATH=tools python -m unittest tools/test_assemble_full_native.py tools/test_blender_bpy_bridge.py tools/test_lively_scene_contract.py -v
+        run: PYTHONPATH=tools python -m unittest tools/test_assemble_full_native.py tools/test_blender_bpy_bridge.py tools/test_lively_scene_contract.py tools/test_lively_scene_mock.py -v
 
   blender-bpy-integration:
     runs-on: ubuntu-24.04
