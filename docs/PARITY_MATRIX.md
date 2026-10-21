@@ -4,6 +4,7 @@ Status vocabulary: NOT_STARTED, IN_PROGRESS, VERIFIED, BLOCKED. Every row must b
 
 | Feature | Status | Evidence needed |
 | --- | --- | --- |
+| Upstream Blender BLO header and BHead decoder | IN_PROGRESS | host tests and Android crosscompile; full scene decoder not integrated |
 | Genuine upstream Blender FP16 math module | IN_PROGRESS | host tests and Android cross-compile; no real-device run yet |
 | Native binary .blend structure preflight | IN_PROGRESS | real Blender-created files, device execution, malformed-file tests |
 | Android Vulkan GPU capability detection | IN_PROGRESS | on-device API/driver data and graceful no-Vulkan fallback |

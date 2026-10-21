@@ -11,3 +11,8 @@ add_subdirectory(../third_party/blender_half blender_half)
 add_executable(blender_math_half_tests blender_math_half_tests.cpp)
 target_link_libraries(blender_math_half_tests PRIVATE blender_upstream_half)
 add_test(NAME blender_math_half_tests COMMAND blender_math_half_tests)
+
+add_subdirectory(../third_party/blender_blo_core blender_blo_core)
+add_executable(blender_upstream_blo_tests blender_upstream_blo_tests.cpp)
+target_link_libraries(blender_upstream_blo_tests PRIVATE blender_upstream_blo_core)
+add_test(NAME blender_upstream_blo_tests COMMAND blender_upstream_blo_tests)

@@ -2,6 +2,7 @@
 #include <jni.h>
 #include <string>
 #include "BLI_math_half.hh"
+#include "blender_reader_adapter.hh"
 
 #include "blend_probe.h"
 #include "vulkan_capability.h"
@@ -44,4 +45,17 @@ Java_com_rezox_render_MainActivity_nativeGpuReport(JNIEnv *env, jobject /*self*/
 {
   const std::string report = render::QueryVulkanCapabilities();
   return env->NewStringUTF(report.c_str());
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_rezox_render_MainActivity_nativeRealBlenderHeader(
+    JNIEnv *env, jobject /*self*/, jstring java_path)
+{
+  if (!java_path) return env->NewStringUTF("UPSTREAM_BLO_INVALID_PATH");
+  const char *raw = env->GetStringUTFChars(java_path,nullptr);
+  if (!raw) return env->NewStringUTF("UPSTREAM_BLO_INVALID_PATH");
+  std::string path(raw);
+  env->ReleaseStringUTFChars(java_path,raw);
+  const std::string status=render::ProbeRealBlenderCoreHeader(path);
+  return env->NewStringUTF(status.c_str());
 }

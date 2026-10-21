@@ -23,3 +23,23 @@ Next engine targets: complete blenlib/guardedalloc, DNA and blenloader_core,
 Main/BKE and depsgraph, Android Vulkan/GPU backend, EEVEE/Cycles,
 Python and all other Blender functionality. No remote workstation requirement.
 Factory assets are not bundled; some upstream binaries are stored in Git LFS.
+
+## Genuine upstream Blender low-level .blend decoder
+
+Vendored unchanged from the same pinned upstream commit:
+`BLO_core_blend_header.hh`, `BLO_core_bhead.hh`,
+`intern/blo_core_blend_header.cc`, `intern/blo_core_bhead.cc`,
+and the real upstream BLI FileReader/endian/compiler/utility header dependencies.
+
+Android/host adapter `third_party/blender_blo_core/native/blender_reader_adapter.cc`
+implements Blender's FileReader callback ABI using bounded local file streams.
+The BLI assertion callbacks are implemented in a small platform port; assertions
+are enabled, but native backtraces are not yet available. The JNI import
+diagnostics call the real Blender header parser and first-block reader.
+
+Host native C++ tests exercise actual upstream header/BHead decoders on
+legacy 32-bit, legacy 64-bit and modern 64-bit synthetic files.
+
+**Not implemented:** full blenlib, GZip/Zstd streaming through Blender's
+FileReader, DNA/BKE scene reconstruction, versioning, depsgraph, viewport,
+EEVEE, Cycles, or any Blender animation or editing operation.
