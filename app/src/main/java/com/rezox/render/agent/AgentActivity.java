@@ -5,6 +5,10 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.NotificationManager;
 import android.content.Intent;
+import android.content.ClipboardManager;
+import android.content.ClipData;
+import android.content.pm.PackageInfo;
+import android.widget.Toast;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
@@ -31,13 +35,15 @@ public final class AgentActivity extends Activity {
     private AgentSecrets secrets;
     private AgentJournal journal;
     private EditText relay,enrollment,videoStudioPairCode;
-    private TextView status,history;
+    private TextView status,history,bridgeState;
     private final ExecutorService background=Executors.newSingleThreadExecutor();
     private final Handler ui=new Handler(Looper.getMainLooper());
     private boolean busy;
     private final Runnable refresh=new Runnable(){public void run(){
         if(isFinishing()||isDestroyed())return;
-        status.setText(secrets.status());history.setText(journal.history());ui.postDelayed(this,2000);
+        status.setText(secrets.videoStudioBridgeEnabled()?localBridgeStatus():secrets.status());
+        if(bridgeState!=null)bridgeState.setText(localBridgeStatus());
+        history.setText(journal.history());ui.postDelayed(this,2000);
     }};
     @Override public void onCreate(Bundle state){
         super.onCreate(state);
@@ -71,27 +77,44 @@ public final class AgentActivity extends Activity {
         LinearLayout statusPanel=StudioUi.violetCard(this);
         StudioUi.add(statusPanel,StudioUi.label(this,"CONNECTION STATUS"));
         StudioUi.space(statusPanel,9);
-        status=StudioUi.text(this,secrets.status(),15,StudioUi.WHITE,true);
+        status=StudioUi.text(this,secrets.videoStudioBridgeEnabled()?localBridgeStatus():secrets.status(),15,StudioUi.WHITE,true);
         StudioUi.add(statusPanel,status);
         StudioUi.space(statusPanel,7);
         StudioUi.add(statusPanel,StudioUi.text(this,
-            "Pairing and HTTPS relay authentication are required before remote commands can arrive.",
+            "Direct Render commands use the existing VideoStudio MCP. Pairing to a separate hosted relay is optional.",
             12,0xFFBBAFD4,false));
         StudioUi.add(page,statusPanel);
         StudioUi.space(page,17);
 
-        LinearLayout localBridge=StudioUi.card(this);
-        StudioUi.add(localBridge,StudioUi.label(this,"DIRECT  /  VIDEOSTUDIO APP-TO-APP MCP"));
+        LinearLayout localBridge=StudioUi.violetCard(this);
+        StudioUi.add(localBridge,StudioUi.label(this,"PRIMARY / VIDEOSTUDIO MCP → RENDER"));
         StudioUi.space(localBridge,9);
-        StudioUi.add(localBridge,StudioUi.text(this,"No new relay.\nNo new pairing code.",20,StudioUi.WHITE,true));
-        StudioUi.space(localBridge,7);
+        StudioUi.add(localBridge,StudioUi.text(this,"Connect & share\nwith ChatGPT.",22,StudioUi.WHITE,true));
+        StudioUi.space(localBridge,8);
         StudioUi.add(localBridge,StudioUi.text(this,
-            "Use your existing VideoStudio Native Agent as a trusted on-phone bridge. Only the installed VideoStudio app can deliver typed commands to Render, and Blender still runs here. Both apps need the updated APKs.",
-            13,StudioUi.MUTED,false));
-        StudioUi.space(localBridge,13);
-        addAction(localBridge,"ENABLE DIRECT VIDEOSTUDIO BRIDGE",StudioUi.PRIMARY,()->enableDirectBridge());
+            "Connect Render as a separate Android Blender executor through the SAME VideoStudio MCP. No new key, cloud server or ChatGPT connector. Native Blender work stays on this phone.",
+            13,0xFFE2D5FF,false));
+        StudioUi.space(localBridge,12);
+        bridgeState=StudioUi.text(this,localBridgeStatus(),13,StudioUi.GREEN,true);
+        StudioUi.add(localBridge,bridgeState);
         StudioUi.space(localBridge,10);
-        addAction(localBridge,"STOP DIRECT BRIDGE",StudioUi.SECONDARY,()->disableDirectBridge());
+        StudioUi.add(localBridge,StudioUi.text(this,
+            "RENDER APP ID  •  "+secrets.renderPublicId(),11,0xFFB9B0D6,false));
+        StudioUi.space(localBridge,16);
+        addAction(localBridge,"CONNECT / SHARE WITH CHATGPT    ↗",StudioUi.PRIMARY,
+            ()->connectShare());
+        StudioUi.space(localBridge,10);
+        addAction(localBridge,"SHARE RENDER CONNECTION",StudioUi.PURPLE,
+            ()->shareRenderConnection());
+        StudioUi.space(localBridge,10);
+        addAction(localBridge,"COPY RENDER APP ID",StudioUi.SECONDARY,
+            ()->copyRenderAppId());
+        StudioUi.space(localBridge,10);
+        addAction(localBridge,"CHECK VIDEOSTUDIO APP",StudioUi.SECONDARY,
+            ()->checkVideoStudioApp());
+        StudioUi.space(localBridge,10);
+        addAction(localBridge,"STOP VIDEOSTUDIO BRIDGE",StudioUi.DANGER,
+            ()->disableDirectBridge());
         StudioUi.add(page,localBridge);
         StudioUi.space(page,17);
 
@@ -186,20 +209,89 @@ public final class AgentActivity extends Activity {
         StudioUi.add(parent,view);
         view.setOnClickListener(v->action.run());
     }
-    private void enableDirectBridge(){
+    private long installedVideoStudioBuild(){
+        try {
+            PackageInfo info;
+            if(Build.VERSION.SDK_INT>=33)
+                info=getPackageManager().getPackageInfo(
+                    RenderConnectionCard.VIDEOSTUDIO_PACKAGE,
+                    PackageManager.PackageInfoFlags.of(0));
+            else
+                info=getPackageManager().getPackageInfo(
+                    RenderConnectionCard.VIDEOSTUDIO_PACKAGE,0);
+            return info.getLongVersionCode();
+        }catch(PackageManager.NameNotFoundException ignored){return -1;}
+        catch(RuntimeException ignored){return -1;}
+    }
+    private String localBridgeStatus(){
+        return RenderConnectionCard.localStatus(
+            secrets.renderPublicId(),secrets.videoStudioBridgeEnabled(),
+            installedVideoStudioBuild(),secrets.lastVideoStudioNativeResult());
+    }
+    private void connectShare(){
+        long installed=installedVideoStudioBuild();
+        if(installed<RenderConnectionCard.MIN_VIDEOSTUDIO_BUILD){
+            new AlertDialog.Builder(this)
+                .setTitle("Updated VideoStudio required")
+                .setMessage("The compatible VideoStudio v3.5.0+ Android app is not visible on this phone. Install the updated VideoStudio APK without deleting its app data. Then return here. You can share the Render setup card meanwhile.")
+                .setNegativeButton("Close",null)
+                .setPositiveButton("Share setup",(d,w)->shareRenderConnection()).show();
+            return;
+        }
         new AlertDialog.Builder(this)
-            .setTitle("Enable VideoStudio native access?")
-            .setMessage("Only the installed VideoStudio Android application can send typed Render commands using Android Binder caller verification. VideoStudio keeps its original MCP connection and projects. Render performs all Blender work locally. You can stop this link any time.")
+            .setTitle("Connect Render through VideoStudio MCP?")
+            .setMessage("Use the existing ChatGPT↔VideoStudio MCP connection to forward only registered Render Blender commands. VideoStudio keeps its own projects, Render performs 3D work locally, and you can stop this bridge at any time. The shared card contains a NON-SECRET Render ID.")
             .setNegativeButton("Cancel",null)
-            .setPositiveButton("Enable",(dialog,which)->{
-                secrets.videoStudioBridgeEnabled(true);
-                secrets.status("Direct VideoStudio MCP bridge enabled. Awaiting commands from the installed VideoStudio Native Agent.");
+            .setNeutralButton("Enable only",(d,w)->activateDirectBridge())
+            .setPositiveButton("Enable & Share",(d,w)->{
+                activateDirectBridge();
+                shareRenderConnection();
             }).show();
+    }
+    private void activateDirectBridge(){
+        secrets.videoStudioBridgeEnabled(true);
+        secrets.status("Local Render bridge enabled. Awaiting a confirmed native command via existing VideoStudio MCP.");
+        if(bridgeState!=null)bridgeState.setText(localBridgeStatus());
+    }
+    private void shareRenderConnection(){
+        String card=RenderConnectionCard.shareText(secrets.renderPublicId(),
+            secrets.videoStudioBridgeEnabled(),
+            installedVideoStudioBuild()>=RenderConnectionCard.MIN_VIDEOSTUDIO_BUILD);
+        Intent send=new Intent(Intent.ACTION_SEND);
+        send.setType("text/plain");
+        send.putExtra(Intent.EXTRA_TEXT,card);
+        try{
+            startActivity(Intent.createChooser(send,"Share Render connection with ChatGPT"));
+        }catch(android.content.ActivityNotFoundException ignored){
+            ClipboardManager clipboard=getSystemService(ClipboardManager.class);
+            clipboard.setPrimaryClip(ClipData.newPlainText("Render Studio connection",card));
+            Toast.makeText(this,"Render connection card copied",Toast.LENGTH_LONG).show();
+        }
+    }
+    private void copyRenderAppId(){
+        ClipboardManager clipboard=getSystemService(ClipboardManager.class);
+        clipboard.setPrimaryClip(ClipData.newPlainText(
+            "Render Studio public app ID",secrets.renderPublicId()));
+        Toast.makeText(this,"Public Render app ID copied",Toast.LENGTH_SHORT).show();
+    }
+    private void checkVideoStudioApp(){
+        long version=installedVideoStudioBuild();
+        String result=version<0 ? "VideoStudio is not installed or is hidden by Android package visibility." :
+            "VideoStudio installed (build "+version+").\n"+
+            (version>=RenderConnectionCard.MIN_VIDEOSTUDIO_BUILD
+            ?"Compatible with the current native Binder bridge."
+            :"Update VideoStudio to build 350 or newer.");
+        new AlertDialog.Builder(this)
+            .setTitle("Render ↔ VideoStudio")
+            .setMessage(result+"\n\n"+localBridgeStatus()
+                +"\n\nA compatible installation and enabled bridge are not proof of a real ChatGPT command. Verify through the existing VideoStudio MCP using render.engine.status.")
+            .setPositiveButton("OK",null).show();
     }
     private void disableDirectBridge(){
         secrets.videoStudioBridgeEnabled(false);
         VideoStudioNativeBridgeService.requestCancel();
-        secrets.status("Direct VideoStudio native command access stopped. VideoStudio's own projects and MCP remain untouched.");
+        secrets.status("Render's local bridge stopped. The original VideoStudio MCP and projects remain unchanged.");
+        if(bridgeState!=null)bridgeState.setText(localBridgeStatus());
     }
     private void pairWithVideoStudio(){
         final String oneTimeCode=videoStudioPairCode.getText().toString().trim();
