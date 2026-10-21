@@ -1,0 +1,248 @@
+package org.blender.blender;
+
+import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.Intent;
+import android.content.pm.ActivityInfo;
+import android.content.res.Configuration;
+import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
+import android.os.Build;
+import android.view.Gravity;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.WindowManager;
+import android.window.OnBackInvokedCallback;
+import android.window.OnBackInvokedDispatcher;
+import android.widget.FrameLayout;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
+import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+
+import org.json.JSONObject;
+
+/**
+ * Android touch-side controls drawn OVER real Blender's native Vulkan Surface.
+ *
+ * This never substitutes a reduced Blender engine or shrinks native mesh,
+ * shaders, image textures, or final render resolution. Only orientation,
+ * temporary workspace layout, and human-visible widget size are changed.
+ *
+ * No account, server, private token, or arbitrary script runner is used.
+ */
+public final class BlenderMobileControls {
+    public static final String SETTINGS = "render_mobile_ui";
+    public static final String MODE = "mode";
+    public static final String PORTRAIT = "portrait";
+    public static final String LANDSCAPE = "landscape";
+    private static final int PANEL = Color.rgb(23,27,37);
+    private static final int ORANGE = Color.rgb(255,151,77);
+    private static final int WHITE = Color.rgb(248,248,250);
+    private static final ExecutorService WORK = Executors.newSingleThreadExecutor();
+    private static final String SPOOL = "render_bpy_jobs";
+
+    private BlenderMobileControls(){}
+
+    public static int preferredOrientation(Activity owner) {
+        String mode = owner.getSharedPreferences(SETTINGS, Activity.MODE_PRIVATE)
+                .getString(MODE, PORTRAIT);
+        return LANDSCAPE.equals(mode) ?
+                ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE :
+                ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
+    }
+
+    public static void setMode(Activity owner,String mode) {
+        if(!PORTRAIT.equals(mode) && !LANDSCAPE.equals(mode))
+            throw new IllegalArgumentException("UNSUPPORTED_RENDER_ORIENTATION");
+        owner.getSharedPreferences(SETTINGS,Activity.MODE_PRIVATE).edit()
+             .putString(MODE,mode).apply();
+    }
+
+    public static void applySafeInsets(Activity owner) {
+        // NativeActivity's original LAYOUT_FULLSCREEN flags place the first
+        // row of tiny Blender icons under display notches and status cutouts.
+        // Give Blender its ACTUAL drawable content rectangle instead.
+        owner.getWindow().getDecorView().setSystemUiVisibility(0);
+        owner.getWindow().setDecorFitsSystemWindows(true);
+        WindowManager.LayoutParams attributes=owner.getWindow().getAttributes();
+        attributes.layoutInDisplayCutoutMode=
+                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_NEVER;
+        owner.getWindow().setAttributes(attributes);
+    }
+
+    private static int px(Activity a,int dp) {
+        return (int)(dp*a.getResources().getDisplayMetrics().density+.5f);
+    }
+    private static GradientDrawable shape(int color,int radius,Activity a) {
+        GradientDrawable d=new GradientDrawable();
+        d.setColor(color);
+        d.setCornerRadius(px(a,radius));
+        d.setStroke(px(a,1),0xFF424754);
+        return d;
+    }
+    private static TextView button(Activity a,String text) {
+        TextView b=new TextView(a);
+        b.setText(text);
+        b.setTextColor(WHITE);
+        b.setGravity(Gravity.CENTER);
+        b.setTextSize(14);
+        b.setMinHeight(px(a,45));
+        b.setPadding(px(a,12),px(a,10),px(a,12),px(a,10));
+        b.setBackground(shape(PANEL,12,a));
+        b.setClickable(true);
+        b.setFocusable(true);
+        return b;
+    }
+    private static void toast(Activity a,String value){
+        if(!a.isFinishing()&&!a.isDestroyed())
+            a.runOnUiThread(()->Toast.makeText(a,value,Toast.LENGTH_SHORT).show());
+    }
+
+    public static void attach(BlenderActivity activity) {
+        activity.setRequestedOrientation(preferredOrientation(activity));
+        applySafeInsets(activity);
+
+        FrameLayout content=new FrameLayout(activity);
+        LinearLayout buttons=new LinearLayout(activity);
+        buttons.setOrientation(LinearLayout.VERTICAL);
+        buttons.setPadding(px(activity,5),px(activity,5),px(activity,5),px(activity,5));
+        content.addView(buttons,new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,ViewGroup.LayoutParams.WRAP_CONTENT));
+        FrameLayout.LayoutParams position=new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,ViewGroup.LayoutParams.WRAP_CONTENT,
+            Gravity.END|Gravity.CENTER_VERTICAL);
+        position.rightMargin=px(activity,3);
+        activity.addContentView(content,position);
+
+        TextView handle=button(activity,"R  ☰");
+        handle.setBackground(shape(0xEEA05F32,14,activity));
+        buttons.addView(handle,new LinearLayout.LayoutParams(
+            px(activity,58),px(activity,50)));
+        LinearLayout tools=new LinearLayout(activity);
+        tools.setOrientation(LinearLayout.VERTICAL);
+        tools.setVisibility(View.GONE);
+        buttons.addView(tools);
+        handle.setOnClickListener(v->tools.setVisibility(
+            tools.getVisibility()==View.VISIBLE?View.GONE:View.VISIBLE));
+
+        add(activity,tools,"⌂  Render Home",()->confirmHome(activity));
+        add(activity,tools,"▣  Focus viewport",()->send(activity,"blender.ui.focus_viewport",
+              new JSONObject()));
+        add(activity,tools,"A+  Larger controls",()->send(activity,"blender.ui.adjust_scale",
+              values("delta",.15)));
+        add(activity,tools,"A−  Smaller controls",()->send(activity,"blender.ui.adjust_scale",
+              values("delta",-.15)));
+        add(activity,tools,"↻  Rotate / Fit",()->{
+            String selected=activity.getSharedPreferences(SETTINGS,Activity.MODE_PRIVATE)
+                    .getString(MODE,PORTRAIT);
+            String next=PORTRAIT.equals(selected)?LANDSCAPE:PORTRAIT;
+            setMode(activity,next);
+            activity.setRequestedOrientation(preferredOrientation(activity));
+            applySafeInsets(activity);
+            toast(activity,next.equals(PORTRAIT)?"Portrait Focus":"Landscape Full Editor");
+            send(activity,"blender.ui.set_mode",values("mode",next));
+        });
+
+        // API 33+ handles system back gestures even when the native input
+        // queue does not deliver a Java KEYCODE_BACK.
+        if(Build.VERSION.SDK_INT>=33) {
+            OnBackInvokedCallback onBack=()->confirmHome(activity);
+            activity.getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+                OnBackInvokedDispatcher.PRIORITY_DEFAULT,onBack);
+            activity.renderBackCallback=onBack;
+        }
+    }
+
+    private static JSONObject values(String key,Object value){
+        JSONObject obj=new JSONObject();
+        try {obj.put(key,value);}catch(Exception error){throw new IllegalStateException(error);}
+        return obj;
+    }
+    private static void add(Activity a,LinearLayout host,String label,Runnable handler){
+        TextView item=button(a,label);
+        LinearLayout.LayoutParams params=new LinearLayout.LayoutParams(
+            px(a,195),px(a,49));
+        params.topMargin=px(a,4);
+        host.addView(item,params);
+        item.setOnClickListener(v->handler.run());
+    }
+
+    /** User explicitly approves leaving the running native editor.
+     * Uncommitted scene edits can otherwise be lost during NativeActivity shutdown.
+     */
+    public static void confirmHome(Activity a){
+        if(a.isFinishing()||a.isDestroyed())return;
+        new AlertDialog.Builder(a)
+            .setTitle("Return to Render Studio?")
+            .setMessage("Blender may have unsaved changes. Save your scene before leaving the native editor.")
+            .setNegativeButton("Stay in Blender",null)
+            .setPositiveButton("Return to Studio",(dialog,which)->{
+                Intent home=new Intent().setClassName(a,"com.rezox.render.RenderHubActivity");
+                home.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                a.startActivity(home);
+                a.finish();
+            }).show();
+    }
+
+    public static void detach(BlenderActivity activity){
+        if(Build.VERSION.SDK_INT>=33 && activity.renderBackCallback!=null){
+            activity.getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(
+                activity.renderBackCallback);
+            activity.renderBackCallback=null;
+        }
+    }
+
+    private static void send(Activity a,String action,JSONObject args){
+        // The same authenticated typed bpy sidecar handles UI-only requests,
+        // but they are not remotely registered as agent actions.
+        WORK.execute(()->{
+            String id=UUID.randomUUID().toString().replace("-","");
+            File root=new File(a.getFilesDir(),SPOOL);
+            File pending=new File(root,"pending");
+            File result=new File(root,"results/"+id+".json");
+            try {
+                if(!pending.isDirectory()&&!pending.mkdirs())
+                    throw new java.io.IOException("NATIVE_UI_QUEUE_UNAVAILABLE");
+                JSONObject command=new JSONObject()
+                    .put("id",id).put("action",action).put("args",args)
+                    .put("deadline",System.currentTimeMillis()/1000+15);
+                File temporary=File.createTempFile("render-control-",".part",pending);
+                try(FileOutputStream stream=new FileOutputStream(temporary)){
+                    stream.write(command.toString().getBytes(StandardCharsets.UTF_8));
+                    stream.getFD().sync();
+                }
+                File ready=new File(pending,id+".json");
+                try {Files.move(temporary.toPath(),ready.toPath(),StandardCopyOption.ATOMIC_MOVE);}
+                catch(java.nio.file.AtomicMoveNotSupportedException e){
+                    Files.move(temporary.toPath(),ready.toPath());
+                }
+                long until=System.nanoTime()+ TimeUnit.SECONDS.toNanos(12);
+                while(System.nanoTime()<until){
+                    if(result.isFile()) {
+                        JSONObject response=new JSONObject(
+                            new String(Files.readAllBytes(result.toPath()),StandardCharsets.UTF_8));
+                        result.delete();
+                        if(!"succeeded".equals(response.optString("state")))
+                            toast(a,"Blender: "+response.optString("error","Control unavailable"));
+                        return;
+                    }
+                    Thread.sleep(180);
+                }
+                ready.delete();
+                toast(a,"Blender UI is busy. Command may not have completed.");
+            } catch(Exception ex){
+                toast(a,"Mobile control unavailable: "+ex.getClass().getSimpleName());
+            }
+        });
+    }
+}
