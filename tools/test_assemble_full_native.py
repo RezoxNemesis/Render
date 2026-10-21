@@ -1,5 +1,6 @@
 """Synthetic unit tests for full-engine APK staging; no internet or engine files."""
 import hashlib
+import io
 from pathlib import Path
 import tempfile
 import unittest
@@ -16,7 +17,9 @@ class NativePackagingTests(unittest.TestCase):
         self.source = self.base / "source"
         java = self.source / "build_files/android/apk/app/src/main/java/org/blender/blender"
         java.mkdir(parents=True)
-        (java / "BlenderActivity.java").write_text("package org.blender.blender; class BlenderActivity {}")
+        (java / "BlenderActivity.java").write_text(
+            "package org.blender.blender; class BlenderActivity {"
+            " protected void onCreate(Bundle state) { } }")
         main = self.source / "build_files/android/apk/app/src/main"
         (main / "res/values").mkdir(parents=True)
         (main / "res/values/strings.xml").write_text("<resources/>")
@@ -44,7 +47,10 @@ class NativePackagingTests(unittest.TestCase):
         with zipfile.ZipFile(self.engine, "w") as z:
             z.writestr("lib/arm64-v8a/libblender.so", b"original actual native engine")
             z.writestr("lib/arm64-v8a/libc++_shared.so", b"native STL")
-            z.writestr("assets/blender_runtime.zip", b"Python scripts factory resources")
+            buffer = io.BytesIO()
+            with zipfile.ZipFile(buffer,"w") as runtime:
+                runtime.writestr("scripts/startup/bl_ui_test.py", b"# ordinary upstream script")
+            z.writestr("assets/blender_runtime.zip", buffer.getvalue())
             for name, data in (additions or {}).items():
                 z.writestr(name, data)
         self.digest = hashlib.sha256(self.engine.read_bytes()).hexdigest()
@@ -60,8 +66,13 @@ class NativePackagingTests(unittest.TestCase):
         self.assertEqual(b"original actual native engine",
                          (self.output / "lib/arm64-v8a/libblender.so").read_bytes())
         self.assertEqual(b"bridge", (self.output / "lib/arm64-v8a/librender_bridge.so").read_bytes())
-        self.assertTrue((self.output / "assets/blender_runtime.zip").exists())
-        self.assertTrue((self.output / "java/org/blender/blender/BlenderActivity.java").exists())
+        runtime = self.output / "assets/blender_runtime.zip"
+        self.assertTrue(runtime.exists())
+        with zipfile.ZipFile(runtime) as z:
+            self.assertIn("scripts/startup/render_agent_startup.py", z.namelist())
+        java = self.output / "java/org/blender/blender/BlenderActivity.java"
+        self.assertTrue(java.exists())
+        self.assertIn("RENDER_AGENT_SPOOL",java.read_text())
         self.assertTrue((self.output / "assets/licenses/Render-Full-Native-Sources.txt").exists())
         root = ET.parse(self.output / "AndroidManifest.xml").getroot()
         self.assertNotIn("package", root.attrib)

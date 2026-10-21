@@ -4,6 +4,7 @@ on:
     branches: ["feature/android-native-foundation-20261021"]
     paths:
       - "full-app/**"
+      - "tools/test_blender_bpy_bridge.py"
       - "tools/assemble_full_native.py"
       - "tools/test_assemble_full_native.py"
       - ".github/workflows/full-native-apk.yml"
@@ -20,7 +21,7 @@ jobs:
         with:
           python-version: "3.13"
       - name: Verify full-engine staging rejects tampered files
-        run: PYTHONPATH=tools python -m unittest tools/test_assemble_full_native.py -v
+        run: PYTHONPATH=tools python -m unittest tools/test_assemble_full_native.py tools/test_blender_bpy_bridge.py -v
 
   build-native-full:
     needs: stage-tests

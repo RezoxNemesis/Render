@@ -32,3 +32,5 @@ all-files access for linked assets; Android's platform permission prompt remains
 Original Blender and all related GPL source remain available from the pinned source;
 the Render agent source and packaging scripts are in this repository.
 Do not claim full desktop parity or a production release solely from APK compilation.
+## Native bpy main-thread command bridge
+The Full-APK staging pipeline adds a Render startup Python module to Blender's normal scripts/startup directory and patches the pinned BlenderActivity to publish an app-private command-spool path. The module registers a Blender main-thread timer and accepts only typed scene.summary or object.add_cube commands, without exposing Python eval or a network listener. The agent and original Blender editor remain in the SAME Android APK and process. Python startup and Java commands require real on-device verification; CI verifies generated code and deterministic unit logic, not a physical Blender action.

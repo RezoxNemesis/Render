@@ -91,6 +91,40 @@ def merge_manifest(source):
     })
     return ET.ElementTree(root)
 
+
+def attach_bpy_agent(runtime_zip, source_py):
+    """Startup timer executes typed bpy operations, never arbitrary Python code."""
+    with zipfile.ZipFile(runtime_zip) as packed:
+        names = packed.namelist()
+        if not any(name.startswith("scripts/startup/") for name in names):
+            raise ValueError("UPSTREAM_BLENDER_STARTUP_TREE_MISSING")
+        if "scripts/startup/render_agent_startup.py" in names:
+            raise ValueError("BLENDER_AGENT_SCRIPT_COLLISION")
+    with zipfile.ZipFile(runtime_zip, "a") as packed:
+        packed.write(source_py, "scripts/startup/render_agent_startup.py",
+                     compress_type=zipfile.ZIP_DEFLATED)
+
+def patch_native_activity(path):
+    java = path.read_text(encoding="utf-8")
+    original = "  protected void onCreate(Bundle state) {"
+    if java.count(original) != 1:
+        raise ValueError("PINNED_BLENDER_ACTIVITY_HOOK_CHANGED")
+    patch = original + """
+    /* Render's app-private command spool, read by Blender's bpy startup timer.
+       No Android listening port, no remote render process. */
+    try {
+      File commandDirectory = new File(getFilesDir(), "render_bpy_jobs");
+      if (!commandDirectory.isDirectory() && !commandDirectory.mkdirs()) {
+        throw new java.io.IOException("Cannot initialize Render command directory");
+      }
+      Os.setenv("RENDER_AGENT_SPOOL", commandDirectory.getAbsolutePath(), true);
+    }
+    catch (Exception exception) {
+      Log.w(TAG, "Render native bpy bridge unavailable", exception);
+    }
+"""
+    path.write_text(java.replace(original, patch), encoding="utf-8")
+
 def check_source(source, verify):
     path = Path(source)
     manifest = path / "build_files/android/apk/app/src/main/AndroidManifest.xml"
@@ -150,7 +184,10 @@ def stage(engine, bridge, source, destination, expected_size=ENGINE_BYTES,
     java_dst = destination / "java/org/blender/blender/BlenderActivity.java"
     java_dst.parent.mkdir(parents=True)
     shutil.copy2(java, java_dst)
+    patch_native_activity(java_dst)
     shutil.copytree(res, destination / "res", dirs_exist_ok=True)
+    startup = Path(__file__).resolve().parents[1] / "full-app/scripts/render_agent_startup.py"
+    attach_bpy_agent(assets / "blender_runtime.zip", startup)
     merged = merge_manifest(manifest)
     merged.write(destination / "AndroidManifest.xml", encoding="utf-8", xml_declaration=True)
     notices = assets / "licenses"
