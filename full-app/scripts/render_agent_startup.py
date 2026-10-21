@@ -16,6 +16,7 @@ import time
 import bpy
 
 ROOT = os.environ.get("RENDER_AGENT_SPOOL", "")
+MOBILE_MODE = os.environ.get("RENDER_MOBILE_UI_MODE", "")
 _LAST_HEARTBEAT = 0.0
 _ID_PATTERN = re.compile(r"^[a-f0-9]{32}$")
 _OBJECT_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,63}$")
@@ -24,11 +25,79 @@ _MAX_BYTES = 16384
 def _number(value, lower, upper):
     return type(value) in (int, float) and math.isfinite(value) and lower <= value <= upper
 
+
+# PreferencesView.ui_scale is writable; PreferencesSystem.ui_scale is
+# derived and readonly. Control size is separate from render quality.
+def _ui_scale(value=None, delta=None):
+    view = bpy.context.preferences.view
+    current = float(view.ui_scale)
+    target = current if value is None else value
+    if delta is not None:
+        target = current + delta
+    target = min(2.20, max(0.85, float(target)))
+    view.ui_scale = target
+    return round(float(view.ui_scale), 3)
+
+
+def _focus_viewport():
+    window = bpy.context.window
+    screen = window.screen if window else None
+    if not window or not screen:
+        raise RuntimeError("BLENDER_WINDOW_UNAVAILABLE")
+    area = next((x for x in screen.areas if x.type == "VIEW_3D"), None)
+    if area is None:
+        raise RuntimeError("NO_VIEW_3D_AREA")
+    with bpy.context.temp_override(window=window, screen=screen, area=area):
+        outcome = bpy.ops.screen.screen_full_area(use_hide_panels=False)
+    if "FINISHED" not in outcome:
+        raise RuntimeError("FOCUS_VIEWPORT_NOT_READY")
+    return {"action": "toggle_fullscreen_area", "preserves_other_editors": True}
+
+
+def _mobile_mode(mode):
+    if mode not in ("portrait", "landscape"):
+        raise ValueError("INVALID_MOBILE_MODE")
+    size = _ui_scale(value=1.34 if mode == "portrait" else 1.18)
+    return {"orientation": mode, "ui_scale": size,
+            "render_quality_unchanged": True, "engine": "native-blender"}
+
+
+def _initial_mobile_setup():
+    if MOBILE_MODE not in ("portrait", "landscape") or getattr(bpy.app,"background",False):
+        return None
+    try:
+        _mobile_mode(MOBILE_MODE)
+        if MOBILE_MODE == "portrait":
+            _focus_viewport()
+        return None
+    except Exception as error:
+        retries = getattr(_initial_mobile_setup, "attempts", 0) + 1
+        _initial_mobile_setup.attempts = retries
+        if retries >= 5:
+            print("Render mobile layout skipped:", type(error).__name__)
+            return None
+        return 1.5
+
 def _dispatch(command):
     action = command.get("action")
     args = command.get("args")
     if not isinstance(args, dict):
         raise ValueError("INVALID_ARGUMENTS")
+    # Local touch-overlay UI operations; NOT remotely registered agent actions.
+    if action == "blender.ui.adjust_scale":
+        if set(args) != {"delta"} or not _number(args.get("delta"), -.25, .25):
+            raise ValueError("INVALID_UI_SCALE_STEP")
+        return {"ui_scale": _ui_scale(delta=args["delta"]),
+                "render_quality_unchanged": True}
+    if action == "blender.ui.focus_viewport":
+        if args:
+            raise ValueError("UNEXPECTED_ARGUMENT")
+        return _focus_viewport()
+    if action == "blender.ui.set_mode":
+        if set(args) != {"mode"}:
+            raise ValueError("INVALID_MOBILE_MODE")
+        return _mobile_mode(args.get("mode"))
+
     scene = bpy.context.scene
     if scene is None:
         raise RuntimeError("NO_ACTIVE_BLENDER_SCENE")
@@ -255,3 +324,6 @@ def _poll():
 
 if ROOT:
     bpy.app.timers.register(_poll, first_interval=0.5, persistent=True)
+
+if MOBILE_MODE in ("portrait", "landscape") and not getattr(bpy.app,"background",False):
+    bpy.app.timers.register(_initial_mobile_setup, first_interval=2.0, persistent=False)
