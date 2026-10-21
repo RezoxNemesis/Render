@@ -73,6 +73,7 @@ void Valid(int fmt,int ptr){
   CHECK(a.structures==1);
   CHECK(a.member_names==3);
   CHECK(a.types==3);
+  CHECK(a.structure_fields==3);
   CHECK(a.sample_structures.size()==1);
   CHECK(a.sample_structures[0]=="Sample");
   const std::string json=render::DnaCatalogJson(a);
