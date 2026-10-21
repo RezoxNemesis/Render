@@ -101,6 +101,12 @@ def _root(name, collection, location):
 def _animate_travel(root, start, end, frames, hop=0.05):
     first, last = frames
     middle = (first + last) // 2
+    # Characters and quadrupeds have local -Y forward; turn them toward the
+    # actual path so their walk cycles don't appear to slide sideways.
+    dx, dy = end[0] - start[0], end[1] - start[1]
+    if abs(dx) + abs(dy) > 0.001:
+        root.rotation_euler.z = math.atan2(dx, -dy)
+        root.keyframe_insert(data_path="rotation_euler", frame=first)
     for frame, progress in ((first, 0.0), (middle, 0.5), (last, 1.0)):
         root.location = (
             start[0] + (end[0] - start[0]) * progress,
@@ -261,8 +267,9 @@ def populate_lively(scene, args):
     scene.frame_start=1
     scene.frame_end=192
     scene.render.fps=24
-    scene.render.resolution_x=960
-    scene.render.resolution_y=540
+    # 720p frames at 24 fps: a cinematic target without assuming desktop GPU.
+    scene.render.resolution_x=1280
+    scene.render.resolution_y=720
     scene.render.resolution_percentage=100
     scene.frame_set(1)
     collection["render_populate_complete"] = True
