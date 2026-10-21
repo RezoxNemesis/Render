@@ -133,7 +133,9 @@ public final class VideoStudioNativeBridgeService extends Service {
                 outcome.put("ok",false).put("error","NATIVE_COMMAND_CANCELLED");
             } else {
                 state="succeeded";
-                outcome.put("ok",true).put("native_result",nativeResult)
+                // Never return the default failure marker alongside ok=true.
+                // A new object makes native success unambiguous to ChatGPT.
+                outcome=new JSONObject().put("ok",true).put("native_result",nativeResult)
                     .put("executed_by","Render Android");
             }
         } catch(Exception | LinkageError error) {
