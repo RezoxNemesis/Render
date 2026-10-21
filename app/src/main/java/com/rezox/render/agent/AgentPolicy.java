@@ -33,6 +33,8 @@ public final class AgentPolicy {
     }
 
     public static String relayUrl(String value) {
+        if(value==null || value.trim().isEmpty())
+            throw new IllegalArgumentException("Relay address required. Paste the HTTPS URL provided after deployment.");
         try {
             URI u = new URI(value.trim());
             if (!"https".equals(u.getScheme()) || u.getHost() == null || u.getUserInfo() != null

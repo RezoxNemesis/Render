@@ -157,7 +157,7 @@ public final class AgentActivity extends Activity {
         String requested=relay.getText().toString().trim();
         perform(()->{
             if(requested.isEmpty())
-                return "No relay origin is configured. Railway or another HTTPS host must be deployed first. The phone cannot connect to a repository URL.";
+                return "No relay address has been entered. Paste the HTTPS URL of your private hosted Render relay here, then run this check.";
             JSONObject health=AgentHttp.checkHealth(requested);
             return "RELAY REACHABLE\n"+health.optString("service","Unknown server")
                 + "\n\nThis verifies HTTPS connectivity only. It does not mean the device is paired or ChatGPT can send commands.";
@@ -167,15 +167,47 @@ public final class AgentActivity extends Activity {
     private void perform(Task task){
         if(busy){secrets.status("A setup request is already running.");return;}busy=true;
         background.execute(()->{
-            String answer;try{answer=task.run();}catch(Exception e){answer="Request failed: "+e.getClass().getSimpleName()+". No credential was exposed.";}
+            String answer;try{answer=task.run();}catch(Exception e){answer=explainFailure(e);}
             final String message=answer;ui.post(()->{busy=false;if(!isFinishing()&&!isDestroyed()){
                 new AlertDialog.Builder(this).setTitle("ChatGPT × Render").setMessage(message).setPositiveButton("OK",null).show();
             }});
         });
     }
+    /** Report actionable setup failures without exposing credentials or server URLs in error text. */
+    private String explainFailure(Exception e) {
+        if(e instanceof IllegalArgumentException || e instanceof IllegalStateException){
+            String code=e.getMessage();
+            if(code!=null && code.matches("[A-Za-z0-9 .:/()_-]{1,200}"))return code;
+            return "Incorrect connection input. Check the HTTPS relay address and one-use code.";
+        }
+        if(e instanceof AgentHttp.RelayException){
+            int status=((AgentHttp.RelayException)e).status;
+            if(status==403)return "The enrollment code was rejected or has already been used. Check the code and try again.";
+            if(status==409)return "This relay has already enrolled a phone. Generate a fresh authorized setup before retrying.";
+            if(status==401)return "Authorization failed or expired. Pair with a fresh one-use enrollment code.";
+            if(status==429)return "Too many attempts. Wait briefly before trying again.";
+            if(status>=500)return "The relay is having a server problem. Try Check Relay Reachability in a minute.";
+            return "The relay rejected the setup request (HTTP "+status+"). Check the setup details.";
+        }
+        if(e instanceof java.net.UnknownHostException)return "Cannot find the relay address. Check the URL and your internet connection.";
+        if(e instanceof java.net.SocketTimeoutException)return "The relay did not respond in time. A free hosting service may be starting up; try again.";
+        if(e instanceof javax.net.ssl.SSLException)return "Secure HTTPS verification failed. Check the relay URL; plain HTTP is not supported.";
+        if(e instanceof java.io.IOException)return "Cannot reach the relay. Check its URL, your network, or the server status.";
+        return "Connection setup failed ("+e.getClass().getSimpleName()+"). No private credential was displayed.";
+    }
     private void pair(){
-        final String origin=relay.getText().toString(),code=enrollment.getText().toString();enrollment.setText("");
+        final String origin=relay.getText().toString().trim(),code=enrollment.getText().toString().trim();
+        enrollment.setText("");
+        if(origin.isEmpty()){secrets.status("Relay URL missing. Deploy the private relay first, then paste its HTTPS address.");
+            new AlertDialog.Builder(this).setTitle("Relay address needed")
+                .setMessage("The relay address field is empty. This is a real HTTPS service URL, not your GitHub repository or ChatGPT account. Once deployed, paste the exact URL here.")
+                .setPositiveButton("OK",null).show();return;}
+        if(code.isEmpty()){secrets.status("One-use enrollment code missing.");
+            new AlertDialog.Builder(this).setTitle("Enrollment code needed")
+                .setMessage("The one-use enrollment code has not been entered. It is issued when your relay is configured. A ChatGPT password, API key or random code will not work.")
+                .setPositiveButton("OK",null).show();return;}
         perform(()->{
+            AgentPolicy.relayUrl(origin);
             if(secrets.load()!=null)throw new IllegalStateException("Revoke the existing connection before pairing another");
             JSONObject answer=AgentHttp.post(origin,"/v1/device/enroll",null,new JSONObject().put("enrollment_code",code).put("name","Render Android"));
             if(!answer.getString("device_id").matches("[a-f0-9]{32}")||!answer.getString("device_token").matches("[A-Za-z0-9_-]{32,256}"))
@@ -188,7 +220,7 @@ public final class AgentActivity extends Activity {
         });
     }
     private void link(){perform(()->{
-        JSONObject c=secrets.load();if(c==null)throw new IllegalStateException("Phone is not paired");
+        JSONObject c=secrets.load();if(c==null)throw new IllegalStateException("Pair this phone first using the relay address and enrollment code, then generate a ChatGPT link code.");
         JSONObject r=AgentHttp.post(c.getString("relay"),"/v1/device/link",c.getString("device_token"),new JSONObject());
         return "New ChatGPT authorization code (10 minutes):\n"+r.getString("link_code")+"\n\nMCP endpoint: "+c.getString("relay")+"/mcp";
     });}

@@ -7,6 +7,14 @@ import static org.junit.Assert.*;
 
 public class AgentPolicyTest {
     @Test public void validHttpsOrigin(){assertEquals("https://relay.example",AgentPolicy.relayUrl("https://relay.example/"));}
+    @Test public void missingRelayGetsExplicitSetupMessage() {
+        for(String origin:new String[]{"", "   "}) {
+            try{AgentPolicy.relayUrl(origin);fail();}
+            catch(IllegalArgumentException expected){assertTrue(expected.getMessage().contains("Relay address required"));}
+        }
+        try{AgentPolicy.relayUrl(null);fail();}
+        catch(IllegalArgumentException expected){assertTrue(expected.getMessage().contains("Relay address required"));}
+    }
     @Test public void rejectsCleartextCredentialsAndPath(){
         for(String value:new String[]{"http://relay.example","https://user:pass@relay.example","https://relay.example/path","https://relay.example?token=x","https://relay.example#x","https://relay.example:0"}) {
             try{AgentPolicy.relayUrl(value);fail(value);}catch(IllegalArgumentException expected){}
