@@ -46,3 +46,6 @@ Blender official source: https://projects.blender.org/blender/blender and public
 The eventual integrated Blender-derived app must fulfill Blender's GNU GPL and all third-party asset/component licenses, include license/attribution notices, and provide corresponding source. This foundation includes genuine Blender BLI FP16 source and its GPLv2 license text under third_party/blender_half; it does not bundle Blender factory assets. Full GPL/copyleft and bundled third-party license obligations will apply to distributable releases.
 
 See the documents for blockers and milestone gates. Do not mark core features implemented based on this scaffold.
+
+### Genuine Blender file compatibility CI
+A second CI job creates actual Blender scene and animation fixtures with upstream `bpy` on a temporary Linux runner, then tests our native Android-targeted reader against the saved files and gzip envelope. The CI desktop binary is a development **test generator only**, not an app dependency or remotely hosted engine. No complete BKE scene reconstruction is claimed.

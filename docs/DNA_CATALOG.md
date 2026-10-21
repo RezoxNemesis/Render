@@ -38,3 +38,17 @@ Gzip input is now passed through Blender's original GPL-licensed `filereader_gzi
 
 ## Top-level ID pointer-token inventory
 A bounded diagnostic set now tracks distinct **saved** ID block pointer tokens (as hexadecimal-like address identifiers, never dereferenced as Android pointers). Four-byte control/data blocks are excluded. The report includes top-level ID block counts and repeated nonzero tokens, helping establish an initial mapping before full Blender Main/BKE pointer reconstruction. These tokens are not usable native memory addresses, and this index is **not** Blender's original OldNewMap or linked-library logic.
+
+## Real Blender-produced file acceptance suite
+
+The separate `blender-real-file-compatibility` CI job installs Blender on a
+**Linux test runner only**, uses genuine `bpy` to generate meshes, an
+animation and additional scene, saves uncompressed `.blend` files, and
+compresses one via gzip for readback checks. It then runs Render's C++ loader
+against the real files, comparing schema / ID block counts and checking that
+`sceneLoaded` is still `false`.
+
+The CI Blender binary **never becomes a remote rendering dependency** of
+Render for Android. A successful test only validates file diagnostics and
+saved-block indexing. Neither BKE reconstruction nor native viewport/modeling
+or animation playback are thereby completed.

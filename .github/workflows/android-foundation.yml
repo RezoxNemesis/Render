@@ -37,3 +37,38 @@ jobs:
           name: render-android-foundation-debug-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+
+  blender-real-file-compatibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install desktop Blender only for generating genuine test fixtures
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends blender
+          blender --version | head -n 2
+      - name: Generate genuine .blend scenes using Blender's own bpy
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+        run: |
+          mkdir -p "$RUNNER_TEMP/real-blender"
+          blender -b -noaudio --python native-tests/create_real_blend_fixtures.py -- --output "$RUNNER_TEMP/real-blender"
+      - name: Build Render's native scene-file diagnostic
+        run: |
+          cmake -S native-tests -B "$RUNNER_TEMP/native-compat" -DCMAKE_BUILD_TYPE=Release
+          cmake --build "$RUNNER_TEMP/native-compat" --target blender_real_fixture_tests --parallel 2
+      - name: Verify uncompressed, animated and gzip Blender files
+        run: |
+          "$RUNNER_TEMP/native-compat/blender_real_fixture_tests" \
+            "$RUNNER_TEMP/real-blender/render_real_scene.blend" \
+            "$RUNNER_TEMP/real-blender/render_animated_scene.blend" \
+            "$RUNNER_TEMP/real-blender/render_real_scene.blend.gz"
+      - name: Archive fixture manifest (not production application assets)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-blender-file-compatibility-manifest
+          path: |
+            ${{ runner.temp }}/real-blender/fixture_manifest.json
+          if-no-files-found: warn
