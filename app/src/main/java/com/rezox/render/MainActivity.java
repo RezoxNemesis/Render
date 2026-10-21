@@ -31,6 +31,7 @@ import java.util.Locale;
  */
 public final class MainActivity extends Activity {
     private static final int REQUEST_BLEND_FILE = 1201;
+    private static final int REQUEST_BACKUP_ZIP = 1202;
     static {
         System.loadLibrary("render_bridge");
     }
@@ -75,6 +76,14 @@ public final class MainActivity extends Activity {
         TextView importer=StudioUi.action(this,"IMPORT .BLEND PROJECT     +",StudioUi.PRIMARY);
         StudioUi.add(files,importer);
         importer.setOnClickListener(v->selectBlend());
+        StudioUi.space(files,11);
+        TextView backup=StudioUi.action(this,"BACK UP SAVED .BLEND PROJECTS     ↗",StudioUi.SECONDARY);
+        StudioUi.add(files,backup);
+        backup.setOnClickListener(v->confirmBackup());
+        StudioUi.space(files,8);
+        StudioUi.add(files,StudioUi.text(this,
+            "Save before switching signing certificates. ZIP includes saved .blend files, not separately linked external assets.",
+            12,StudioUi.MUTED,false));
         StudioUi.add(page,files);
         StudioUi.space(page,15);
 
@@ -107,6 +116,39 @@ public final class MainActivity extends Activity {
             12,StudioUi.MUTED,false));
     }
 
+    private void confirmBackup() {
+        new android.app.AlertDialog.Builder(this)
+            .setTitle("Back up your Blender projects")
+            .setMessage("Choose a destination OUTSIDE Render's app-private folders, such as Downloads or your Drive document provider. The ZIP contains all saved .blend files with SHA-256 checksums. Externally linked textures/materials are not automatically packed.")
+            .setNegativeButton("Cancel",null)
+            .setPositiveButton("Choose destination",(d,w)->{
+                Intent save=new Intent(Intent.ACTION_CREATE_DOCUMENT);
+                save.addCategory(Intent.CATEGORY_OPENABLE);
+                save.setType("application/zip");
+                save.putExtra(Intent.EXTRA_TITLE,"Render_Projects_Backup.zip");
+                save.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                startActivityForResult(save,REQUEST_BACKUP_ZIP);
+            }).show();
+    }
+
+    private String exportProjectBackup(Uri output) throws Exception {
+        java.util.List<java.io.File> folders=new java.util.ArrayList<>();
+        File external=getExternalFilesDir(null);
+        if(external!=null)folders.add(new File(external,"Projects"));
+        folders.add(new File(getFilesDir(),"Projects"));
+        com.rezox.render.agent.ProjectScope scope=new com.rezox.render.agent.ProjectScope(
+            folders.toArray(new File[0]));
+        java.util.List<com.rezox.render.agent.ProjectScope.Entry> files=scope.entries();
+        if(files.isEmpty())throw new IOException("No saved Blender project files found.");
+        try(OutputStream out=getContentResolver().openOutputStream(output,"w")) {
+            if(out==null)throw new IOException("The selected destination did not open for writing.");
+            ProjectBackup.Result result=ProjectBackup.export(files,out);
+            return "Backup exported successfully: "+result.projects+" .blend projects, "+
+                result.sourceBytes+" original bytes.\\nSave the ZIP outside this app before uninstalling. "+
+                "Restore separately linked textures and assets from their original locations.";
+        }
+    }
+
     private void selectBlend() {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
@@ -117,6 +159,22 @@ public final class MainActivity extends Activity {
 
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
+        if(request==REQUEST_BACKUP_ZIP){
+            if(result!=RESULT_OK||data==null||data.getData()==null)return;
+            final Uri destination=data.getData();
+            status.setText("Backing up saved projects…");
+            new Thread(()->{
+                try{
+                    String report=exportProjectBackup(destination);
+                    runOnUiThread(()->status.setText(report));
+                }catch(Exception error){
+                    runOnUiThread(()->status.setText("Backup failed: "+
+                        error.getClass().getSimpleName()+
+                        (error.getMessage()==null?"":" — "+error.getMessage())));
+                }
+            },"render-project-backup").start();
+            return;
+        }
         if (request != REQUEST_BLEND_FILE || result != RESULT_OK || data == null || data.getData() == null) return;
         Uri source = data.getData();
         status.setText("Copying .blend file into local app storage...");
