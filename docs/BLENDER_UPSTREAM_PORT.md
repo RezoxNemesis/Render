@@ -46,3 +46,17 @@ EEVEE, Cycles, or any Blender animation or editing operation.
 
 ## SDNA catalog preflight (diagnostic layer)
 The Android JNI shell now calls a bounded read-only parser for the genuine SDNA NAME/TYPE/TLEN/STRC table from a DNA1 block. It uses upstream Blender's BLO BHead reader and does not decode original scene data or replace DNA_sdna_from_data. This is not a scene loader or depsgraph. Details: docs/DNA_CATALOG.md.
+
+## Authentic Zstd FileReader dependency
+
+Blender's genuine GPL-2.0-or-later filereader_zstd.cc is vendored from pinned
+Blender source. It links against upstream Zstd 1.5.7 pinned to Git commit
+f8745da6ff1ad1e7bab384bd1f9d742439278e99 (dual BSD/GPL2).
+This dependency is built as a static arm64 Android library; nothing is fetched
+by the installed mobile application. An optional local RENDER_ZSTD_SOURCE_DIR
+provides an exact-revision offline development build.
+
+The ported reader has explicit array delete[] substitutions to match the
+current narrow new[] allocator shim; the entire guardedalloc, BLI, and real
+DNA scene loader still require integration. Zstd compression support must
+pass Android CI and Blender-produced fixture tests before being claimed.
