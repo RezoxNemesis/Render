@@ -160,10 +160,15 @@ public final class AgentService extends Service {
                 result=new JSONObject().put("error",code).put("executed_by","android-agent");
             }catch(Exception ignored){}
         }finally{
-            try{journal.finish(work.envelope.id,state,result);
-                AgentWorkPresence.finish(this,state);
+            boolean receiptStored=false;
+            try{
+                journal.finish(work.envelope.id,state,result);
+                receiptStored=true;
+            }catch(Exception e){
+                secrets.enabled(false);
+                secrets.status("Result journal failed. Recovery required; automatic replay disabled.");
             }
-            catch(Exception e){secrets.enabled(false);secrets.status("Result journal failed. Recovery required; automatic replay disabled.");}
+            AgentWorkPresence.finish(this,receiptStored?state:"recovery_required");
             active=null;PROCESS_BUSY.set(false);
         }
     }
