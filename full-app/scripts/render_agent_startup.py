@@ -372,6 +372,70 @@ def _dispatch(command):
     scene = bpy.context.scene
     if scene is None:
         raise RuntimeError("NO_ACTIVE_BLENDER_SCENE")
+    if action == "blender.scene.visual_audit":
+        if args:
+            raise ValueError("UNEXPECTED_ARGUMENT")
+        # Report real Blender database evidence, not a guessed visual rating.
+        objects = list(scene.objects)
+        meshes = [ob for ob in objects if ob.type == "MESH"]
+        materials = {mat.name: mat for ob in meshes
+                     for mat in ob.data.materials if mat is not None}
+        node_materials = sum(1 for mat in materials.values()
+                             if mat.use_nodes and mat.node_tree)
+        animated = sum(1 for ob in objects
+                       if ob.animation_data is not None and
+                       ob.animation_data.action is not None)
+        lights = [ob for ob in objects if ob.type == "LIGHT"]
+        named = {ob.name for ob in objects}
+        has_architecture = (
+            any(n == "RoofCap" or n.startswith("RoofCap.") for n in named)
+            and any(n == "EntryCanopy" or n.startswith("EntryCanopy.")
+                    for n in named)
+        )
+        has_people = any(n.startswith("RS_Walker_") for n in named)
+        has_dog = any(n.startswith("RS_Dog") for n in named)
+        has_cat = any(n.startswith("RS_Cat") for n in named)
+        has_sun = any(ob.data.type == "SUN" for ob in lights)
+        has_ground = any(n.startswith("RS_Garden") for n in named)
+        has_sky = (scene.world is not None and scene.world.use_nodes and
+                   scene.world.node_tree is not None and
+                   scene.world.node_tree.nodes.get("Background") is not None)
+        has_camera = scene.camera is not None and scene.camera.type == "CAMERA"
+        frames = max(0, scene.frame_end - scene.frame_start + 1)
+        checks = {
+            "building_geometry": has_architecture,
+            "editable_pbr_materials": node_materials >= 3,
+            "pedestrians": has_people,
+            "dog": has_dog,
+            "cat": has_cat,
+            "ground": has_ground,
+            "sun": has_sun,
+            "sky": has_sky,
+            "camera": has_camera,
+            "animated_transforms": animated >= 2,
+            "animation_duration": frames >= 24,
+        }
+        return {
+            "scene": scene.name, "blender_version": bpy.app.version_string,
+            "scene_objects": len(objects), "mesh_objects": len(meshes),
+            "lights": len(lights), "unique_materials": len(materials),
+            "pbr_node_materials": node_materials,
+            "animated_objects": animated, "frame_count": frames,
+            "fps": scene.render.fps, "render_engine": scene.render.engine,
+            "checks": checks, "ready_for_lively_video": all(checks.values()),
+            "failed_checks": [k for k, value in checks.items() if not value],
+            "executed_by": "bpy-main-thread-on-android",
+            "note": "Scene database audit only; final render quality requires inspecting a real output"
+        }
+    if action == "blender.scene.batch_assembly":
+        import importlib.util
+        helper = Path(__file__).with_name("render_batch_assembly.py")
+        if not helper.is_file():
+            raise RuntimeError("BATCH_ASSEMBLY_NOT_PACKAGED")
+        spec = importlib.util.spec_from_file_location("render_batch_assembly", helper)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module.apply_assembly(scene, args)
     if action == "blender.scene.summary":
         if args:
             raise ValueError("UNEXPECTED_ARGUMENT")
