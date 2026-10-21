@@ -85,6 +85,80 @@ public final class BlenderSpool {
                 "INVALID_KEYFRAME_VALUE");
             return;
         }
+        if("blender.object.add_primitive".equals(action)){
+            if(args.has("name"))name(args,true);
+            if(args.has("kind")&&!java.util.Arrays.asList("UV_SPHERE","ICO_SPHERE","CYLINDER","CONE","PLANE","TORUS")
+                .contains(args.getString("kind")))throw new IllegalArgumentException("INVALID_PRIMITIVE_KIND");
+            if(args.has("size")&&!finite(args.get("size"),0.001,10000))
+                throw new IllegalArgumentException("INVALID_PRIMITIVE_SIZE");
+            if(args.has("location"))vector(args,"location",-100000,100000,"INVALID_PRIMITIVE_LOCATION");
+            return;
+        }
+        if("blender.object.add_camera".equals(action)){
+            if(args.has("name"))name(args,true);
+            if(args.has("location"))vector(args,"location",-100000,100000,"INVALID_CAMERA_LOCATION");
+            if(args.has("rotation_euler"))vector(args,"rotation_euler",-1000,1000,"INVALID_CAMERA_ROTATION");
+            return;
+        }
+        if("blender.object.add_light".equals(action)){
+            if(args.has("name"))name(args,true);
+            if(args.has("light_type")&&!java.util.Arrays.asList("POINT","SUN","SPOT","AREA")
+                .contains(args.getString("light_type")))throw new IllegalArgumentException("INVALID_LIGHT_KIND");
+            if(args.has("location"))vector(args,"location",-100000,100000,"INVALID_LIGHT_LOCATION");
+            if(args.has("color"))vector(args,"color",0,1,"INVALID_LIGHT_COLOR");
+            if(args.has("energy")&&!finite(args.get("energy"),0,10000000))
+                throw new IllegalArgumentException("INVALID_LIGHT_ENERGY");
+            return;
+        }
+        if("blender.object.modifier_add".equals(action)){
+            name(args,true);
+            if(!java.util.Arrays.asList("SUBSURF","BEVEL","SOLIDIFY","MIRROR")
+                .contains(args.getString("modifier_type")))
+                throw new IllegalArgumentException("INVALID_MODIFIER_TYPE");
+            if(args.has("levels")){
+                Object value=args.get("levels");
+                if(!(value instanceof Integer)||(Integer)value<0||(Integer)value>6)
+                    throw new IllegalArgumentException("INVALID_MODIFIER_LEVEL");
+            }
+            if(args.has("width")&&!finite(args.get("width"),0,1000))
+                throw new IllegalArgumentException("INVALID_MODIFIER_WIDTH");
+            return;
+        }
+        if("blender.material.assign".equals(action)){
+            name(args,true);
+            if(args.has("material_name")){
+                String material=args.getString("material_name");
+                if(!material.matches("[A-Za-z][A-Za-z0-9_-]{0,63}"))
+                    throw new IllegalArgumentException("INVALID_MATERIAL_NAME");
+            }
+            if(args.has("color"))vector(args,"color",0,1,"INVALID_MATERIAL_COLOR");
+            if(args.has("metallic")&&!finite(args.get("metallic"),0,1))
+                throw new IllegalArgumentException("INVALID_MATERIAL_SURFACE");
+            if(args.has("roughness")&&!finite(args.get("roughness"),0,1))
+                throw new IllegalArgumentException("INVALID_MATERIAL_SURFACE");
+            return;
+        }
+        if("blender.scene.render_settings".equals(action)){
+            if(args.length()==0)throw new IllegalArgumentException("RENDER_SETTINGS_REQUIRED");
+            for(String field:new String[]{"resolution_x","resolution_y","samples"}){
+                if(args.has(field)){
+                    Object value=args.get(field);
+                    int minimum=field.equals("samples")?1:16;
+                    int maximum=field.equals("samples")?4096:16384;
+                    if(!(value instanceof Integer)||(Integer)value<minimum||(Integer)value>maximum)
+                        throw new IllegalArgumentException("INVALID_RENDER_SETTINGS");
+                }
+            }
+            if(args.has("engine")&&!java.util.Arrays.asList(
+                "CYCLES","BLENDER_EEVEE","BLENDER_EEVEE_NEXT","BLENDER_WORKBENCH")
+                .contains(args.getString("engine")))
+                throw new IllegalArgumentException("INVALID_RENDER_ENGINE");
+            return;
+        }
+        if("blender.scene.render_still".equals(action)){
+            if(args.length()!=0)throw new IllegalArgumentException("UNEXPECTED_ARGUMENT");
+            return;
+        }
         throw new IllegalArgumentException("NATIVE_BLENDER_ACTION_UNAVAILABLE");
     }
     public JSONObject execute(String action, JSONObject args, AtomicBoolean cancelled) throws Exception {
@@ -103,7 +177,8 @@ public final class BlenderSpool {
         File request=new File(pending,id+".json");
         File claimed=new File(working,id+".json");
         File resultFile=new File(results,id+".json");
-        long timeoutMillis=action.equals("blender.project.save_copy") ? 120000L : 20000L;
+        long timeoutMillis=action.equals("blender.scene.render_still") ? 480000L :
+            action.equals("blender.project.save_copy") ? 120000L : 20000L;
         JSONObject envelope=new JSONObject().put("id",id).put("action",action)
             .put("args",args).put("deadline",System.currentTimeMillis()/1000+timeoutMillis/1000);
         byte[] contents=envelope.toString().getBytes(StandardCharsets.UTF_8);

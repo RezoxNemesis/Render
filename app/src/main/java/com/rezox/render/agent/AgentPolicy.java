@@ -26,6 +26,13 @@ public final class AgentPolicy {
         registry.put("blender.object.set_transform", fields("name", "location", "rotation_euler", "scale"));
         registry.put("blender.object.keyframe", fields("name", "frame", "data_path", "value"));
         registry.put("blender.project.save_copy", Collections.emptySet());
+        registry.put("blender.object.add_primitive", fields("name", "kind", "size", "location"));
+        registry.put("blender.object.add_camera", fields("name", "location", "rotation_euler"));
+        registry.put("blender.object.add_light", fields("name", "light_type", "location", "energy", "color"));
+        registry.put("blender.object.modifier_add", fields("name", "modifier_type", "levels", "width"));
+        registry.put("blender.material.assign", fields("name", "material_name", "color", "metallic", "roughness"));
+        registry.put("blender.scene.render_settings", fields("resolution_x", "resolution_y", "samples", "engine"));
+        registry.put("blender.scene.render_still", Collections.emptySet());
         ACTIONS = Collections.unmodifiableMap(registry);
     }
     private static Set<String> fields(String... values) {
@@ -61,6 +68,13 @@ public final class AgentPolicy {
         if (action.equals("blender.object.set_transform")
             && !fields.contains("location") && !fields.contains("rotation_euler") && !fields.contains("scale"))
             throw new IllegalArgumentException("TRANSFORM_FIELD_REQUIRED");
+        if ((action.equals("blender.object.modifier_add") ||
+             action.equals("blender.material.assign")) && !fields.contains("name"))
+            throw new IllegalArgumentException("OBJECT_NAME_REQUIRED");
+        if (action.equals("blender.object.modifier_add") && !fields.contains("modifier_type"))
+            throw new IllegalArgumentException("MODIFIER_TYPE_REQUIRED");
+        if (action.equals("blender.scene.render_settings") && fields.isEmpty())
+            throw new IllegalArgumentException("RENDER_SETTINGS_REQUIRED");
         if (action.equals("blender.object.keyframe")
             && !(fields.contains("data_path") && fields.contains("frame") && fields.contains("value")))
             throw new IllegalArgumentException("KEYFRAME_FIELDS_REQUIRED");

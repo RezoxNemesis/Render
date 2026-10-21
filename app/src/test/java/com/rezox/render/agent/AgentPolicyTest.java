@@ -21,7 +21,7 @@ public class AgentPolicyTest {
         }
     }
     @Test public void registryExposesOnlyRealHandlers(){
-        assertEquals(10,AgentPolicy.ACTIONS.size());
+        assertEquals(17,AgentPolicy.ACTIONS.size());
         assertFalse(AgentPolicy.ACTIONS.containsKey("cycles.render"));
         assertFalse(AgentPolicy.ACTIONS.containsKey("shell.exec"));
         assertTrue(AgentPolicy.ACTIONS.containsKey("blender.scene.summary"));
@@ -30,6 +30,13 @@ public class AgentPolicyTest {
         assertTrue(AgentPolicy.ACTIONS.containsKey("blender.object.set_transform"));
         assertTrue(AgentPolicy.ACTIONS.containsKey("blender.object.keyframe"));
         assertTrue(AgentPolicy.ACTIONS.containsKey("blender.project.save_copy"));
+        assertTrue(AgentPolicy.ACTIONS.containsKey("blender.object.add_primitive"));
+        assertTrue(AgentPolicy.ACTIONS.containsKey("blender.object.add_camera"));
+        assertTrue(AgentPolicy.ACTIONS.containsKey("blender.object.add_light"));
+        assertTrue(AgentPolicy.ACTIONS.containsKey("blender.object.modifier_add"));
+        assertTrue(AgentPolicy.ACTIONS.containsKey("blender.material.assign"));
+        assertTrue(AgentPolicy.ACTIONS.containsKey("blender.scene.render_settings"));
+        assertTrue(AgentPolicy.ACTIONS.containsKey("blender.scene.render_still"));
     }
     @Test public void validReadCommand(){AgentPolicy.validate("command-1",1,"engine.status",Collections.emptySet());}
     @Test public void acceptsTypedBpyCommandsButNoPythonShell(){

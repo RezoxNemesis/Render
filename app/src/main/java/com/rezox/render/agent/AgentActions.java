@@ -52,6 +52,35 @@ public final class AgentActions {
                 }else if(field.equals("data_path")){
                     prop.put("type","string").put("enum",new JSONArray(
                         new String[]{"location","rotation_euler","scale"}));
+                }else if(field.equals("kind")){
+                    prop.put("type","string").put("enum",new JSONArray(new String[]{
+                        "UV_SPHERE","ICO_SPHERE","CYLINDER","CONE","PLANE","TORUS"}));
+                }else if(field.equals("light_type")){
+                    prop.put("type","string").put("enum",new JSONArray(new String[]{
+                        "POINT","SUN","SPOT","AREA"}));
+                }else if(field.equals("modifier_type")){
+                    prop.put("type","string").put("enum",new JSONArray(new String[]{
+                        "SUBSURF","BEVEL","SOLIDIFY","MIRROR"}));
+                }else if(field.equals("engine")){
+                    prop.put("type","string").put("enum",new JSONArray(new String[]{
+                        "CYCLES","BLENDER_EEVEE","BLENDER_EEVEE_NEXT","BLENDER_WORKBENCH"}));
+                }else if(field.equals("material_name")){
+                    prop.put("type","string").put("pattern","^[A-Za-z][A-Za-z0-9_-]{0,63}$");
+                }else if(field.equals("resolution_x")||field.equals("resolution_y")){
+                    prop.put("type","integer").put("minimum",16).put("maximum",16384);
+                }else if(field.equals("samples")){
+                    prop.put("type","integer").put("minimum",1).put("maximum",4096);
+                }else if(field.equals("levels")){
+                    prop.put("type","integer").put("minimum",0).put("maximum",6);
+                }else if(field.equals("energy")){
+                    prop.put("type","number").put("minimum",0).put("maximum",10000000);
+                }else if(field.equals("metallic")||field.equals("roughness")){
+                    prop.put("type","number").put("minimum",0).put("maximum",1);
+                }else if(field.equals("width")){
+                    prop.put("type","number").put("minimum",0).put("maximum",1000);
+                }else if(field.equals("color")){
+                    prop.put("type","array").put("minItems",3).put("maxItems",3)
+                        .put("items",new JSONObject().put("type","number").put("minimum",0).put("maximum",1));
                 }else if(field.equals("location") || field.equals("rotation_euler")
                         || field.equals("scale") || field.equals("value")){
                     double minimum = field.equals("scale") ? 0.001 :
@@ -68,9 +97,18 @@ public final class AgentActions {
                 id.equals("blender.scene.set_frame") ? new String[]{"frame"} :
                 id.equals("blender.object.set_transform") ? new String[]{"name"} :
                 id.equals("blender.object.keyframe") ?
-                    new String[]{"name","frame","data_path","value"} : new String[]{};
+                    new String[]{"name","frame","data_path","value"} :
+                id.equals("blender.object.modifier_add") ?
+                    new String[]{"name","modifier_type"} :
+                id.equals("blender.material.assign") ? new String[]{"name"} : new String[]{};
             JSONObject schema = new JSONObject().put("type","object").put("properties",properties)
                 .put("additionalProperties",false).put("required",new JSONArray(required));
+            if (id.equals("blender.scene.render_settings")) {
+                JSONArray anyOf = new JSONArray();
+                for (String field : new String[]{"resolution_x","resolution_y","samples","engine"})
+                    anyOf.put(new JSONObject().put("required",new JSONArray(new String[]{field})));
+                schema.put("anyOf",anyOf);
+            }
             if (id.equals("blender.object.set_transform")) {
                 JSONArray anyOf = new JSONArray();
                 for (String field : new String[]{"location","rotation_euler","scale"})
@@ -80,9 +118,7 @@ public final class AgentActions {
             boolean bpy=id.startsWith("blender.");
             boolean available=!bpy||fullBlender;
             JSONObject descriptor=new JSONObject().put("id",id).put("available",available).put("api_version",1)
-                .put("read_only",!(id.equals("blender.object.add_cube") || id.equals("blender.scene.set_frame")
-                    || id.equals("blender.object.set_transform") || id.equals("blender.object.keyframe")
-                    || id.equals("blender.project.save_copy")))
+                .put("read_only",!bpy || id.equals("blender.scene.summary"))
                 .put("cancellation","between_native_calls").put("input_schema",schema);
             if(bpy&&!available)descriptor.put("reason","Full native Blender editor not packaged in this Android build");
             if(bpy&&available)descriptor.put("requires","Open full Blender editor and wait for bpy timer startup");
