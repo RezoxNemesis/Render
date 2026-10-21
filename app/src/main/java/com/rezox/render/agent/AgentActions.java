@@ -61,6 +61,8 @@ public final class AgentActions {
                 }else if(field.equals("modifier_type")){
                     prop.put("type","string").put("enum",new JSONArray(new String[]{
                         "SUBSURF","BEVEL","SOLIDIFY","MIRROR"}));
+                }else if(field.equals("denoising")){
+                    prop.put("type","boolean");
                 }else if(field.equals("engine")){
                     prop.put("type","string").put("enum",new JSONArray(new String[]{
                         "CYCLES","BLENDER_EEVEE","BLENDER_EEVEE_NEXT","BLENDER_WORKBENCH"}));
@@ -105,7 +107,7 @@ public final class AgentActions {
                 .put("additionalProperties",false).put("required",new JSONArray(required));
             if (id.equals("blender.scene.render_settings")) {
                 JSONArray anyOf = new JSONArray();
-                for (String field : new String[]{"resolution_x","resolution_y","samples","engine"})
+                for (String field : new String[]{"resolution_x","resolution_y","samples","engine","denoising"})
                     anyOf.put(new JSONObject().put("required",new JSONArray(new String[]{field})));
                 schema.put("anyOf",anyOf);
             }

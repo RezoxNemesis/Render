@@ -260,7 +260,7 @@ def _model_action(command, scene):
                 "executed_by": "bpy-main-thread-on-android"}
 
     if action == "blender.scene.render_settings":
-        allowed = {"resolution_x", "resolution_y", "samples", "engine"}
+        allowed = {"resolution_x", "resolution_y", "samples", "engine", "denoising"}
         if set(args) - allowed or not args:
             raise ValueError("INVALID_RENDER_SETTINGS")
         for key in ("resolution_x", "resolution_y"):
@@ -270,11 +270,17 @@ def _model_action(command, scene):
         samples = args.get("samples")
         if samples is not None and (type(samples) is not int or samples < 1 or samples > 4096):
             raise ValueError("INVALID_RENDER_SAMPLES")
+        denoising = args.get("denoising")
+        if "denoising" in args and type(denoising) is not bool:
+            raise ValueError("INVALID_DENOISING_SETTING")
         engine = args.get("engine")
         if engine is not None and engine not in (
             "CYCLES", "BLENDER_EEVEE", "BLENDER_EEVEE_NEXT", "BLENDER_WORKBENCH"
         ):
             raise ValueError("INVALID_RENDER_ENGINE")
+        effective_engine = engine if engine is not None else scene.render.engine
+        if (samples is not None or denoising is not None) and effective_engine != "CYCLES":
+            raise ValueError("CYCLES_SETTINGS_REQUIRE_CYCLES_ENGINE")
         if engine is not None:
             try:
                 scene.render.engine = engine
@@ -288,14 +294,22 @@ def _model_action(command, scene):
         if "resolution_x" in args or "resolution_y" in args:
             scene.render.resolution_percentage = 100
         if samples is not None:
-            if scene.render.engine != "CYCLES":
-                raise ValueError("CYCLES_SAMPLES_REQUIRE_CYCLES_ENGINE")
             scene.cycles.samples = samples
+        if denoising is not None:
+            layer = getattr(bpy.context.view_layer, "cycles", None)
+            if layer is None or not hasattr(layer, "use_denoising"):
+                raise RuntimeError("CYCLES_DENOISING_OPTION_UNAVAILABLE")
+            layer.use_denoising = denoising
+        layer = getattr(bpy.context.view_layer, "cycles", None)
+        active_denoising = bool(layer.use_denoising) if (
+            scene.render.engine == "CYCLES" and layer is not None and
+            hasattr(layer, "use_denoising")) else None
         return {"resolution_x": scene.render.resolution_x,
                 "resolution_y": scene.render.resolution_y,
                 "resolution_percentage": scene.render.resolution_percentage,
                 "engine": scene.render.engine,
                 "samples": int(scene.cycles.samples) if scene.render.engine == "CYCLES" else None,
+                "denoising": active_denoising,
                 "executed_by": "bpy-main-thread-on-android"}
 
     if action == "blender.scene.render_still":

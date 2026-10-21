@@ -31,7 +31,7 @@ public final class AgentPolicy {
         registry.put("blender.object.add_light", fields("name", "light_type", "location", "energy", "color"));
         registry.put("blender.object.modifier_add", fields("name", "modifier_type", "levels", "width"));
         registry.put("blender.material.assign", fields("name", "material_name", "color", "metallic", "roughness"));
-        registry.put("blender.scene.render_settings", fields("resolution_x", "resolution_y", "samples", "engine"));
+        registry.put("blender.scene.render_settings", fields("resolution_x", "resolution_y", "samples", "engine", "denoising"));
         registry.put("blender.scene.render_still", Collections.emptySet());
         ACTIONS = Collections.unmodifiableMap(registry);
     }

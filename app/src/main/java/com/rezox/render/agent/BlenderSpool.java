@@ -140,6 +140,8 @@ public final class BlenderSpool {
         }
         if("blender.scene.render_settings".equals(action)){
             if(args.length()==0)throw new IllegalArgumentException("RENDER_SETTINGS_REQUIRED");
+            if(args.has("denoising") && !(args.get("denoising") instanceof Boolean))
+                throw new IllegalArgumentException("INVALID_DENOISING_SETTING");
             for(String field:new String[]{"resolution_x","resolution_y","samples"}){
                 if(args.has(field)){
                     Object value=args.get(field);

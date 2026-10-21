@@ -109,10 +109,12 @@ def main():
         assert len(bpy.data.objects["RenderSphere"].data.materials)>=1
 
         configured=submit("blender.scene.render_settings",{
-            "resolution_x":64,"resolution_y":64,"engine":"CYCLES","samples":2})
+            "resolution_x":64,"resolution_y":64,"engine":"CYCLES","samples":2,
+            "denoising":False})
         assert configured["state"]=="succeeded",configured
         assert bpy.context.scene.render.resolution_x==64
         assert bpy.context.scene.render.resolution_percentage==100
+        assert bpy.context.view_layer.cycles.use_denoising is False
 
         invalid_mat=submit("blender.material.assign",{
             "name":"RenderSphere","color":[1,0,2]})
