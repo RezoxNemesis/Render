@@ -35,7 +35,7 @@ public final class RenderHubActivity extends Activity {
         StudioUi.add(page,brand);
         StudioUi.space(page,30);
 
-        StudioUi.add(page,StudioUi.label(this,"CREATION SPACE  /  V 0.11"));
+        StudioUi.add(page,StudioUi.label(this,"CREATION SPACE  /  V 0.15"));
         StudioUi.space(page,10);
         StudioUi.add(page,StudioUi.text(this,"Your 3D studio.\nNow in your pocket.",31,StudioUi.WHITE,true));
         StudioUi.space(page,9);
@@ -70,9 +70,19 @@ public final class RenderHubActivity extends Activity {
         StudioUi.add(editor,StudioUi.text(this,
             "Model  •  Sculpt  •  Rig  •  Animate  •  Render",13,StudioUi.MUTED,false));
         StudioUi.space(editor,17);
-        TextView open=StudioUi.action(this,"LAUNCH & CHECK ENGINE     ↗",StudioUi.PRIMARY);
+        StudioUi.add(editor,StudioUi.text(this,
+            "PORTRAIT: a touch-size viewport with a focus toggle. LANDSCAPE: the complete Blender multi-panel desktop layout. All native tools and render quality are retained.",
+            12,StudioUi.MUTED,false));
+        StudioUi.space(editor,14);
+        TextView open=StudioUi.action(this,"OPEN PORTRAIT FOCUS     ↗",StudioUi.PRIMARY);
         StudioUi.add(editor,open);
-        open.setOnClickListener(v->startActivity(new Intent(this,EditorLaunchActivity.class)));
+        open.setContentDescription("Open Blender portrait mobile viewport focus");
+        open.setOnClickListener(v->launchEditor("portrait"));
+        StudioUi.space(editor,9);
+        TextView landscape=StudioUi.action(this,"OPEN FULL LANDSCAPE EDITOR     ↗",StudioUi.SECONDARY);
+        StudioUi.add(editor,landscape);
+        landscape.setContentDescription("Open full native Blender landscape studio");
+        landscape.setOnClickListener(v->launchEditor("landscape"));
         StudioUi.add(page,editor);
         StudioUi.space(page,14);
 
@@ -110,5 +120,9 @@ public final class RenderHubActivity extends Activity {
         StudioUi.add(page,StudioUi.text(this,
             "Render is an independent experimental Android port. The real editor requires compatible Vulkan drivers; the agent's relay only transfers commands and results.",
             12,StudioUi.MUTED,false));
+    }
+    private void launchEditor(String mode) {
+        org.blender.blender.BlenderMobileControls.setMode(this,mode);
+        startActivity(new Intent(this,EditorLaunchActivity.class));
     }
 }
