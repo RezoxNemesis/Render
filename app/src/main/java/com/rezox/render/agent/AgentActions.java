@@ -114,6 +114,12 @@ public final class AgentActions {
             } catch(PackageManager.NameNotFoundException missing) {
                 result.put("installedVersionName","unavailable");
             }
+            // A recent Blender Python timer heartbeat proves that typed bpy
+            // commands can be delivered; a bundled editor alone does not.
+            File ready=new File(context.getFilesDir(),"render_bpy_jobs/ready");
+            long age=System.currentTimeMillis()-ready.lastModified();
+            result.put("editorCommandBridgeReady",
+                ready.isFile() && age>=0 && age<15000);
             return result;
         }
         if (action.equals("gpu.info")) return new JSONObject().put("native_status",RenderNative.gpuInfo())
