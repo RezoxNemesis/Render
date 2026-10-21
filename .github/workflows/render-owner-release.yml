@@ -68,7 +68,7 @@ jobs:
 
       - name: Build and test native command bridge
         run: |
-          PYTHONPATH=tools python3 -m unittest discover -s tools -p 'test_*.py' -v
+          PYTHONPATH=tools python3 -m unittest tools/test_assemble_full_native.py tools/test_blender_bpy_bridge.py tools/test_lively_scene_contract.py tools/test_lively_scene_mock.py -v
           gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
 
       - name: Fetch pinned Blender binary and native source
