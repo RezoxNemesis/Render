@@ -21,8 +21,11 @@ public class AgentPolicyTest {
         }
     }
     @Test public void registryExposesOnlyRealHandlers(){
-        assertEquals(22,AgentPolicy.ACTIONS.size());
+        assertEquals(25,AgentPolicy.ACTIONS.size());
         assertTrue(AgentPolicy.ACTIONS.containsKey("agent.diagnostics"));
+        assertTrue(AgentPolicy.ACTIONS.containsKey("agent.capabilities"));
+        assertTrue(AgentPolicy.ACTIONS.containsKey("blender.scene.batch_assembly"));
+        assertTrue(AgentPolicy.ACTIONS.containsKey("blender.scene.visual_audit"));
         assertFalse(AgentPolicy.ACTIONS.containsKey("cycles.render"));
         assertFalse(AgentPolicy.ACTIONS.containsKey("shell.exec"));
         assertTrue(AgentPolicy.ACTIONS.containsKey("blender.scene.summary"));
@@ -47,6 +50,15 @@ public class AgentPolicyTest {
     @Test public void acceptsTypedBpyCommandsButNoPythonShell(){
         AgentPolicy.validate("id-1",1,"blender.scene.summary",Collections.emptySet());
         AgentPolicy.validate("inspect-1",1,"agent.diagnostics",Collections.emptySet());
+        AgentPolicy.validate("cap-1",1,"agent.capabilities",Collections.emptySet());
+        AgentPolicy.validate("audit-1",1,"blender.scene.visual_audit",Collections.emptySet());
+        AgentPolicy.validate("batch-1",1,"blender.scene.batch_assembly",
+            new HashSet<>(Arrays.asList("assembly","parts")));
+        try {
+            AgentPolicy.validate("batch-2",1,"blender.scene.batch_assembly",
+                Collections.singleton("assembly"));
+            fail("Batch cannot be partially specified");
+        }catch(IllegalArgumentException expected){} 
         AgentPolicy.validate("id-2",1,"blender.object.add_cube",new HashSet<>(Arrays.asList("name","location","size")));
         try{AgentPolicy.validate("id-3",1,"blender.object.add_cube",Collections.singleton("code"));fail();}
         catch(IllegalArgumentException expected){}
