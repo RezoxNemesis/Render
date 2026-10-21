@@ -9,8 +9,8 @@ android {
         applicationId = "com.rezox.render"
         minSdk = 28
         targetSdk = 35
-        versionCode = 6
-        versionName = "0.6.0-gzip-blo"
+        versionCode = 7
+        versionName = "0.7.0-id-name-previews"
 
         ndk { abiFilters += listOf("arm64-v8a") }
         externalNativeBuild {

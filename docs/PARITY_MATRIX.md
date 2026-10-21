@@ -5,6 +5,7 @@ Status vocabulary: NOT_STARTED, IN_PROGRESS, VERIFIED, BLOCKED. Every row must b
 | Feature | Status | Evidence needed |
 | --- | --- | --- |
 | Genuine Blender gzip FileReader integration | IN_PROGRESS | host real zlib gzip fixtures and Android arm64 build; zstd still missing |
+| Saved Object/Scene/Mesh ID-name previews | IN_PROGRESS | real Blender fixtures and Android arm64 build; no BKE instances |
 | SDNA schema and saved ID-token diagnostic index | IN_PROGRESS | synthetic collision tests; real Blender fixtures and Android runtime pending |
 | Read-only SDNA schema index and datablock-category count | IN_PROGRESS | host synthetic tests; need actual .blend fixtures and real phone runtime |
 | Upstream Blender BLO header and BHead decoder | IN_PROGRESS | host tests and Android crosscompile; full scene decoder not integrated |

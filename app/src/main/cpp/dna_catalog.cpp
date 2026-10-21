@@ -3,6 +3,7 @@
 // Based on Blender makesdna/intern/dna_genfile.cc's NAME/TYPE/TLEN/STRC format.
 // Do NOT claim this is Blender's full SDNA decode, .blend scene loader, or depsgraph.
 #include "dna_catalog.h"
+#include "id_name_preview.h"
 
 #include "blender_reader_adapter.hh"
 #include "BLO_core_bhead.hh"
@@ -129,7 +130,8 @@ bool ReadCount(Cursor &cursor, uint32_t &count)
   return true;
 }
 
-bool DecodeSchema(const std::vector<uint8_t> &dna, DnaCatalogResult &result)
+bool DecodeSchema(const std::vector<uint8_t> &dna, DnaCatalogResult &result,
+                  uint32_t pointer_bytes, IdNameLayout &id_layout)
 {
   Cursor in(dna);
   if (!in.Tag("SDNA") || !in.Tag("NAME")) return false;
@@ -180,6 +182,9 @@ bool DecodeSchema(const std::vector<uint8_t> &dna, DnaCatalogResult &result)
     seen_struct_type[type_index] = true;
     if (!in.Fits(static_cast<size_t>(member_count) * 4)) return false;
     if (preview.size() < kMaxPreviewTypes) preview.push_back(types[type_index]);
+    const bool is_id_struct = types[type_index] == "ID";
+    uint64_t id_member_offset = 0;
+    bool id_layout_ok = pointer_bytes == 4 || pointer_bytes == 8;
     // Real Blender validates struct sizes and arrays during its full DNA decode.
     // Here we only validate bounded field indices; never reconstruct scene memory.
     for (uint16_t m = 0; m < member_count; ++m) {
@@ -188,6 +193,17 @@ bool DecodeSchema(const std::vector<uint8_t> &dna, DnaCatalogResult &result)
       if (!in.U16(field_type) || !in.U16(name_index) ||
           field_type >= types.size() || name_index >= names.size()) return false;
       ++total_fields;
+      const std::string &member = names[name_index];
+      const std::string &field_type_name = types[field_type];
+      if (m == 0 && member == "id" && field_type_name == "ID") {
+        if (types[type_index] == "Object") id_layout.object_struct = static_cast<int>(i);
+        if (types[type_index] == "Scene") id_layout.scene_struct = static_cast<int>(i);
+        if (types[type_index] == "Mesh") id_layout.mesh_struct = static_cast<int>(i);
+      }
+      if (is_id_struct && id_layout_ok) {
+        id_layout_ok = AdvanceIdLayout(member, field_type_name, lengths[field_type],
+                                       pointer_bytes, id_member_offset, id_layout);
+      }
     }
     (void)lengths[type_index];
   }
@@ -244,6 +260,7 @@ DnaCatalogResult InspectDnaCatalog(const std::string &path)
                 "Upstream BHead reader cannot decode cross-endian raw blocks yet");
 
   bool found_dna = false;
+  IdNameLayout id_layout;
   uint64_t inflated = 0;
   std::unordered_set<uintptr_t> id_tokens;
   for (uint64_t i = 0; i < kMaxDiagnosticBlocks; ++i) {
@@ -261,6 +278,10 @@ DnaCatalogResult InspectDnaCatalog(const std::string &path)
         return Fail(r, DnaCatalogStatus::NoSchema, "No DNA1 schema block");
       r.unique_id_tokens = id_tokens.size();
       r.status = DnaCatalogStatus::Indexed;
+      const SavedIdNames previews = PreviewSavedIdNames(path, is_gzip, id_layout);
+      r.sample_object_names = previews.objects;
+      r.sample_scene_names = previews.scenes;
+      r.sample_mesh_names = previews.meshes;
       return r;
     }
     std::array<char, 4> code{};
@@ -286,7 +307,7 @@ DnaCatalogResult InspectDnaCatalog(const std::string &path)
       if (dna.empty() || reader->read(reader, dna.data(), dna.size()) !=
                              static_cast<int64_t>(dna.size()))
         return Fail(r, DnaCatalogStatus::InvalidBlock, "Truncated DNA1 payload");
-      if (!DecodeSchema(dna, r))
+      if (!DecodeSchema(dna, r, static_cast<uint32_t>(header->pointer_size), id_layout))
         return Fail(r, DnaCatalogStatus::InvalidSchema, "Invalid SDNA NAME/TYPE/TLEN/STRC");
       if (is_gzip) inflated += static_cast<uint64_t>(b.len);
       found_dna = true;
@@ -338,6 +359,21 @@ std::string DnaCatalogJson(const DnaCatalogResult &r)
   for (size_t i = 0; i < r.sample_structures.size(); ++i) {
     if (i) o << ",";
     o << "\"" << EscapeJson(r.sample_structures[i]) << "\"";
+  }
+  o << "],\"sampleObjectNames\":[";
+  for (size_t i = 0; i < r.sample_object_names.size(); ++i) {
+    if (i) o << ",";
+    o << "\"" << EscapeJson(r.sample_object_names[i]) << "\"";
+  }
+  o << "],\"sampleSceneNames\":[";
+  for (size_t i = 0; i < r.sample_scene_names.size(); ++i) {
+    if (i) o << ",";
+    o << "\"" << EscapeJson(r.sample_scene_names[i]) << "\"";
+  }
+  o << "],\"sampleMeshNames\":[";
+  for (size_t i = 0; i < r.sample_mesh_names.size(); ++i) {
+    if (i) o << ",";
+    o << "\"" << EscapeJson(r.sample_mesh_names[i]) << "\"";
   }
   o << "],\"sceneLoaded\":false,\"engineIntegrated\":false,\"message\":\""
     << EscapeJson(r.message) << "\"}";

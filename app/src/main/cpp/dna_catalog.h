@@ -35,6 +35,9 @@ struct DnaCatalogResult {
   uint32_t structures = 0;
   uint64_t structure_fields = 0;
   std::vector<std::string> sample_structures;
+  std::vector<std::string> sample_object_names;
+  std::vector<std::string> sample_scene_names;
+  std::vector<std::string> sample_mesh_names;
   std::string message;
 };
 

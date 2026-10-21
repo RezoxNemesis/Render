@@ -31,6 +31,9 @@ render::DnaCatalogResult CheckReal(const char *path, const bool animated)
   VERIFY(r.id_blocks >= r.object_blocks + r.mesh_blocks + r.scene_blocks,
          "Top-level ID code inventory omitted real object or mesh types");
   VERIFY(r.unique_id_tokens >= 2, "Real Blender saved ID pointers were not indexed");
+  VERIFY(!r.sample_object_names.empty(), "No saved Blender Object ID names were read");
+  VERIFY(!r.sample_scene_names.empty(), "No saved Blender Scene ID names were read");
+  VERIFY(!r.sample_mesh_names.empty(), "No saved Blender Mesh ID names were read");
   VERIFY(report.find("\"sceneLoaded\":false") != std::string::npos,
          "Diagnostic must never claim to load a Blender scene");
   return r;
@@ -46,6 +49,8 @@ int main(int argc, char **argv)
          "Gzip fixture changed native object block indexing");
   VERIFY(gzip.mesh_blocks == basic.mesh_blocks,
          "Gzip fixture changed native mesh block indexing");
+  VERIFY(gzip.sample_object_names == basic.sample_object_names,
+         "Gzip changed on-disk saved Object ID names");
   VERIFY(gzip.structures == basic.structures,
          "Gzip fixture changed SDNA schema parsing");
   VERIFY(advanced.scene_blocks >= basic.scene_blocks,
