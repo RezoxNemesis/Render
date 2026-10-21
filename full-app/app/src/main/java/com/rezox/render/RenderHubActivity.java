@@ -4,6 +4,9 @@ import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Color;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import com.rezox.render.agent.AgentWorkPresence;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -18,6 +21,20 @@ import com.rezox.render.ui.StudioViewportArt;
  * Android Activity; no inert promotional tiles or unsupported capabilities.
  */
 public final class RenderHubActivity extends Activity {
+    private TextView agentWorkStatus;
+    private final Handler ui=new Handler(Looper.getMainLooper());
+    private final Runnable refresh=new Runnable(){
+        @Override public void run(){
+            if(agentWorkStatus!=null){
+                AgentWorkPresence.Snapshot work=AgentWorkPresence.snapshot(RenderHubActivity.this);
+                agentWorkStatus.setText((work.isWorking()?"👆  ":
+                        work.needsRecovery()?"⚠  ":"✋  ")+work.description());
+            }
+            ui.postDelayed(this,1000);
+        }
+    };
+    @Override public void onResume(){super.onResume();ui.post(refresh);}
+    @Override public void onPause(){ui.removeCallbacks(refresh);super.onPause();}
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         LinearLayout page=StudioUi.page(this);
@@ -94,6 +111,11 @@ public final class RenderHubActivity extends Activity {
         StudioUi.add(agent,StudioUi.text(this,
             "Pair your private relay, inspect native actions, run approved tasks and view activity history.",
             13,0xFFC1B8DA,false));
+        StudioUi.space(agent,12);
+        agentWorkStatus=StudioUi.text(this,"✋  No native Blender command is running",
+                13,StudioUi.WHITE,true);
+        agentWorkStatus.setContentDescription("Render Studio live command status");
+        StudioUi.add(agent,agentWorkStatus);
         StudioUi.space(agent,15);
         TextView bridge=StudioUi.action(this,"OPEN AGENT CONTROL     →",StudioUi.PURPLE);
         StudioUi.add(agent,bridge);
