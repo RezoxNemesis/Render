@@ -1,7 +1,7 @@
 name: Render Full Native Blender + Agent APK
 on:
   push:
-    branches: ["feature/android-native-foundation-20261021", "feature/lively-building-native-animation-20261022"]
+    branches: ["feature/android-native-foundation-20261021", "feature/lively-building-native-animation-20261022", "feature/render-autonomy-live-status-signing-hardening-20261022"]
     paths:
       - "full-app/**"
       - "app/src/main/java/**"
@@ -10,6 +10,9 @@ on:
       - "tools/test_blender_bpy_bridge.py"
       - "tools/test_lively_scene_contract.py"
       - "tools/test_lively_scene_mock.py"
+      - "tools/test_native_autonomy_security.py"
+      - "tools/configure_owner_signing.py"
+      - "tools/assemble_full_native.py"
       - "app/src/test/java/**"
       - "tools/test_real_blender_bpy.py"
       - "tools/assemble_full_native.py"
@@ -28,7 +31,7 @@ jobs:
         with:
           python-version: "3.13"
       - name: Verify full-engine staging rejects tampered files
-        run: PYTHONPATH=tools python -m unittest tools/test_assemble_full_native.py tools/test_blender_bpy_bridge.py tools/test_lively_scene_contract.py tools/test_lively_scene_mock.py -v
+        run: PYTHONPATH=tools python -m unittest tools/test_assemble_full_native.py tools/test_blender_bpy_bridge.py tools/test_lively_scene_contract.py tools/test_lively_scene_mock.py tools/test_native_autonomy_security.py -v
 
   blender-bpy-integration:
     runs-on: ubuntu-24.04
