@@ -49,6 +49,51 @@ def main():
         assert tuple(bpy.data.objects["NativeRenderCube"].location)==(1.0,2.0,3.0)
         assert len(bpy.context.scene.objects)==before+1
 
+
+        frame_result=submit("blender.scene.set_frame",{"frame":12})
+        assert frame_result["state"]=="succeeded",frame_result
+        assert frame_result["result"]["frame"]==12,frame_result
+        assert bpy.context.scene.frame_current==12
+
+        transform=submit("blender.object.set_transform",{
+            "name":"NativeRenderCube","location":[0.0,1.0,2.0],
+            "rotation_euler":[0.0,0.0,0.5],"scale":[1.0,2.0,1.0],
+        })
+        assert transform["state"]=="succeeded",transform
+        selected=bpy.context.scene.objects["NativeRenderCube"]
+        assert tuple(selected.location)==(0.0,1.0,2.0)
+        assert tuple(selected.scale)==(1.0,2.0,1.0)
+        assert abs(selected.rotation_euler.z-0.5)<0.000001
+
+        for frame,position in [(1,[0,0,0]),(24,[3,0,1])]:
+            key=submit("blender.object.keyframe",{
+                "name":"NativeRenderCube","data_path":"location",
+                "frame":frame,"value":position,
+            })
+            assert key["state"]=="succeeded",key
+            assert key["result"]["inserted"] is True
+            assert key["result"]["frame"]==frame
+        assert selected.animation_data is not None
+        assert selected.animation_data.action is not None
+        bpy.context.scene.frame_set(24)
+        assert abs(selected.location.x-3.0)<0.0001
+        assert abs(selected.location.z-1.0)<0.0001
+
+        invalid_key=submit("blender.object.keyframe",{
+            "name":"NativeRenderCube","data_path":"__class__","frame":25,
+            "value":[1,2,3]})
+        assert invalid_key["state"]=="failed"
+        assert invalid_key["error"]=="INVALID_KEYFRAME_PATH"
+
+        missing=submit("blender.object.set_transform",{
+            "name":"NotAnObject","location":[1,2,3]})
+        assert missing["state"]=="failed"
+        assert missing["error"]=="OBJECT_NOT_FOUND"
+
+        bad_frame=submit("blender.scene.set_frame",{"frame":"24"})
+        assert bad_frame["state"]=="failed"
+        assert bad_frame["error"]=="INVALID_FRAME"
+
         invalid=submit("python.eval",{"source":"raise AssertionError('not authorized')"})
         assert invalid["state"]=="failed",invalid
         assert invalid["error"]=="NATIVE_BLENDER_ACTION_UNAVAILABLE"
@@ -63,7 +108,7 @@ def main():
         assert expired["state"]=="failed" and expired["error"]=="COMMAND_EXPIRED",expired
         assert "MustNotExist" not in bpy.data.objects
 
-        print("PASS: genuine Blender bpy scene introspection, cube creation, invalid action and expired job")
+        print("PASS: real Blender bpy scene, keyframes, transforms, security and expired jobs")
 
 if __name__=="__main__":
     main()
