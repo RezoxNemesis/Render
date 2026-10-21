@@ -145,8 +145,19 @@ public final class VideoStudioNativeBridgeService extends Service {
             try { outcome.put("ok",false).put("error",code).put("state",state); }
             catch(Exception ignored){}
         } finally {
+            // Every completed IPC receipt clearly identifies the actual
+            // Android executor so ChatGPT can distinguish Render from VideoStudio.
+            try {
+                outcome.put("target_app",RenderConnectionCard.APP);
+                outcome.put("target_package",RenderConnectionCard.PACKAGE);
+                outcome.put("render_public_id",secrets.renderPublicId());
+                outcome.put("transport","VideoStudio MCP v3 > Android Binder");
+            } catch(Exception ignored) {}
             if(journaled) {
-                try {journal.finish(id,state,outcome);}
+                try {
+                    journal.finish(id,state,outcome);
+                    secrets.recordVideoStudioNativeResult();
+                }
                 catch(Exception error){
                     outcome=error("RENDER_JOURNAL_WRITE_FAILED");
                     secrets.videoStudioBridgeEnabled(false);
