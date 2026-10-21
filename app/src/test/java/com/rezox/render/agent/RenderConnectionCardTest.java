@@ -26,9 +26,10 @@ public class RenderConnectionCardTest {
         assertTrue(card.contains("awaiting a real native command result"));
     }
     @Test public void enabledIsDifferentFromVerifiedOrDeployed(){
-        assertTrue(RenderConnectionCard.localStatus(ID,true,350,0).contains("Waiting for first confirmed"));
+        assertTrue(RenderConnectionCard.localStatus(ID,true,353,0).contains("NOT READY"));
+        assertTrue(RenderConnectionCard.localStatus(ID,true,354,0).contains("Waiting for first confirmed"));
         assertTrue(RenderConnectionCard.localStatus(ID,true,340,0).contains("NOT READY"));
-        assertTrue(RenderConnectionCard.localStatus(ID,false,350,12345).contains("STOPPED"));
-        assertTrue(RenderConnectionCard.localStatus(ID,true,350,12345).contains("NATIVE COMMAND CONFIRMED"));
+        assertTrue(RenderConnectionCard.localStatus(ID,false,354,12345).contains("STOPPED"));
+        assertTrue(RenderConnectionCard.localStatus(ID,true,354,12345).contains("NATIVE COMMAND CONFIRMED"));
     }
 }

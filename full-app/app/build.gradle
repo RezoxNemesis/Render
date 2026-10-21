@@ -9,8 +9,8 @@ android {
         applicationId 'com.rezox.render'
         minSdk 31
         targetSdk 34
-        versionCode 15
-        versionName '0.14.1-direct-share-primary'
+        versionCode 16
+        versionName '0.14.2-direct-binder-compatibility'
         ndk { abiFilters 'arm64-v8a' }
     }
     sourceSets {

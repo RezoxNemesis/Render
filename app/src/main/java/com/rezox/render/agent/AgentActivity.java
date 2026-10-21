@@ -248,7 +248,7 @@ public final class AgentActivity extends Activity {
         if(installed<RenderConnectionCard.MIN_VIDEOSTUDIO_BUILD){
             new AlertDialog.Builder(this)
                 .setTitle("Updated VideoStudio required")
-                .setMessage("The compatible VideoStudio v3.5.0+ Android app is not visible on this phone. Install the updated VideoStudio APK without deleting its app data. Then return here. You can share the Render setup card meanwhile.")
+                .setMessage("The compatible VideoStudio v3.5.4+ Android app is not visible on this phone. Install the updated VideoStudio APK without deleting its app data. Then return here. You can share the Render setup card meanwhile.")
                 .setNegativeButton("Close",null)
                 .setPositiveButton("Share setup",(d,w)->shareRenderConnection()).show();
             return;
@@ -295,7 +295,7 @@ public final class AgentActivity extends Activity {
             "VideoStudio installed (build "+version+").\n"+
             (version>=RenderConnectionCard.MIN_VIDEOSTUDIO_BUILD
             ?"Compatible with the current native Binder bridge."
-            :"Update VideoStudio to build 350 or newer.");
+            :"Update VideoStudio to build 354 or newer.");
         new AlertDialog.Builder(this)
             .setTitle("Render ↔ VideoStudio")
             .setMessage(result+"\n\n"+localBridgeStatus()

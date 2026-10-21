@@ -11,7 +11,7 @@ public final class RenderConnectionCard {
     public static final String APP = "Render Studio";
     public static final String PACKAGE = "com.rezox.render";
     public static final String VIDEOSTUDIO_PACKAGE = "com.rezoxnemesis.videostudio";
-    public static final long MIN_VIDEOSTUDIO_BUILD = 350;
+    public static final long MIN_VIDEOSTUDIO_BUILD = 354;
     public static final String TRANSPORT = "VideoStudio MCP v3 -> native Android Binder";
     public static final String ACTION_PREFIX = "render.";
 
@@ -55,7 +55,7 @@ public final class RenderConnectionCard {
         if (!validPublicId(publicId)) throw new IllegalArgumentException("INVALID_RENDER_PUBLIC_ID");
         if (!enabled) return "STOPPED / VideoStudio cannot control Render. Public ID: " + publicId;
         if (videoBuild < MIN_VIDEOSTUDIO_BUILD)
-            return "NOT READY / Install or update VideoStudio Native Agent v3.5.0+ (build 350).";
+            return "NOT READY / Install or update VideoStudio Native Agent v3.5.4+ (build 354).";
         if (lastResultMillis <= 0)
             return "READY ON PHONE / Waiting for first confirmed Render command from VideoStudio MCP.";
         return "NATIVE COMMAND CONFIRMED / Last Render result at " +
