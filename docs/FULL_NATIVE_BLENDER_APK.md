@@ -47,3 +47,6 @@ A separate `EditorLaunchActivity` now runs native-library preflight and extracts
 
 ## v0.12 VideoStudio MCP shared transport
 Native Render is a second authenticated Android executor beneath the existing VideoStudio v3 Worker and connected ChatGPT MCP. The owner enters a one-use code obtained from the existing VideoStudio MCP; the original private owner key never leaves VideoStudio. The Worker runs no Blender code, and VideoStudio's original projects and queue remain separate. The Worker additive channel must be deployed and the Render phone paired and started before native command results are possible. See docs/AGENT_ACTIVATION.md.
+
+## v0.13 — same-phone VideoStudio Native Agent IPC
+An owner-enabled Binder Messenger in Render receives typed operations only from Android's UID-verified VideoStudio package. The existing VideoStudio MCP v3 Worker needs no update for this fallback: ChatGPT talks to the installed VideoStudio Native Agent, which forwards authorized Render actions on-phone. Render does all Blender modeling, animation and file handling locally and returns results to VideoStudio for its MCP completion. No VideoStudio owner credential or project media is transferred. The separately queued Cloudflare Worker Render child-device feature remains experimental until deployed. Device smoke testing is still required.

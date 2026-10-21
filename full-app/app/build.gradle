@@ -9,8 +9,8 @@ android {
         applicationId 'com.rezox.render'
         minSdk 31
         targetSdk 34
-        versionCode 12
-        versionName '0.12.0-shared-videostudio-mcp'
+        versionCode 13
+        versionName '0.13.0-videostudio-native-ipc'
         ndk { abiFilters 'arm64-v8a' }
     }
     sourceSets {

@@ -1,3 +1,36 @@
+## Direct local VideoStudio MCP → Render Android (no Worker deployment required)
+
+This is the fastest transport to test. It requires UPDATED APKs for both VideoStudio and Render,
+but no Cloudflare changes, new server, Railway, or extra ChatGPT connection.
+
+1. Install both updated experimental Android builds. Back up app-owned projects
+   before uninstalling a debug-signed app; the signing certificate can change.
+2. In Render → ChatGPT × Render, choose ENABLE DIRECT VIDEOSTUDIO BRIDGE and
+   approve the local prompt. This bridge defaults OFF and can be stopped locally.
+3. Use the original VideoStudio MCP in ChatGPT. Request action
+   render.engine.status using the existing app_execute or queue_video_edit
+   compatibility action. The Worker sends it to VIDEO STUDIO's original queue.
+4. The VideoStudio foreground Native Agent sends the typed command through
+   an explicit Android Binder Messenger to Render. Render checks the Android
+   kernel-reported sending UID against com.rezoxnemesis.videostudio and verifies
+   the owner-enabled local bridge before executing actual Render operations.
+5. Render sends native result/evidence back through Binder. VideoStudio returns
+   the result through the ORIGINAL MCP command-result tool. A queued receipt
+   is not a verified completed Blender operation.
+
+Both applications retain independent project stores. VideoStudio owner keys
+are never transferred to Render, and no Gallery browsing or arbitrary Python
+execution is exposed. Render uses a durable job journal and does not replay
+uncertain mutations after process death. STOP disables the on-phone bridge.
+
+The existing Cloudflare Worker additive Render child-device route remains in
+VideoStudio-MCP draft PR #142; deployment of that server-side route is NOT
+required for this direct Android IPC mode. The original VideoStudio Native
+Agent DOES need to be active and connected for direct IPC to execute.
+
+Hardware and real end-to-end on-phone Binder execution remain unverified until
+both APKs are installed and a native command result has been observed.
+
 ## Preferred connection: existing VideoStudio MCP v3 — no extra relay
 
 Render shares the existing VideoStudio Cloudflare Worker and connected ChatGPT MCP,
