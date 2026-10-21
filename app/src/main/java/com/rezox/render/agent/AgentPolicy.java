@@ -18,6 +18,7 @@ public final class AgentPolicy {
         Map<String, Set<String>> registry = new LinkedHashMap<>();
         registry.put("engine.status", Collections.emptySet());
         registry.put("agent.diagnostics", Collections.emptySet());
+        registry.put("agent.capabilities", Collections.emptySet());
         registry.put("projects.list", fields("offset", "limit"));
         registry.put("projects.inspect", fields("project_id", "expected_sha256"));
         registry.put("gpu.info", Collections.emptySet());
@@ -36,6 +37,8 @@ public final class AgentPolicy {
         registry.put("blender.scene.render_still", Collections.emptySet());
         registry.put("blender.project.restore_scene", fields("project_id", "expected_sha256"));
         registry.put("blender.scene.create_lively_project", Collections.emptySet());
+        registry.put("blender.scene.batch_assembly", fields("assembly","parts"));
+        registry.put("blender.scene.visual_audit", Collections.emptySet());
         registry.put("blender.scene.populate_lively", Collections.emptySet());
         registry.put("blender.scene.render_video", Collections.emptySet());
         ACTIONS = Collections.unmodifiableMap(registry);
@@ -64,7 +67,10 @@ public final class AgentPolicy {
         if (version != 1) throw new IllegalArgumentException("UNSUPPORTED_PROTOCOL_VERSION");
         if (!ACTIONS.containsKey(action)) throw new IllegalArgumentException("NATIVE_ACTION_UNAVAILABLE");
         if (!ACTIONS.get(action).containsAll(fields)) throw new IllegalArgumentException("UNKNOWN_ARGUMENT");
-        if (action.equals("blender.project.restore_scene") && !fields.contains("project_id"))
+        if (action.equals("blender.scene.batch_assembly") &&
+            !(fields.contains("assembly") && fields.contains("parts")))
+            throw new IllegalArgumentException("ASSEMBLY_FIELDS_REQUIRED");
+                if (action.equals("blender.project.restore_scene") && !fields.contains("project_id"))
             throw new IllegalArgumentException("PROJECT_ID_REQUIRED");
         if (action.equals("projects.inspect") && !fields.contains("project_id"))
             throw new IllegalArgumentException("PROJECT_ID_REQUIRED");
