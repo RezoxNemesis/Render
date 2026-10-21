@@ -49,29 +49,32 @@ public final class AgentActions {
                 if(field.equals("assembly")){
                     prop.put("type","string").put("pattern","^[A-Za-z][A-Za-z0-9_-]{0,63}$");
                 }else if(field.equals("parts")){
-                    prop.put("type","array").put("minItems",1).put("maxItems",96)
-                        .put("items",new JSONObject().put("type","object")
+                    JSONObject partProperties=new JSONObject();
+                    partProperties.put("name",new JSONObject().put("type","string")
+                            .put("pattern","^[A-Za-z][A-Za-z0-9_-]{0,63}$"));
+                    partProperties.put("kind",new JSONObject().put("type","string")
+                            .put("enum",new JSONArray(new String[]{
+                                    "CUBE","CYLINDER","CONE","UV_SPHERE","PLANE"})));
+                    for(String vec:new String[]{"location","scale","color"}){
+                        double low=vec.equals("scale")?.001:vec.equals("location")?-10000:0;
+                        double high=vec.equals("scale")?1000:vec.equals("location")?10000:1;
+                        partProperties.put(vec,new JSONObject().put("type","array")
+                            .put("minItems",3).put("maxItems",3)
+                            .put("items",new JSONObject().put("type","number")
+                                .put("minimum",low).put("maximum",high)));
+                    }
+                    for(String surface:new String[]{"metallic","roughness","bevel"}){
+                        partProperties.put(surface,new JSONObject().put("type","number")
+                                .put("minimum",0).put("maximum",
+                                    surface.equals("bevel")?.25:1));
+                    }
+                    JSONObject partDefinition=new JSONObject().put("type","object")
                             .put("required",new JSONArray(new String[]{
                                 "name","kind","location","scale"}))
                             .put("additionalProperties",false)
-                            .put("properties",new JSONObject()
-                                .put("name",new JSONObject().put("type","string")
-                                    .put("pattern","^[A-Za-z][A-Za-z0-9_-]{0,63}$"))
-                                .put("kind",new JSONObject().put("type","string")
-                                    .put("enum",new JSONArray(new String[]{
-                                        "CUBE","CYLINDER","CONE","UV_SPHERE","PLANE"}))
-                                .put("location",new JSONObject().put("type","array")
-                                    .put("minItems",3).put("maxItems",3))
-                                .put("scale",new JSONObject().put("type","array")
-                                    .put("minItems",3).put("maxItems",3))
-                                .put("color",new JSONObject().put("type","array")
-                                    .put("minItems",3).put("maxItems",3))
-                                .put("metallic",new JSONObject().put("type","number")
-                                    .put("minimum",0).put("maximum",1))
-                                .put("roughness",new JSONObject().put("type","number")
-                                    .put("minimum",0).put("maximum",1))
-                                .put("bevel",new JSONObject().put("type","number")
-                                    .put("minimum",0).put("maximum",.25))));
+                            .put("properties",partProperties);
+                    prop.put("type","array").put("minItems",1).put("maxItems",96)
+                            .put("items",partDefinition);
                 }else if(field.equals("offset")||field.equals("limit")){
                     prop.put("type","integer").put("minimum",field.equals("offset")?0:1);
                     prop.put("maximum",field.equals("offset")?Integer.MAX_VALUE:200);
@@ -128,7 +131,7 @@ public final class AgentActions {
                 properties.put(field,prop);
             }
             String[] required = id.equals("blender.scene.batch_assembly") ? new String[]{"assembly","parts"} :
-                            String[] required = id.equals("projects.inspect") ? new String[]{"project_id"} :
+                id.equals("projects.inspect") ? new String[]{"project_id"} :
                 id.equals("blender.project.restore_scene") ? new String[]{"project_id"} :
                 id.equals("blender.scene.set_frame") ? new String[]{"frame"} :
                 id.equals("blender.object.set_transform") ? new String[]{"name"} :
