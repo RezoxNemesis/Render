@@ -191,6 +191,7 @@ public final class BlenderSpool {
         File claimed=new File(working,id+".json");
         File resultFile=new File(results,id+".json");
         long timeoutMillis=action.equals("blender.scene.render_video") ? 1800000L :
+            action.equals("blender.scene.populate_lively") ? 120000L :
             action.equals("blender.scene.render_still") ? 480000L :
             action.equals("blender.project.save_copy") ? 120000L : 20000L;
         JSONObject envelope=new JSONObject().put("id",id).put("action",action)
