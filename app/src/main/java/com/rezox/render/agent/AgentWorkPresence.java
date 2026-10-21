@@ -22,6 +22,7 @@ public final class AgentWorkPresence {
     private static final int NOTIFICATION_ID=78;
     private static final long MAX_STALE_MS=35_000L;
     private static final Object LOCK=new Object();
+    private static long lastNotificationAt=0L;
 
     private AgentWorkPresence(){}
 
@@ -73,7 +74,7 @@ public final class AgentWorkPresence {
                     .putString("action",action).putString("stage","Accepted by native executor")
                     .putString("source",source).putLong("started",now)
                     .putLong("updated",now).putInt("progress",-1).apply();
-            notifyOwner(ctx,true);
+            safeNotify(ctx,true,true);
         }
     }
 
@@ -84,7 +85,7 @@ public final class AgentWorkPresence {
             int value=percent<0?-1:Math.max(0,Math.min(100,percent));
             p.edit().putString("stage",stage).putInt("progress",value)
                     .putLong("updated",System.currentTimeMillis()).apply();
-            notifyOwner(ctx,true);
+            safeNotify(ctx,true,false);
         }
     }
 
@@ -98,7 +99,7 @@ public final class AgentWorkPresence {
                     .putString("stage",state.equals("succeeded")?
                         "Native result journaled":"Check native result journal")
                     .putLong("updated",System.currentTimeMillis()).apply();
-            notifyOwner(ctx,false);
+            safeNotify(ctx,false,true);
         }
     }
 
@@ -108,6 +109,15 @@ public final class AgentWorkPresence {
             if("running".equals(prefs(ctx).getString("state","")))
                 finish(ctx,"recovery_required");
         }
+    }
+
+    private static void safeNotify(Context ctx,boolean running,boolean force){
+        long now=System.currentTimeMillis();
+        // Updating notifications for every rendered frame can throttle Android
+        // system UI. The in-app hand still reads the latest stored native stage.
+        if(!force && now-lastNotificationAt<1500L)return;
+        try{notifyOwner(ctx,running);lastNotificationAt=now;}
+        catch(RuntimeException ignored){ /* A denied notification must not abort native work. */ }
     }
 
     private static void notifyOwner(Context ctx,boolean running){
