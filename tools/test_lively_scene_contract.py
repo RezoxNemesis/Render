@@ -10,6 +10,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 HELPER = ROOT / "full-app/scripts/render_lively_scene.py"
+BATCH = ROOT / "full-app/scripts/render_batch_assembly.py"
 STARTUP = ROOT / "full-app/scripts/render_agent_startup.py"
 POLICY = ROOT / "app/src/main/java/com/rezox/render/agent/AgentPolicy.java"
 AGENT = ROOT / "app/src/main/java/com/rezox/render/agent/AgentActions.java"
@@ -19,7 +20,7 @@ ASSEMBLER = ROOT / "tools/assemble_full_native.py"
 
 class NativeLivelySceneContractTests(unittest.TestCase):
     def test_python_modules_parse_without_running_blender(self):
-        for source in (HELPER, STARTUP, ASSEMBLER):
+        for source in (HELPER, BATCH, STARTUP, ASSEMBLER):
             compile(source.read_text(encoding="utf-8"), str(source), "exec")
 
     def test_no_arbitrary_user_scripts_or_file_paths(self):
@@ -88,12 +89,15 @@ class NativeLivelySceneContractTests(unittest.TestCase):
             archive = Path(work) / "blender_runtime.zip"
             with zipfile.ZipFile(archive, "w") as z:
                 z.writestr("scripts/startup/upstream_example.py", "# upstream")
-            module.attach_bpy_agent(archive, STARTUP, HELPER)
+            module.attach_bpy_agent(archive, STARTUP, HELPER, BATCH)
             with zipfile.ZipFile(archive) as z:
                 self.assertIn("scripts/startup/render_agent_startup.py", z.namelist())
                 self.assertIn("scripts/startup/render_lively_scene.py", z.namelist())
+                self.assertIn("scripts/startup/render_batch_assembly.py", z.namelist())
                 self.assertEqual(z.read("scripts/startup/render_lively_scene.py"),
                                  HELPER.read_bytes())
+                self.assertEqual(z.read("scripts/startup/render_batch_assembly.py"),
+                                 BATCH.read_bytes())
 
 
 if __name__ == "__main__":
