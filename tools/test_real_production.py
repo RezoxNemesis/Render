@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-"""Desktop CI semantic fixtures only; not Android production rendering proof."""
+"""CI semantic fixtures only; not Android hardware or production rendering proof."""
 import importlib.util
 import json
 from pathlib import Path
 import tempfile
 import bpy
+from mathutils import Vector
 
 ROOT=Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location('render_production_under_test',ROOT/'full-app/scripts/render_production.py')
@@ -31,18 +32,44 @@ with tempfile.TemporaryDirectory() as tmp:
     group=bpy.context.scene.objects['ProductionTestInstances'].modifiers[0].node_group
     assert sum(n.bl_idname=='GeometryNodeInstanceOnPoints' for n in group.nodes)==3
     assert not any(n.bl_idname=='GeometryNodeRealizeInstances' for n in group.nodes)
+
+    # Actual curves with tapered control-point radii, not a hair-texture claim.
+    hair=run('curve.create',{'name':'ProductionTestHair','radius':0.01,'strands':[
+        [[0,0,1,1],[0.2,0,1.4,0.5],[0.4,0,1.5,0.02]],
+        [[0,0.1,1,1],[0.15,0.1,1.4,0.5],[0.25,0.1,1.6,0.02]]]})
+    assert hair['editable_strands']==2 and bpy.data.objects[hair['object']].type=='CURVE'
+    face=run('mesh.create',{'name':'ProductionTestFace','vertices':[[0,0,0],[1,0,0],[1,1,0],[0,1,0]],'faces':[[0,1,2,3]]})
+    run('mesh.edit',{'object':'ProductionTestFace','expected_vertices':4,'patches':[{'index':0,'coordinate':[0,0,0.1]}]})
+    run('shape.create',{'object':'ProductionTestFace','name':'Expression','expected_vertices':4,'patches':[{'index':1,'coordinate':[1,0,0.5]}]})
+    run('shape.keys',{'object':'ProductionTestFace','shape':'Expression','keys':[{'frame':1,'value':0},{'frame':10,'value':1}]})
+    bpy.context.scene.frame_set(10);bpy.context.view_layer.update()
+    face_ob=bpy.data.objects['ProductionTestFace'];evaluated=face_ob.evaluated_get(bpy.context.evaluated_depsgraph_get())
+    assert abs(evaluated.data.vertices[1].co.z-0.5)<0.0001
+    run('mesh.create',{'name':'ProductionTestSkinned','kind':'CUBE'})
+    rig=run('rig.create',{'name':'ProductionTestSkeleton','bones':[{'name':'RootBone','head':[0,0,0],'tail':[0,0,1]}]})
+    assert rig['native_armature']
+    run('rig.bind',{'object':'ProductionTestSkinned','rig':'ProductionTestSkeleton','expected_vertices':8,
+        'weights':[{'index':i,'influences':[['RootBone',1.0]]} for i in range(8)]})
+    run('rig.keys',{'rig':'ProductionTestSkeleton','keys':[{'bone':'RootBone','frame':1,'rotation_euler':[0,0,0]},
+        {'bone':'RootBone','frame':10,'rotation_euler':[0,0.7,0]}]})
+    skin=bpy.data.objects['ProductionTestSkinned'];bpy.context.scene.frame_set(1);bpy.context.view_layer.update()
+    first=skin.evaluated_get(bpy.context.evaluated_depsgraph_get()).data.vertices[0].co.copy()
+    bpy.context.scene.frame_set(10);bpy.context.view_layer.update()
+    second=skin.evaluated_get(bpy.context.evaluated_depsgraph_get()).data.vertices[0].co.copy()
+    assert (second-first).length>0.05,(first,second)
+
     run('camera.aim',{'name':'ProductionTestCamera','location':[14,-18,14],'target':[1,1,1],'lens':35})
     run('world.configure',{'color':[0.25,0.4,0.6],'strength':1.0})
-    # The Ubuntu fixture Blender has no OpenImageDenoiser. This explicit fixture
-    # setting is saved in the snapshot; runtime code must not disable it silently.
+    # Ubuntu fixture Blender has no OIDN. Set the fixture explicitly; runtime
+    # must never silently disable requested quality features.
     bpy.context.scene.cycles.use_denoising=False
     for layer in bpy.context.scene.view_layers:
         if hasattr(layer,'cycles') and hasattr(layer.cycles,'use_denoising'):layer.cycles.use_denoising=False
     checkpoint=run('project.checkpoint',{'name':'ProductionFixture'})
     assert checkpoint['bytes']>256
+    projects=run('project.list',{});assert projects['total']==1
     page=run('scene.inspect',{'limit':1});assert len(page['objects'])==1 and page['next_offset']==1
-    original=bpy.context.scene;original_frame=original.frame_current
-    seen=[]
+    original=bpy.context.scene;original_frame=original.frame_current;seen=[]
     def record(scene,*unused):seen.append((scene.frame_current,scene.name))
     bpy.app.handlers.render_pre.append(record)
     try:
@@ -51,12 +78,14 @@ with tempfile.TemporaryDirectory() as tmp:
         assert done['state']=='frames_complete' and done['completed_frames']==1,done
         assert seen and seen[0][0]==1,seen
         assert bpy.context.scene==original and original.frame_current==original_frame
-        again=run('render.step',{'job_id':plan['job_id']});assert again['completed_frames']==1
-        assert len(seen)==1,seen
+        again=run('render.step',{'job_id':plan['job_id']});assert again['completed_frames']==1 and len(seen)==1
     finally:bpy.app.handlers.render_pre.remove(record)
     manifest=json.loads((Path(tmp)/'Production'/plan['job_id']/'manifest.json').read_text())
     frame=Path(tmp)/'Production'/plan['job_id']/manifest['frames']['1']['filename']
     assert frame.read_bytes().startswith(b'\x89PNG\r\n\x1a\n')
     assert done['spec']['width']==64 and done['spec']['height']==64
-print('PASS: real bpy geometry, PBR, hierarchy, instancing, checkpoint, pagination and exact immutable frame job')
-print('NOT CLAIMED: physical Android GPU, hardware encoder, screenshots, image-to-3D or 10-million device stress test')
+    restored=run('project.restore',{'filename':checkpoint['filename'],'sha256':checkpoint['sha256'],'scene':checkpoint['scene']})
+    assert restored['previous_scene_preserved'] and original.name in bpy.data.scenes
+    assert bpy.context.scene.name==restored['scene'] and bpy.context.scene!=original
+print('PASS: real bpy geometry, PBR, hierarchy, hair curves, facial shapes, skinning, instancing, restore and exact immutable frame jobs')
+print('NOT CLAIMED: physical Android GPU, hardware encoder, screenshots, automatic image-to-3D or 10-million device stress test')
