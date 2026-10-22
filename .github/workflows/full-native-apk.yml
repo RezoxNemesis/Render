@@ -1,7 +1,7 @@
 name: Render Full Native Blender + Agent APK
 on:
   push:
-    branches: [feature/021-thermal-batch-drive-inplace-20261022]
+    branches: [feature/023-real-reference-ui-viewport-20261022]
   pull_request:
     branches: [feature/native-production-toolkit-20261022]
     paths: ["full-app/**", "app/**", "tools/**", ".github/workflows/full-native-apk.yml"]
@@ -22,7 +22,7 @@ jobs:
           python-version: "3.13"
       - run: python tools/prepare_production_toolkit.py
       - name: Verify production and previous native contracts
-        run: PYTHONPATH=tools python -m unittest tools/test_assemble_full_native.py tools/test_blender_bpy_bridge.py tools/test_lively_scene_contract.py tools/test_lively_scene_mock.py tools/test_native_autonomy_security.py tools/test_blender_batch_assembly.py tools/test_production_contract.py tools/test_thermal_drive_inplace_contract.py -v
+        run: PYTHONPATH=tools python -m unittest tools/test_assemble_full_native.py tools/test_blender_bpy_bridge.py tools/test_lively_scene_contract.py tools/test_lively_scene_mock.py tools/test_native_autonomy_security.py tools/test_blender_batch_assembly.py tools/test_production_contract.py tools/test_thermal_drive_inplace_contract.py tools/test_studio_v22_contract.py tools/test_v23_reference_contract.py -v
       - name: Verify adapter is repeatable
         run: python tools/prepare_production_toolkit.py
   blender-bpy-integration:
@@ -41,6 +41,7 @@ jobs:
         run: |
           blender -b -noaudio --python-exit-code 1 --python tools/test_real_blender_bpy.py
           blender -b -noaudio --python-exit-code 1 --python tools/test_real_production.py
+          blender -b -noaudio --python-exit-code 1 --python tools/test_real_studio_v23.py
   build-native-full:
     needs: [stage-tests, blender-bpy-integration]
     runs-on: ubuntu-24.04
@@ -109,36 +110,36 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee "$RUNNER_TEMP/render-production-signature.txt"
           grep -Fqi 'f3d63fb20be25ca0be8aa6a161d5cf13cd98ba2fa300c7a604cce35131b9eb30' "$RUNNER_TEMP/render-production-signature.txt"
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | tee "$RUNNER_TEMP/render-production-badging.txt"
-          grep -Fq "versionCode='24'" "$RUNNER_TEMP/render-production-badging.txt"
+          grep -Fq "versionCode='25'" "$RUNNER_TEMP/render-production-badging.txt"
           python3 - <<'PY'
           import io,zipfile
           with zipfile.ZipFile('full-app/app/build/outputs/apk/debug/app-debug.apk') as a:
               with zipfile.ZipFile(io.BytesIO(a.read('assets/blender_runtime.zip'))) as z:
-                  for name in ('render_production.py','render_production_contract.py','render_production_detail.py'):
+                  for name in ('render_production.py','render_production_contract.py','render_production_detail.py','render_studio_ops.py','render_studio_contract.py'):
                       assert 'scripts/startup/'+name in z.namelist()
           print('PASS: production runtime packaged with native Blender')
           PY
-          cp "$APK" "$RUNNER_TEMP/Render-0.21.0-original-INPLACE-candidate.apk"
-          sha256sum "$RUNNER_TEMP/Render-0.21.0-original-INPLACE-candidate.apk" > "$RUNNER_TEMP/render-production-sha256.txt"
+          cp "$APK" "$RUNNER_TEMP/Render-0.22.0-original-INPLACE-candidate.apk"
+          sha256sum "$RUNNER_TEMP/Render-0.22.0-original-INPLACE-candidate.apk" > "$RUNNER_TEMP/render-production-sha256.txt"
       - name: Build isolated preview without altering installed Render
         run: |
           gradle -p full-app --no-daemon -PrenderSideBySide=true :app:assembleDebug
-          cp full-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/Render-0.21.0-production-preview-development.apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$RUNNER_TEMP/Render-0.21.0-production-preview-development.apk" > "$RUNNER_TEMP/render-preview-signature.txt"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$RUNNER_TEMP/Render-0.21.0-production-preview-development.apk" > "$RUNNER_TEMP/render-preview-badging.txt"
+          cp full-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/Render-0.22.0-production-preview-development.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$RUNNER_TEMP/Render-0.22.0-production-preview-development.apk" > "$RUNNER_TEMP/render-preview-signature.txt"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$RUNNER_TEMP/Render-0.22.0-production-preview-development.apk" > "$RUNNER_TEMP/render-preview-badging.txt"
           grep -Fq "name='com.rezox.render.preview'" "$RUNNER_TEMP/render-preview-badging.txt"
-          sha256sum "$RUNNER_TEMP/Render-0.21.0-production-preview-development.apk" >> "$RUNNER_TEMP/render-production-sha256.txt"
+          sha256sum "$RUNNER_TEMP/Render-0.22.0-production-preview-development.apk" >> "$RUNNER_TEMP/render-production-sha256.txt"
       - uses: actions/upload-artifact@v4
         with:
-          name: Render-0.21.0-ORIGINAL-SAME-SIGNER-INPLACE-CANDIDATE
-          path: ${{ runner.temp }}/Render-0.21.0-original-INPLACE-candidate.apk
+          name: Render-0.22.0-ORIGINAL-SAME-SIGNER-INPLACE-CANDIDATE
+          path: ${{ runner.temp }}/Render-0.22.0-original-INPLACE-candidate.apk
           compression-level: 0
           retention-days: 7
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
-          name: Render-0.21.0-preview-development-OPTIONAL
-          path: ${{ runner.temp }}/Render-0.21.0-production-preview-development.apk
+          name: Render-0.22.0-preview-development-OPTIONAL
+          path: ${{ runner.temp }}/Render-0.22.0-production-preview-development.apk
           compression-level: 0
           retention-days: 7
           if-no-files-found: error
@@ -147,7 +148,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: Render-0.21.0-build-and-signature-proof
+          name: Render-0.22.0-build-and-signature-proof
           path: |
             ${{ runner.temp }}/render-production-signature.txt
             ${{ runner.temp }}/render-production-badging.txt
