@@ -32,6 +32,11 @@ assert receipt["visual_quality_verified"] is False
 assert receipt["mesh_vertices"] > 3000 and receipt["mesh_faces"] > 3000
 assert len(scene.objects) > count_before
 assert all(receipt["checks"].values()), receipt
+# Physical units: shoe sole on z=0 and crown at requested height_m.
+mesh_points = [(v.co.z * ob.scale.z) for ob in bpy.data.collections[receipt["collection"]].objects
+               if ob.type == "MESH" for v in ob.data.vertices]
+assert abs(min(mesh_points)) < 1e-5, min(mesh_points)
+assert abs(max(mesh_points)-1.75) < 1e-5, max(mesh_points)
 coll = bpy.data.collections[receipt["collection"]]
 assert coll["omega_mesh_seams"].count(";") >= 4
 assert len(json.loads(coll["omega_landmarks_json"])) >= 20

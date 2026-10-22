@@ -16,6 +16,7 @@ _STYLE = "stylized_anatomical_v1"
 _NAME = re.compile(r"[A-Za-z][A-Za-z0-9_-]{0,31}\Z")
 _SHA = re.compile(r"[a-f0-9]{64}\Z")
 _SEGMENTS = 64
+_SOURCE_HEIGHT = 2.301  # Synthetic crown above the z=0 shoe sole.
 
 
 def validate(operation, payload):
@@ -44,6 +45,11 @@ def validate(operation, payload):
         raise ValueError("INVALID_ARGUMENTS")
     return {"name": name, "style": style, "height_m": float(height),
             "reference_sha256": ref}
+
+
+def _scale(height_m):
+    """Meters per source-mesh unit; height_m is actual crown elevation."""
+    return height_m / _SOURCE_HEIGHT
 
 
 def _digest(data):
@@ -237,7 +243,7 @@ def _construct(bpy, scene, coll, name, height):
             (sgn*.19,.004,.16,.066,.066)], trouser, 32)
         # Mesh boot tapers to the leg and grows toward the front-facing toe.
         _loft(bpy, coll, prefix + side + "Shoe", [
-            (sgn*.19,-.095,.035,.079,.148),
+            (sgn*.19,-.095,0.0,.079,.148),
             (sgn*.19,-.074,.08,.073,.139),
             (sgn*.19,-.023,.15,.066,.074)], shoes, 32)
         x = sgn*.081
@@ -279,7 +285,7 @@ def _construct(bpy, scene, coll, name, height):
     shirt["omega_mesh_role"] = "separate_garment_with_annotated_openings"
     for obj in coll.objects:
         if obj.type in {"MESH", "CURVE"}:
-            obj.scale = (height/1.75,) * 3
+            obj.scale = (_scale(height),) * 3
     # Three genuine editable Blender cameras; do NOT change active camera or render settings.
     from mathutils import Vector
     for label, position in (("Front", (0,-5,1.45)),
@@ -288,11 +294,11 @@ def _construct(bpy, scene, coll, name, height):
         camera = bpy.data.cameras.new(prefix + label + "CameraData")
         ob = bpy.data.objects.new(prefix + label + "Camera", camera)
         coll.objects.link(ob)
-        ob.location = tuple(v * height/1.75 for v in position)
-        focus = Vector((0,0,1.3*height/1.75))
+        ob.location = tuple(v * _scale(height) for v in position)
+        focus = Vector((0,0,1.3*_scale(height)))
         ob.rotation_euler = (focus-ob.location).to_track_quat("-Z", "Y").to_euler()
         camera.type = "ORTHO"
-        camera.ortho_scale = 3.0 * height/1.75
+        camera.ortho_scale = 3.0 * _scale(height)
     return body
 
 
@@ -361,7 +367,7 @@ def execute(operation, payload, context):
         coll["omega_phase"] = 5
         coll["omega_source_revision"] = revision
         coll["omega_reference_sha256"] = args["reference_sha256"] or ""
-        coll["omega_landmarks_json"] = json.dumps({k: [round(v*args["height_m"]/1.75, 6) for v in xyz]
+        coll["omega_landmarks_json"] = json.dumps({k: [round(v*_scale(args["height_m"]), 6) for v in xyz]
                                                   for k, xyz in _landmarks().items()}, sort_keys=True)
         coll["omega_mesh_seams"] = "shoulders;hips;fingers;shirt;shoes;eyes;ears;hair"
         result = _readback(bpy, scene, coll, revision)

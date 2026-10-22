@@ -51,6 +51,11 @@ class CharacterContractTests(unittest.TestCase):
         self.assertEqual(mod.validate("omega.character.create", {
             "name":"Hero","reference_sha256":"a"*64})["reference_sha256"], "a"*64)
 
+    def test_declared_height_is_true_native_crown_height(self):
+        self.assertAlmostEqual(mod._scale(1.75) * mod._SOURCE_HEIGHT, 1.75)
+        self.assertAlmostEqual(mod._scale(2.1) * mod._SOURCE_HEIGHT, 2.1)
+        self.assertGreater(mod._SOURCE_HEIGHT, 2.3)
+
     def test_stylized_anatomical_rings_have_positive_radius(self):
         controls=[(.9,.22,.16),(1.1,.18,.11),(1.7,.15,.1)]
         rings=mod._interp_rings(controls,.02)

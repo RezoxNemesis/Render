@@ -5,8 +5,8 @@
   "status": "Partial",
   "seed_sha": "ed7ef34fa85d9e361bc9c92d554d8ec937755cc2",
   "head_branch": "feature/omega-P05-human-character-20261022",
-  "head_sha": "1930a0281c242970b8dd5c69efed0e70192e6687",
-  "head_sha_note": "Engineering code commit immediately before this report commit; a report cannot embed its own SHA.",
+  "head_sha": "ae022a7069a7f277b0dcce67b059b2fb0dee9b69",
+  "head_sha_note": "Previous verified branch commit; report cannot embed its own future Git commit SHA.",
   "pr_url": "https://github.com/RezoxNemesis/Render/pull/15",
   "owned_paths_changed": [
     "full-app/scripts/omega/phase05_character.py",
@@ -18,7 +18,7 @@
     "state": "PASS",
     "command": "python -m unittest discover -s tools/omega -p 'test_phase05_*.py' -v",
     "results": [
-      "Ran 9 tests in 0.003s",
+      "Ran 10 tests in 0.002s",
       "OK"
     ],
     "compile": "python -m py_compile full-app/scripts/omega/phase05_character.py : PASS",
@@ -43,17 +43,17 @@
     {
       "kind": "source",
       "path": "full-app/scripts/omega/phase05_character.py",
-      "verified": "git_blob_sha_f767560b745e89086c86f620b115fe5a84a57726"
+      "verified": "git_blob_sha_ca635927a2a150ecb2af7b21ac01a210941b73da"
     },
     {
       "kind": "test",
       "path": "tools/omega/test_phase05_character.py",
-      "verified": "git_blob_sha_76106d0d1f81aed777dffb766fcc6417bdab64ea"
+      "verified": "git_blob_sha_148c93d35b0ea1978c2ab7ad45a805cc26bfdf7d"
     },
     {
       "kind": "native_fixture_not_yet_executed",
       "path": "native-tests/omega/phase05/test_native_character.py",
-      "verified": "git_blob_sha_68ce36b0ff761ad1475c0aa5a5fc9bd5df705821"
+      "verified": "git_blob_sha_33e0d1066b2319035244b88fd7fa593742646d2b"
     }
   ],
   "scene_stage": "SCULPTED (provisional until real bpy fixture); never RIG_READY",
@@ -83,7 +83,8 @@
       "ears",
       "hair"
     ],
-    "rigging": "not implemented (Phase 06 owner)"
+    "rigging": "not implemented (Phase 06 owner)",
+    "height_m": "Physical z=0 shoe sole to hair crown z=height_m; pure regression passed, native bounding test awaits bpy"
   },
   "quality_reduced": false,
   "residual_blockers": [
