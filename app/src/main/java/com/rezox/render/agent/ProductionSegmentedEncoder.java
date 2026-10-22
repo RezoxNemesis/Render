@@ -69,9 +69,24 @@ public final class ProductionSegmentedEncoder {
         if("encoded".equals(manifest.optString("state"))&&
                 previousVideo!=null&&previousVideo.optBoolean("segmented")){
             File index=ProductionFiles.file(context,job,previousVideo.getString("filename"));
-            if(index.isFile()&&index.length()==previousVideo.optLong("bytes")&&
-                ProductionFiles.sha(index).equals(previousVideo.getString("sha256")))
+            boolean indexValid=index.isFile()&&
+                index.length()==previousVideo.optLong("bytes")&&
+                ProductionFiles.sha(index).equals(previousVideo.getString("sha256"));
+            boolean partsValid=indexValid;
+            JSONArray previousParts=previousVideo.optJSONArray("segments");
+            if(previousParts==null)partsValid=false;
+            if(partsValid)for(int i=0;i<previousParts.length();i++){
+                if(readVerified(context,job,previousParts.optJSONObject(i))==null){
+                    partsValid=false;break;
+                }
+            }
+            if(partsValid&&previousParts.length()==ProductionSegmentPlan.plan(spec).size())
                 return previousVideo;
+            // A valid index alone is not sufficient proof that its MP4 parts
+            // survive a power cut or external storage corruption. Keep every
+            // good part and selectively re-encode only absent/bad ones.
+            manifest.put("state","frames_complete");
+            save(sourceFile,manifest);
         }
 
         List<ProductionSegmentPlan.Span> spans=ProductionSegmentPlan.plan(spec);
