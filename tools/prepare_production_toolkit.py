@@ -48,10 +48,10 @@ def prepare():
     replace('app/src/test/java/com/rezox/render/agent/AgentPolicyTest.java','assertEquals(25,AgentPolicy.ACTIONS.size());','assertEquals(26,AgentPolicy.ACTIONS.size());\n        assertTrue(AgentPolicy.ACTIONS.containsKey("production.execute"));')
     for name in ('full-app/app/build.gradle','app/build.gradle.kts'):
         path=ROOT/name;s=path.read_text()
-        s=re.sub(r'versionCode\s*(?:=\s*)?\d+',lambda match:'versionCode = 23' if name.endswith('.kts') else 'versionCode 23',s,count=1)
-        s=re.sub(r'versionName\s*(?:=\s*)?[\"\'][^\"\']+[\"\']',lambda match:'versionName = "0.20.0-native-production-toolkit"' if name.endswith('.kts') else "versionName '0.20.0-native-production-toolkit'",s,count=1)
+        s=re.sub(r'versionCode\s*(?:=\s*)?\d+',lambda match:'versionCode = 24' if name.endswith('.kts') else 'versionCode 24',s,count=1)
+        s=re.sub(r'versionName\s*(?:=\s*)?[\"\'][^\"\']+[\"\']',lambda match:'versionName = "0.21.0-native-thermal-batch-drive"' if name.endswith('.kts') else "versionName '0.21.0-native-thermal-batch-drive'",s,count=1)
         path.write_text(s)
     from harden_production_runtime import apply
     apply(ROOT)
-    print('Prepared native production toolkit v0.20.0; original project data and endpoints unchanged')
+    print('Prepared native production toolkit v0.21.0; original project data and endpoints unchanged')
 if __name__=='__main__':prepare()
