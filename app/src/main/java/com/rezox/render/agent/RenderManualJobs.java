@@ -144,6 +144,24 @@ public final class RenderManualJobs {
                         "All MP4 segments ready":"MP4 ready for export",done,total);
                     ending="succeeded";break;
                 }
+                // Do not acquire a GPU/render wake lock merely to discover
+                // that Android is already at SEVERE thermal pressure or the
+                // next frame cannot fit on disk. Real Blender remains paused.
+                JSONObject observed=ProductionThermalTelemetry.sample(app);
+                ProductionThermalPolicy.Decision admission=ProductionThermalPolicy.evaluate(
+                    observed.optInt("thermal_status",-1),
+                    observed.optBoolean("low_memory",false),
+                    observed.optLong("available_memory_bytes",0L),STOP.get());
+                String admissionReason=admission.renderAllowed?"READY":admission.reason;
+                if(admission.renderAllowed&&
+                    !RenderStorageBudget.frameSpaceAvailable(app,jobId))
+                    admissionReason="PAUSED_STORAGE_PRESSURE";
+                if(!"READY".equals(admissionReason)){
+                    publish(app,jobId,"cooling",admissionReason,done,total);
+                    for(int elapsed=0;elapsed<120&&!STOP.get();elapsed+=5)
+                        Thread.sleep(5000L);
+                    continue;
+                }
                 JSONObject request=new JSONObject().put("job_id",jobId)
                     .put("max_frames",1).put("max_wall_ms",540000)
                     .put("cooldown_max_ms",60000);
