@@ -15,6 +15,8 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import com.rezox.render.ui.StudioUi;
+import com.rezox.render.agent.RenderRecoveryStatus;
+import org.json.JSONObject;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -41,6 +43,7 @@ public final class EditorLaunchActivity extends Activity {
     private LinearLayout actions;
     private final AtomicBoolean starting=new AtomicBoolean(false);
     private volatile boolean destroyed=false;
+    private volatile JSONObject recoveryEvidence;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -136,6 +139,14 @@ public final class EditorLaunchActivity extends Activity {
         if(!starting.compareAndSet(false,true))return;
         new Thread(()->{
             try {
+                report("Checking verified project recovery and prior native render…");
+                JSONObject evidence=RenderRecoveryStatus.inspect(this);
+                recoveryEvidence=evidence;
+                if(!destroyed)runOnUiThread(()->{
+                    if(!isFinishing()&&!isDestroyed())
+                        deviceStatus.setText(collectDevice()+"\n\n"+
+                            RenderRecoveryStatus.ownerSummary(evidence));
+                });
                 report("Checking installed Blender libraries…");
                 File nativeDir=new File(getApplicationInfo().nativeLibraryDir);
                 File library=new File(nativeDir,"libblender.so");
@@ -259,6 +270,7 @@ public final class EditorLaunchActivity extends Activity {
             candidates.add(new File(getExternalFilesDir(null),"blender-startup.log"));
         StringBuilder data=new StringBuilder("RENDER EDITOR DIAGNOSTICS\n");
         data.append(collectDevice()).append("\n\n");
+        if(recoveryEvidence!=null)data.append("Project and native render evidence: ").append(recoveryEvidence.toString()).append("\n\n");
         data.append("Startup stage: ").append(getSharedPreferences(STATE_PREF,MODE_PRIVATE)
             .getString("stage","Unknown")).append("\n\n");
         for(File file:candidates) {
