@@ -160,6 +160,32 @@ def attach_bpy_agent(runtime_zip, source_py, scene_py=None, batch_py=None):
                 raise ValueError("SESSION_RUNTIME_NOT_PACKAGED")
             packed.write(source, "scripts/startup/" + extra,
                          compress_type=zipfile.ZIP_DEFLATED)
+        # Keep the pinned full Blender runtime intact. Each independently
+        # reviewed Omega module is an optional Python package member, not a
+        # startup script or a replacement for libblender.so.
+        scripts = Path(source_py).parent
+        omega_dir = scripts / "omega"
+        omega_files = [
+            (scripts / "omega_registry.py", "scripts/startup/omega_registry.py"),
+            (omega_dir / "__init__.py", "scripts/startup/omega/__init__.py"),
+        ]
+        allowed = {
+            "phase01_engine.py", "phase02_render.py", "phase03_agent.py",
+            "phase04_geometry.py", "phase05_character.py", "phase06_rig.py",
+            "phase07_motion.py", "phase08_world.py", "phase09_vfx.py",
+            "phase11_artist.py", "phase12_quality.py", "phase13_simulation.py",
+        }
+        if omega_dir.is_dir():
+            for phase_file in sorted(omega_dir.glob("phase*.py")):
+                if phase_file.name not in allowed:
+                    raise ValueError("UNRECOGNIZED_OMEGA_MODULE")
+                omega_files.append((phase_file, "scripts/startup/omega/" + phase_file.name))
+        for source, archive_name in omega_files:
+            if not source.is_file():
+                raise ValueError("OMEGA_REGISTRY_RUNTIME_MISSING")
+            if archive_name in names:
+                raise ValueError("UPSTREAM_OMEGA_MODULE_COLLISION")
+            packed.write(source, archive_name, compress_type=zipfile.ZIP_DEFLATED)
 
 def patch_native_activity(path):
     java = path.read_text(encoding="utf-8")
