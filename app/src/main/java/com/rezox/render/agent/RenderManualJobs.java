@@ -187,7 +187,10 @@ public final class RenderManualJobs {
             if(age<0||age>3600||!job.matches("[a-f0-9]{32}")){
                 request.delete();return;
             }
-            if(start(context,job))request.delete();
+            // Start owner-visible foreground work, not a hidden in-memory
+            // thread that stops when the Blender activity is destroyed.
+            JSONObject result=RenderLongForegroundService.request(context,job);
+            if(result.optBoolean("foreground_launch_requested"))request.delete();
         }catch(Exception ignored){
             // Keep request for inspection; no blind or unbounded retry storm.
         }
