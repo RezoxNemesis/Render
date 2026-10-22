@@ -1,5 +1,6 @@
 package com.rezox.render.agent;
 
+import com.rezox.render.omega.integration.OmegaOperations;
 import android.app.ActivityManager;
 import android.content.Context;
 import android.content.Intent;
@@ -36,7 +37,7 @@ public final class ProductionBridge {
     }
     public static void validate(JSONObject args)throws Exception {
         fields(args,"operation,payload,target_id");
-        if(!(args.opt("operation") instanceof String)||!OPERATIONS.contains(args.getString("operation")))throw new IllegalArgumentException("PRODUCTION_OPERATION_UNAVAILABLE");
+        if(!(args.opt("operation") instanceof String)||!OPERATIONS.contains(args.getString("operation"))&&!OmegaOperations.isReserved(args.getString("operation")))throw new IllegalArgumentException("PRODUCTION_OPERATION_UNAVAILABLE");
         if(args.has("payload")&&!(args.opt("payload") instanceof JSONObject))throw new IllegalArgumentException("INVALID_PRODUCTION_PAYLOAD");
         if(args.has("target_id")&&(!(args.opt("target_id") instanceof String)||!args.getString("target_id").matches("[a-fA-F0-9-]{36}")))throw new IllegalArgumentException("INVALID_TARGET_ID");
         if(args.toString().getBytes(StandardCharsets.UTF_8).length>131072)throw new IllegalArgumentException("PRODUCTION_REQUEST_TOO_LARGE");
@@ -74,9 +75,23 @@ public final class ProductionBridge {
                 .put("thermal_severe_is_safely_paused",true)
                 .put("drive_backup_via","user-granted Android Storage Access Framework; cloud storage only")
                 .put("drive_folder_granted",ProductionDriveStorage.status(context).getBoolean("folder_granted"))
-                .put("user_project_quality_changed",false);
+                .put("user_project_quality_changed",false)
+                .put("omega_reserved_only_not_verified",new JSONArray(OmegaOperations.reserved()))
+                .put("omega_capabilities_operation","omega.integration.capabilities");
         }
         if(operation.equals("device.profile")){fields(p,"");return profile(context);}
+        // The frozen Omega IDs are transport-reserved only: the native registry
+        // checks which reviewed phase modules are actually installed/enabled.
+        // No arbitrary operator or script name crosses the Binder/spool boundary.
+        if(OmegaOperations.isReserved(operation)){
+            if(!editorReady(context))throw new IllegalStateException("BLENDER_EDITOR_NOT_RUNNING");
+            JSONObject nativeArgs=new JSONObject().put("operation",operation)
+                .put("payload",p)
+                .put("available_memory_bytes",profile(context).optLong("available_memory_bytes",0L));
+            try(NativeWakeGuard wake=NativeWakeGuard.acquire(context,"omega.dispatch")){
+                return new BlenderSpool(context).execute("omega.dispatch",nativeArgs,cancelled);
+            }
+        }
         if(operation.equals("editor.open")){
             fields(p,"");Intent intent=new Intent().setClassName(context,"com.rezox.render.EditorLaunchActivity").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             context.startActivity(intent);
