@@ -72,6 +72,13 @@ class Phase07Contract(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "UNSUPPORTED_NATIVE_FEATURE"):
             M._solve_leg(1., .5, .5, 5., 0, 0.)
 
+    def test_context_cancellation_and_dry_run_are_non_mutating(self):
+        M._guard_context({"dry_run": False, "cancellation_requested": False})
+        with self.assertRaisesRegex(ValueError, "CANCELLED_BY_OWNER"):
+            M._guard_context({"cancellation_requested": lambda: True})
+        with self.assertRaisesRegex(ValueError, "UNSUPPORTED_NATIVE_FEATURE"):
+            M._guard_context({"dry_run": True})
+
     def test_identity_and_signature_are_replay_stable(self):
         p = M.validate("omega.motion.create_actions", {"rig": "Rig", "clip": "Walk"})
         names = dict(M._DEFAULT_BONES)
