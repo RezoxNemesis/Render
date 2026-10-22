@@ -14,7 +14,7 @@ public class EngineRuntimeSealTest {
     private static File makeInstalled(File root)throws Exception{
         File dir=new File(root,"scripts/startup");
         assertTrue(dir.mkdirs());
-        Files.writeString(new File(dir,"render_agent_startup.py").toPath(),"import bpy");
+        Files.write(new File(dir,"render_agent_startup.py").toPath(),"import bpy".getBytes(StandardCharsets.UTF_8));
         return root;
     }
     @Test public void sameArchiveAcrossApkUpdatesDoesNotRequireExtraction()throws Exception{
@@ -32,8 +32,8 @@ public class EngineRuntimeSealTest {
         EngineRuntimeSeal.refreshPackageStamp(root,"5.3","apk-2",hash);
         assertTrue(EngineRuntimeSeal.hasSamePackageStamp(root,"5.3","apk-2"));
         assertArrayEquals(original,Files.readAllBytes(project.toPath()));
-        assertEquals("import bpy",Files.readString(
-            new File(root,"scripts/startup/render_agent_startup.py").toPath()));
+        assertEquals("import bpy",new String(Files.readAllBytes(
+            new File(root,"scripts/startup/render_agent_startup.py").toPath()),StandardCharsets.UTF_8));
     }
     @Test public void changedArchiveAndLostStartupNeverCountAsReusable()throws Exception{
         File root=makeInstalled(temp.newFolder("engine-new"));
