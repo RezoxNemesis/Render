@@ -20,8 +20,8 @@ def prepare():
             ('tools/assemble_full_native.py','render_studio_contract.py'),
             ('app/src/main/java/com/rezox/render/agent/ProductionBridge.java','StudioReferenceInbox.list(context,p)'),
             ('full-app/scripts/render_production.py','render_studio_ops.py'),
-            ('full-app/app/build.gradle','versionCode 26'),
-            ('app/build.gradle.kts','versionCode = 26'),
+            ('full-app/app/build.gradle','versionCode 27'),
+            ('app/build.gradle.kts','versionCode = 27'),
         )
         if not all(marker in (ROOT/path).read_text() for path,marker in required):
             raise RuntimeError('INCOMPLETE_V022_BUILD_ADAPTER_STATE')
@@ -84,5 +84,16 @@ def prepare():
         source=source.replace('0.22.0-native-reference-precision',
             '0.24.0-native-continuity-assets')
         target.write_text(source)
-    print('Prepared Render Studio v0.24 recovery, procedural assets, native hand and render UI; original package preserved')
+    # Strict monotonic Android version, original package and same signing identity.
+    for name in ('app/build.gradle.kts','full-app/app/build.gradle'):
+        target=ROOT/name
+        source=target.read_text()
+        before='versionCode = 26' if name.endswith('.kts') else 'versionCode 26'
+        after='versionCode = 27' if name.endswith('.kts') else 'versionCode 27'
+        if source.count(before)!=1:
+            raise RuntimeError('V025_VERSION_ADAPTER_DRIFT: '+name)
+        source=source.replace(before,after,1).replace(
+            '0.24.0-native-continuity-assets','0.25.0-native-verified-recovery')
+        target.write_text(source)
+    print('Render Studio 0.25 protected full-quality renders and verified recoveries staged; installed package/signing remain unchanged')
 if __name__=='__main__':prepare()
