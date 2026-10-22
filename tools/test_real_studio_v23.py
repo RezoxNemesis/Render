@@ -39,7 +39,10 @@ with tempfile.TemporaryDirectory() as d:
     assert ob.type=='MESH' and ob.hide_render
     assert ob.data.uv_layers.active and ob.data.materials[0].use_nodes
     assert ob['render_source_hash']==digest
-    assert any(image.packed_file is not None for image in bpy.data.images if image.name==target.name)
+    assert bound['packed'] is True, bound
+    textures=[node.image for node in ob.data.materials[0].node_tree.nodes
+              if node.type=='TEX_IMAGE' and node.image]
+    assert textures and textures[0].packed_file is not None
 
     v=bpy.data.meshes.new('ModelFaceMesh')
     v.from_pydata([[-.2,-.1,1.0],[.2,-.1,1.0],[0,-.1,1.4]],[],[[0,1,2]])
