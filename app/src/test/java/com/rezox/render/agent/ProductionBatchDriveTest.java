@@ -45,7 +45,7 @@ public class ProductionBatchDriveTest {
         Context c=RuntimeEnvironment.getApplication();
         String jobId="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
         File manifest=ProductionFiles.file(c,jobId,"manifest.json");
-        JSONObject spec=new JSONObject().put("frame_count",250);
+        JSONObject spec=new JSONObject().put("frame_count",250).put("start",1).put("end",250);
         JSONObject frames=new JSONObject();
         frames.put("1",new JSONObject().put("sha256","x"));
         JSONObject data=new JSONObject().put("state","ready")
@@ -55,6 +55,8 @@ public class ProductionBatchDriveTest {
         JSONObject status=ProductionBatch.jobStatus(c,jobId);
         assertEquals(1,status.getInt("completed_frames"));
         assertEquals(2,status.getInt("next_frame"));
+        assertEquals(1,status.getInt("start_frame"));
+        assertEquals(250,status.getInt("end_frame"));
         assertFalse(status.getBoolean("quality_reduced"));
         assertEquals("revision-1",status.getString("fingerprint"));
         manifest.delete();
@@ -63,7 +65,7 @@ public class ProductionBatchDriveTest {
         Context c=RuntimeEnvironment.getApplication();
         String jobId="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
         File manifest=ProductionFiles.file(c,jobId,"manifest.json");
-        JSONObject m=new JSONObject().put("spec",new JSONObject().put("frame_count",4))
+        JSONObject m=new JSONObject().put("spec",new JSONObject().put("frame_count",4).put("start",1).put("end",4))
             .put("frames",new JSONObject()).put("state","ready")
             .put("next_frame",1).put("fingerprint","a");
         Files.write(manifest.toPath(),m.toString().getBytes(StandardCharsets.UTF_8));
