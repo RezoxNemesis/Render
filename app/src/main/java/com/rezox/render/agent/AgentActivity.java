@@ -171,6 +171,16 @@ public final class AgentActivity extends Activity {
             catch(Exception e){Toast.makeText(this,"Folder picker unavailable: "+e.getClass().getSimpleName(),Toast.LENGTH_LONG).show();}
         });
         StudioUi.add(page,cloudBackup);
+        LinearLayout referenceCard=StudioUi.card(this);
+        StudioUi.add(referenceCard,StudioUi.label(this,"REFERENCE IMAGE / VIDEO INBOX"));
+        StudioUi.add(referenceCard,StudioUi.text(this,
+            "Import only photos or videos you choose. Render checks the real file bytes and saves a private checksum. It never browses Gallery or guesses the unseen side of a character.",
+            12,StudioUi.MUTED,false));
+        addAction(referenceCard,"IMPORT PHOTOS / VIDEOS INTO RENDER",StudioUi.SECONDARY,()->{
+            try{StudioReferenceInbox.openPicker(this);}
+            catch(Exception e){Toast.makeText(this,"Reference picker unavailable: "+e.getClass().getSimpleName(),Toast.LENGTH_LONG).show();}
+        });
+        StudioUi.add(page,referenceCard);
         StudioUi.space(page,17);
 
         // Keep legacy cloud modes supported but do not confuse them with
@@ -282,6 +292,25 @@ public final class AgentActivity extends Activity {
             "SCREEN CAPTURE ENABLED  •  Secret fields remain masked. This connection never uses cloud Blender rendering. Device and permission limitations still apply.",
             11,StudioUi.MUTED,false));
         ui.post(refresh);
+        if(StudioReferenceInbox.isExplicitOwnerMediaIntent(getIntent()))receiveReferenceIntent(getIntent());
+    }
+    private void receiveReferenceIntent(Intent inbound){
+        if(inbound==null||!StudioReferenceInbox.isExplicitOwnerMediaIntent(inbound))return;
+        // Permission-limited source URIs are used only for this owner-selected copy.
+        setIntent(new Intent(this,AgentActivity.class));
+        background.execute(()->{
+            try{
+                JSONObject receipt=StudioReferenceInbox.receive(getApplicationContext(),inbound);
+                int count=receipt.getInt("imported");
+                ui.post(()->Toast.makeText(this,"Imported "+count+" reference(s); inspect reference.list through your existing Render bridge.",Toast.LENGTH_LONG).show());
+            }catch(Exception e){
+                ui.post(()->Toast.makeText(this,"Reference import failed: "+e.getMessage(),Toast.LENGTH_LONG).show());
+            }
+        });
+    }
+    @Override protected void onNewIntent(Intent intent){
+        super.onNewIntent(intent);
+        receiveReferenceIntent(intent);
     }
     private void addAction(LinearLayout parent,String title,int style,Runnable action) {
         TextView view=StudioUi.action(this,title,style);
@@ -514,6 +543,11 @@ public final class AgentActivity extends Activity {
     });}
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){
         super.onActivityResult(requestCode,resultCode,data);
+        if(requestCode==StudioReferenceInbox.PICK_REFERENCE && resultCode==Activity.RESULT_OK)
+            receiveReferenceIntent(new Intent(Intent.ACTION_OPEN_DOCUMENT)
+                .setData(data==null?null:data.getData())
+                .setClipData(data==null?null:data.getClipData())
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION));
         if(requestCode==ProductionDriveStorage.REQUEST_PICK_FOLDER){
             try{
                 boolean selected=ProductionDriveStorage.acceptFolderSelection(this,resultCode,data);
