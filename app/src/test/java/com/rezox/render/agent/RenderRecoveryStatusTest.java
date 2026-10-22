@@ -45,6 +45,16 @@ public class RenderRecoveryStatusTest {
             assertTrue(status.getBoolean("latest_session_verified"));
             assertFalse(status.getBoolean("relies_on_quit_blend"));
             assertFalse(status.getBoolean("device_render_crash_root_cause_verified"));
+            File event=new File(new File(ProductionFiles.root(c),"Diagnostics"),
+                "native_render_event.json");
+            event.getParentFile().mkdirs();
+            try{
+                Files.write(event.toPath(),"{broken json".getBytes(StandardCharsets.UTF_8));
+                JSONObject withBadLog=RenderRecoveryStatus.inspect(c);
+                assertTrue(withBadLog.getBoolean("recoverable"));
+                assertEquals("invalid_native_render_record",
+                    withBadLog.getString("last_native_render_state"));
+            }finally{event.delete();}
             byte[] corrupt=content.clone();corrupt[300]^=8;Files.write(file.toPath(),corrupt);
             status=RenderRecoveryStatus.inspect(c);
             assertFalse(status.getBoolean("latest_session_verified"));
