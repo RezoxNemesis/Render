@@ -109,6 +109,12 @@ public final class ProductionBatch {
                 if(SystemClock.elapsedRealtime()-started >= maxWall){
                     reason="TIME_BUDGET_REACHED";break;
                 }
+                // Disk pressure is distinct from memory/thermal pressure.
+                // Stop BEFORE launching an expensive native frame rather than
+                // writing a partial PNG and losing the last known good master.
+                if(!RenderStorageBudget.frameSpaceAvailable(context,jobId))
+                    return report(context,jobId,"PAUSED_STORAGE_PRESSURE",produced,
+                        SystemClock.elapsedRealtime()-started,reading);
                 JSONObject nativeArgs=new JSONObject().put("operation","render.step")
                     .put("payload",new JSONObject().put("job_id",jobId));
                 JSONObject result=new BlenderSpool(context).execute("blender.production.execute",nativeArgs,cancelled);

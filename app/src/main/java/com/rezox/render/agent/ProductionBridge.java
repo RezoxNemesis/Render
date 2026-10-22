@@ -22,7 +22,9 @@ public final class ProductionBridge {
         "artifact.read","artifact.export","reference.write","project.create","project.checkpoint",
         "scene.inspect","mesh.create","asset.create","material.assign","group.create","animation.keys","camera.aim",
         "world.configure","instances.plan","instances.create","reference.attach",
-        "render.plan","render.step","render.batch","render.status","render.encode","drive.status","drive.backup"};
+        "render.plan","render.step","render.batch","render.status","render.encode","drive.status","drive.backup",
+        "render.storage.status","render.job.start","render.job.status","render.job.pause",
+        "render.job.export","render.job.export_segment","project.checkpoint_export"};
     private static final Set<String> OPERATIONS=new HashSet<>(Arrays.asList(OPS));
     private ProductionBridge(){}
     public static void fields(JSONObject p,String allowed)throws Exception {
@@ -80,6 +82,69 @@ public final class ProductionBridge {
                 .put("omega_capabilities_operation","omega.integration.capabilities");
         }
         if(operation.equals("device.profile")){fields(p,"");return profile(context);}
+        // These operations remain authenticated/target-id scoped by the
+        // existing Render/VideoStudio Binder checks above. No filesystem path
+        // or arbitrary bpy operator is accepted from a remote command.
+        if(operation.equals("render.storage.status")){
+            fields(p,"job_id");
+            return RenderStorageBudget.forJob(context,p.getString("job_id"));
+        }
+        if(operation.equals("render.job.status")){
+            fields(p,"");
+            return RenderLongForegroundService.status(context);
+        }
+        if(operation.equals("render.job.start")){
+            fields(p,"job_id");
+            return RenderLongForegroundService.request(context,p.getString("job_id"));
+        }
+        if(operation.equals("render.job.pause")){
+            fields(p,"");
+            return RenderLongForegroundService.requestPause(context);
+        }
+        if(operation.equals("render.job.export")){
+            fields(p,"job_id");
+            return RenderManualJobs.export(context,p.getString("job_id"));
+        }
+        if(operation.equals("render.job.export_segment")){
+            fields(p,"job_id,index");
+            return RenderManualJobs.exportSegment(context,p.getString("job_id"),
+                (int)integer(p,"index",0,100000,-1));
+        }
+        if(operation.equals("project.checkpoint_export")){
+            fields(p,"name");
+            String name=p.optString("name","Project");
+            if(!name.matches("[A-Za-z][A-Za-z0-9_-]{0,63}"))
+                throw new IllegalArgumentException("INVALID_PROJECT_NAME");
+            JSONObject nativeArgs=new JSONObject().put("operation","project.checkpoint")
+                .put("payload",new JSONObject().put("name",name));
+            JSONObject checkpoint;
+            try(NativeWakeGuard wake=NativeWakeGuard.acquire(context,"blender.project.save_copy")){
+                checkpoint=new BlenderSpool(context).execute(
+                    "blender.production.execute",nativeArgs,cancelled);
+            }
+            if(!"Projects".equals(checkpoint.optString("category"))||
+                !checkpoint.optString("filename").endsWith(".blend")||
+                !checkpoint.optString("sha256").matches("[a-f0-9]{64}"))
+                throw new IllegalStateException("NATIVE_PROJECT_CHECKPOINT_UNVERIFIED");
+            JSONObject result=new JSONObject().put("checkpoint",checkpoint)
+                .put("checkpoint_saved",true).put("source_project_unchanged",true);
+            try{
+                JSONObject exported=ProductionFiles.export(context,new JSONObject()
+                    .put("category","Projects")
+                    .put("filename",checkpoint.getString("filename"))
+                    .put("expected_sha256",checkpoint.getString("sha256")));
+                result.put("export",exported).put("downloads_verified",true);
+            }catch(Exception problem){
+                // Crucially, the native checkpoint remains in app-private
+                // Projects. Never claim its successful export or redo the
+                // Blender save blindly when a file provider fails.
+                result.put("downloads_verified",false)
+                    .put("export_retry_operation","artifact.export")
+                    .put("export_error",problem.getClass().getSimpleName());
+            }
+            return result.put("native_execution_verified",true)
+                .put("quality_reduced",false);
+        }
         // The frozen Omega IDs are transport-reserved only: the native registry
         // checks which reviewed phase modules are actually installed/enabled.
         // No arbitrary operator or script name crosses the Binder/spool boundary.

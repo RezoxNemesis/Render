@@ -24,6 +24,10 @@ import android.widget.TextView;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import com.rezox.render.agent.RenderManualJobs;
+import com.rezox.render.agent.RenderLongForegroundService;
+import com.rezox.render.agent.ProductionBridge;
+import com.rezox.render.agent.AgentSecrets;
+import java.util.concurrent.atomic.AtomicBoolean;
 import com.rezox.render.omega.engine.OverlayBounds;
 import com.rezox.render.omega.engine.EngineEvidence;
 import android.widget.Toast;
@@ -219,6 +223,34 @@ public final class BlenderMobileControls {
               "blender.render.resume_last",new JSONObject()));
         add(activity,tools,"▣  Save Current Session",()->send(activity,
               "blender.project.save_session",new JSONObject()));
+        add(activity,tools,"⬇  Save full .blend to Downloads",()->WORK.execute(()->{
+            try{
+                JSONObject args=new JSONObject().put("operation","project.checkpoint_export")
+                    .put("target_id",new AgentSecrets(activity).renderPublicId())
+                    .put("payload",new JSONObject().put("name","RenderProject"));
+                JSONObject result=ProductionBridge.execute(activity,args,new AtomicBoolean(false));
+                if(result.optBoolean("downloads_verified"))
+                    toast(activity,"Real .blend verified in Download/RenderStudio");
+                else if(result.optBoolean("checkpoint_saved"))
+                    toast(activity,"Saved internally; Downloads export unavailable");
+                else toast(activity,"Project checkpoint not verified");
+            }catch(Exception error){
+                toast(activity,"Save failed: "+error.getClass().getSimpleName());
+            }
+        }));
+        add(activity,tools,"▶  Continue render in background",()->WORK.execute(()->{
+            try{
+                String job=RenderManualJobs.status(activity).optString("job_id","");
+                if(job.isEmpty())job=RenderManualJobs.newestRecoverable(activity);
+                if(job.isEmpty())throw new IllegalStateException("NO_RENDER_JOB");
+                JSONObject result=RenderLongForegroundService.request(activity,job);
+                toast(activity,result.optBoolean("foreground_launch_requested")?
+                    "Foreground render requested; progress in notification":
+                    "Open this app to permit background renderer");
+            }catch(Exception error){
+                toast(activity,"Render service unavailable: "+error.getClass().getSimpleName());
+            }
+        }));
         add(activity,tools,"◉  Fix Viewport Flicker",()->send(activity,
               "blender.ui.stabilize_viewport",new JSONObject()));
         add(activity,tools,"⬇  Export PNG / MP4",()->WORK.execute(()->{
@@ -276,23 +308,38 @@ public final class BlenderMobileControls {
                 ViewGroup.LayoutParams.MATCH_PARENT,px(activity,39)));
         renderControl.setOnClickListener(v->{
             if(RenderManualJobs.active()){
-                RenderManualJobs.pause();
-                toast(activity,"Pausing after the current frame");
+                try{RenderLongForegroundService.requestPause(activity);
+                    toast(activity,"Pausing after current native frame");}
+                catch(Exception error){RenderManualJobs.pause();
+                    toast(activity,"Pause requested");}
             } else {
                 WORK.execute(()->{
-                    String job=RenderManualJobs.status(activity).optString("job_id","");
-                    if(job.isEmpty())job=RenderManualJobs.newestRecoverable(activity);
-                    if(!job.isEmpty()&&RenderManualJobs.start(activity,job))
-                        toast(activity,"Resuming the saved render");
-                    else toast(activity,"Open File → Resume Render to recover a job");
+                    try{
+                        String job=RenderManualJobs.status(activity).optString("job_id","");
+                        if(job.isEmpty())job=RenderManualJobs.newestRecoverable(activity);
+                        if(job.isEmpty())throw new IllegalStateException("NO_RENDER_JOB");
+                        JSONObject result=RenderLongForegroundService.request(activity,job);
+                        toast(activity,result.optBoolean("foreground_launch_requested")?
+                            "Resuming saved render in foreground service":
+                            "Resume from owner-visible Render activity");
+                    }catch(Exception error){
+                        toast(activity,"Render resume unavailable: "+error.getClass().getSimpleName());
+                    }
                 });
             }
         });
         final Handler refreshHandler=new Handler(Looper.getMainLooper());
+        final int[] ownerVisibleChecks={0};
         final Runnable pulse=new Runnable(){
             @Override public void run(){
                 if(activity.isFinishing()||activity.isDestroyed())return;
                 RenderManualJobs.acceptMenuRequest(activity);
+                if(++ownerVisibleChecks[0]%15==0){
+                    WORK.execute(()->{
+                        if(!activity.isFinishing()&&!activity.isDestroyed())
+                            RenderLongForegroundService.resumeConsentedVisibleJob(activity);
+                    });
+                }
                 JSONObject snapshot=RenderManualJobs.status(activity);
                 String job=snapshot.optString("job_id","");
                 String state=snapshot.optString("state","idle");
@@ -355,10 +402,15 @@ public final class BlenderMobileControls {
         if(a.isFinishing()||a.isDestroyed())return;
         if(RenderManualJobs.active()){
             new AlertDialog.Builder(a)
-                .setTitle("Rendering in progress")
-                .setMessage("Pause after the current frame before leaving. Finished frames are checkpointed and can resume without starting over.")
+                .setTitle("Native Blender is rendering")
+                .setMessage("Keep the render service active while leaving the app. Android may still suspend native Blender if the editor process dies; committed PNG frames remain recoverable.")
                 .setNegativeButton("Stay in Blender",null)
-                .setPositiveButton("Pause at frame boundary",(d,w)->RenderManualJobs.pause())
+                .setNeutralButton("Pause after frame",(d,w)->{
+                    try{RenderLongForegroundService.requestPause(a);}
+                    catch(Exception error){RenderManualJobs.pause();}
+                })
+                .setPositiveButton("Keep rendering & hide app",(d,w)->
+                    a.moveTaskToBack(true))
                 .show();
             return;
         }
