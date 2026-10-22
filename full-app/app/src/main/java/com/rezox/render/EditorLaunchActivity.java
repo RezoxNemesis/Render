@@ -50,7 +50,7 @@ public final class EditorLaunchActivity extends Activity {
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
-        EngineEvidence.record(this,EngineEvidence.Stage.PREFLIGHT_ACCEPTED);
+        EngineEvidence.record(this,EngineEvidence.Stage.LAUNCHER_ACTIVITY_CREATED);
         LinearLayout page=StudioUi.page(this);
         LinearLayout top=StudioUi.row(this);
         TextView back=StudioUi.action(this,"←",StudioUi.SECONDARY);
@@ -143,9 +143,13 @@ public final class EditorLaunchActivity extends Activity {
         if(!starting.compareAndSet(false,true))return;
         if(!GLOBAL_PREFLIGHT.compareAndSet(false,true)){
             starting.set(false);
-            report("Blender resources are already being prepared in this process.");
+            report("Blender resources are being prepared; launch will resume automatically.");
+            // Activity recreation must not strand the new UI while the old
+            // Activity's background extraction is still holding the gate.
+            status.postDelayed(()->{if(!destroyed&&!isFinishing())prepare();},750);
             return;
         }
+        EngineEvidence.record(this,EngineEvidence.Stage.PREFLIGHT_ACCEPTED);
         new Thread(()->{
             boolean handedToUi=false;
             try {
