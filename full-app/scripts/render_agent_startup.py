@@ -14,6 +14,7 @@ import re
 import time
 
 import bpy
+import render_session_tools as _render_session
 
 ROOT = os.environ.get("RENDER_AGENT_SPOOL", "")
 MOBILE_MODE = os.environ.get("RENDER_MOBILE_UI_MODE", "")
@@ -354,6 +355,10 @@ def _dispatch(command):
     args = command.get("args")
     if not isinstance(args, dict):
         raise ValueError("INVALID_ARGUMENTS")
+    if action in ("blender.project.save_session", "blender.project.restore_session",
+                  "blender.render.plan_current", "blender.render.resume_last",
+                  "blender.ui.stabilize_viewport"):
+        return _render_session.dispatch(action, args)
     # Local touch-overlay UI operations; NOT remotely registered agent actions.
     if action == "blender.ui.adjust_scale":
         if set(args) != {"delta"} or not _number(args.get("delta"), -.25, .25):
@@ -679,6 +684,7 @@ def _poll():
     return 0.5
 
 if ROOT:
+    _render_session.install()
     bpy.app.timers.register(_poll, first_interval=0.5, persistent=True)
 
 if MOBILE_MODE in ("portrait", "landscape") and not getattr(bpy.app,"background",False):
