@@ -329,10 +329,17 @@ public final class BlenderMobileControls {
             }
         });
         final Handler refreshHandler=new Handler(Looper.getMainLooper());
+        final int[] ownerVisibleChecks={0};
         final Runnable pulse=new Runnable(){
             @Override public void run(){
                 if(activity.isFinishing()||activity.isDestroyed())return;
                 RenderManualJobs.acceptMenuRequest(activity);
+                if(++ownerVisibleChecks[0]%15==0){
+                    WORK.execute(()->{
+                        if(!activity.isFinishing()&&!activity.isDestroyed())
+                            RenderLongForegroundService.resumeConsentedVisibleJob(activity);
+                    });
+                }
                 JSONObject snapshot=RenderManualJobs.status(activity);
                 String job=snapshot.optString("job_id","");
                 String state=snapshot.optString("state","idle");
