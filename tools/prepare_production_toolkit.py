@@ -20,8 +20,8 @@ def prepare():
             ('tools/assemble_full_native.py','render_studio_contract.py'),
             ('app/src/main/java/com/rezox/render/agent/ProductionBridge.java','StudioReferenceInbox.list(context,p)'),
             ('full-app/scripts/render_production.py','render_studio_ops.py'),
-            ('full-app/app/build.gradle','versionCode 25'),
-            ('app/build.gradle.kts','versionCode = 25'),
+            ('full-app/app/build.gradle','versionCode 26'),
+            ('app/build.gradle.kts','versionCode = 26'),
         )
         if not all(marker in (ROOT/path).read_text() for path,marker in required):
             raise RuntimeError('INCOMPLETE_V022_BUILD_ADAPTER_STATE')
@@ -71,5 +71,18 @@ def prepare():
     apply(ROOT)
     from prepare_v23_reference import apply as install_reference_studio
     install_reference_studio()
-    print('Prepared Render Studio native reference toolkit v0.22.0; package, data and VideoStudio MCP unchanged')
+    # v0.24 is an in-place successor; never silently downgrade an already
+    # installed v0.22, rotate its signer, or change the Android package name.
+    for name in ('app/build.gradle.kts','full-app/app/build.gradle'):
+        target=ROOT/name
+        source=target.read_text()
+        before='versionCode = 25' if name.endswith('.kts') else 'versionCode 25'
+        after='versionCode = 26' if name.endswith('.kts') else 'versionCode 26'
+        if source.count(before)!=1:
+            raise RuntimeError('V024_VERSION_ADAPTER_DRIFT: '+name)
+        source=source.replace(before,after,1)
+        source=source.replace('0.22.0-native-reference-precision',
+            '0.24.0-native-continuity-assets')
+        target.write_text(source)
+    print('Prepared Render Studio v0.24 recovery, procedural assets, native hand and render UI; original package preserved')
 if __name__=='__main__':prepare()
