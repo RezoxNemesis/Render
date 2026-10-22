@@ -21,7 +21,7 @@ public final class ProductionBridge {
         "artifact.read","artifact.export","reference.write","project.create","project.checkpoint",
         "scene.inspect","mesh.create","material.assign","group.create","animation.keys","camera.aim",
         "world.configure","instances.plan","instances.create","reference.attach",
-        "render.plan","render.step","render.status","render.encode"};
+        "render.plan","render.step","render.batch","render.status","render.encode","drive.status","drive.backup"};
     private static final Set<String> OPERATIONS=new HashSet<>(Arrays.asList(OPS));
     private ProductionBridge(){}
     public static void fields(JSONObject p,String allowed)throws Exception {
@@ -47,11 +47,12 @@ public final class ProductionBridge {
     public static JSONObject profile(Context context)throws Exception {
         ActivityManager manager=context.getSystemService(ActivityManager.class);ActivityManager.MemoryInfo memory=new ActivityManager.MemoryInfo();
         if(manager!=null)manager.getMemoryInfo(memory);
-        PowerManager power=context.getSystemService(PowerManager.class);int thermal=power==null?-1:power.getCurrentThermalStatus();
-        return new JSONObject().put("available_memory_bytes",memory.availMem).put("total_memory_bytes",memory.totalMem)
-            .put("low_memory",memory.lowMemory).put("thermal_status",thermal).put("native_editor_ready",editorReady(context))
+        JSONObject telemetry=ProductionThermalTelemetry.sample(context);
+        return telemetry.put("native_editor_ready",editorReady(context))
             .put("maximum_instance_request",10_000_000).put("ten_million_device_test_passed",false)
-            .put("quality_reduction_policy","never_silent").put("full_desktop_parity_verified",false);
+            .put("quality_reduction_policy","never_silent")
+            .put("render_auto_cooldown_available",true)
+            .put("full_desktop_parity_verified",false);
     }
     public static JSONObject execute(Context context,JSONObject args,AtomicBoolean cancelled)throws Exception {
         validate(args);String operation=args.getString("operation");JSONObject p=args.optJSONObject("payload");if(p==null)p=new JSONObject();
@@ -68,7 +69,12 @@ public final class ProductionBridge {
                 .put("native_editor_ready",editorReady(context)).put("native_window_capture_ready",ProductionCapture.available())
                 .put("android_h264_encoder_available",ProductionVideoEncoder.available()).put("cloud_rendering",false)
                 .put("automatic_image_to_3d_provider_installed",false).put("visual_quality_verified",false)
-                .put("render_protocol","plan_then_step_each_frame_then_encode_then_export");
+                .put("render_protocol","plan_then_batch_up_to_12_frames_with_cooldown_then_encode_then_export")
+                .put("render_batch_max_frames",12)
+                .put("thermal_severe_is_safely_paused",true)
+                .put("drive_backup_via","user-granted Android Storage Access Framework; cloud storage only")
+                .put("drive_folder_granted",ProductionDriveStorage.status(context).getBoolean("folder_granted"))
+                .put("user_project_quality_changed",false);
         }
         if(operation.equals("device.profile")){fields(p,"");return profile(context);}
         if(operation.equals("editor.open")){
@@ -81,6 +87,9 @@ public final class ProductionBridge {
         if(operation.equals("artifact.read"))return ProductionFiles.read(context,p);
         if(operation.equals("artifact.export"))return ProductionFiles.export(context,p);
         if(operation.equals("reference.write"))return ProductionFiles.writeReference(context,p);
+        if(operation.equals("drive.status")){fields(p,"");return ProductionDriveStorage.status(context);}
+        if(operation.equals("drive.backup"))return ProductionDriveStorage.backup(context,p);
+        if(operation.equals("render.batch"))return ProductionBatch.advance(context,p,cancelled);
         if(operation.equals("render.status")){
             fields(p,"job_id");File manifest=ProductionFiles.file(context,p.getString("job_id"),"manifest.json");
             if(!manifest.isFile()||manifest.length()>16*1024*1024)throw new IllegalArgumentException("RENDER_MANIFEST_UNAVAILABLE");
@@ -88,18 +97,34 @@ public final class ProductionBridge {
             return new JSONObject().put("job_id",m.getString("job_id")).put("state",m.getString("state"))
                 .put("completed_frames",m.getJSONObject("frames").length()).put("spec",m.getJSONObject("spec"))
                 .put("next_frame",m.getInt("next_frame")).put("quality_reduced",false)
-                .put("video",m.optJSONObject("video"));
+                .put("video",m.optJSONObject("video"))
+                .put("thermal",ProductionThermalTelemetry.sample(context))
+                .put("supports_resume",true)
+                .put("batch_operation","render.batch");
         }
         JSONObject device=profile(context);
+        ProductionThermalPolicy.Decision gate=ProductionThermalPolicy.evaluate(
+            device.optInt("thermal_status",-1),device.optBoolean("low_memory"),
+            device.optLong("available_memory_bytes"),cancelled.get());
         if(operation.equals("render.encode")){
             fields(p,"job_id");
+            if(!gate.renderAllowed)
+                return ProductionBatch.jobStatus(context,p.getString("job_id")).put("paused",true)
+                    .put("reason",gate.reason).put("thermal",device).put("video_created",false);
             try(NativeWakeGuard wake=NativeWakeGuard.acquire(context,"blender.scene.render_video")){
                 return ProductionVideoEncoder.encode(context,p.getString("job_id"),cancelled);
             }
         }
         if(operation.equals("render.step")||operation.equals("instances.create")){
-            if(device.optBoolean("low_memory")||device.optLong("available_memory_bytes")<256L*1024*1024)throw new IllegalStateException("PAUSED_MEMORY_PRESSURE");
-            if(device.optInt("thermal_status")>=PowerManager.THERMAL_STATUS_SEVERE)throw new IllegalStateException("PAUSED_THERMAL_PRESSURE");
+            if(!gate.renderAllowed){
+                if(operation.equals("render.step")){
+                    fields(p,"job_id");
+                    return ProductionBatch.jobStatus(context,p.getString("job_id"))
+                        .put("paused",true).put("reason",gate.reason).put("thermal",device)
+                        .put("retry_after_seconds",30);
+                }
+                throw new IllegalStateException(gate.reason);
+            }
         }
         JSONObject nativePayload=new JSONObject(p.toString());
         if(operation.equals("instances.plan")||operation.equals("instances.create")){
