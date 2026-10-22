@@ -135,25 +135,18 @@ def apply():
     patch(batch,'if(result.optInt("completed_frames")<=current.getInt("completed_frames"))',
           'if(result.optInt("completed_frames")<=current.getInt("completed_frames"))')
 
-    # Include deliberate owner UI action rather than hidden auto-import.
+    # The raw Android activity compiles independently and already confirms
+    # owner-granted media before touching its private reference inbox.
     agent='app/src/main/java/com/rezox/render/agent/AgentActivity.java'
-    patch(agent,'if(StudioReferenceInbox.isExplicitOwnerMediaIntent(getIntent()))receiveReferenceIntent(getIntent());',
+    patch(agent,'if(StudioReferenceInbox.isExplicitOwnerMediaIntent(getIntent()))confirmSharedReference(getIntent());',
           '''if(StudioReferenceInbox.isExplicitOwnerMediaIntent(getIntent()))
             confirmSharedReference(getIntent());
         else if(getIntent()!=null&&"com.rezox.render.agent.PICK_MEDIA".equals(getIntent().getAction())){
             setIntent(new Intent(this,AgentActivity.class));
             StudioReferenceInbox.openPicker(this);
         }''')
-    patch(agent,'    private void receiveReferenceIntent(Intent inbound){',
-          '''    private void confirmSharedReference(Intent inbound){
-        new AlertDialog.Builder(this)
-            .setTitle("Import these images/videos into Render?")
-            .setMessage("Only the files explicitly shared with Render will be copied into its private reference inbox. No Gallery browsing occurs.")
-            .setNegativeButton("Cancel",null)
-            .setPositiveButton("Import",(dialog,which)->receiveReferenceIntent(inbound))
-            .show();
-    }
-    private void receiveReferenceIntent(Intent inbound){''')
+    if 'private void confirmSharedReference(Intent inbound)' not in (ROOT/agent).read_text():
+        raise RuntimeError('OWNER_IMPORT_CONFIRMATION_MISSING')
     # APK version is increased monotonically, same installed signing certificate.
     for file in ('app/build.gradle.kts','full-app/app/build.gradle'):
         path=ROOT/file;text=path.read_text()
