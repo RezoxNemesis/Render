@@ -94,11 +94,23 @@ def merge_manifest(source):
     ET.SubElement(filter_, "category", {ANDROID + "name": "android.intent.category.LAUNCHER"})
     for klass in ("com.rezox.render.MainActivity", "com.rezox.render.agent.AgentActivity",
                   "com.rezox.render.EditorLaunchActivity"):
-        ET.SubElement(application, "activity", {
+        is_reference_inbox = klass.endswith("agent.AgentActivity")
+        node = ET.SubElement(application, "activity", {
             ANDROID + "name": klass,
-            ANDROID + "exported": "false",
+            ANDROID + "exported": "true" if is_reference_inbox else "false",
             ANDROID + "screenOrientation": "unspecified",
         })
+        # Only explicit user SEND/Open Document grants arrive here; no Gallery
+        # enumeration or broad READ_MEDIA permissions are requested.
+        if is_reference_inbox:
+            for action in ("android.intent.action.SEND",
+                           "android.intent.action.SEND_MULTIPLE"):
+                for mime in ("image/*", "video/*"):
+                    intent = ET.SubElement(node, "intent-filter")
+                    ET.SubElement(intent, "action", {ANDROID + "name": action})
+                    ET.SubElement(intent, "category", {
+                        ANDROID + "name": "android.intent.category.DEFAULT"})
+                    ET.SubElement(intent, "data", {ANDROID + "mimeType": mime})
     service = ET.SubElement(application, "service", {
         ANDROID + "name": "com.rezox.render.agent.AgentService",
         ANDROID + "exported": "false",
