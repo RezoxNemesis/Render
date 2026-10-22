@@ -1,5 +1,6 @@
 import unittest
 from pathlib import Path
+ROOT=Path(__file__).resolve().parents[1]
 
 BASE=Path(__file__).resolve().parents[1]
 def source(p):return (BASE/p).read_text()
