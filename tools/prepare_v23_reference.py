@@ -130,8 +130,11 @@ def apply():
            ProductionBridge.integer(p,"expected_next_frame",1,10000000,-1)!=current.getInt("next_frame"))
             throw new IllegalArgumentException("RENDER_NEXT_FRAME_CONFLICT");
         int maxFrames=(int)ProductionBridge.integer(p,"max_frames",1,12,8);''')
-    patch(batch,'current.getInt("next_frame")>current.getInt("total_frames")',
-          'current.getInt("next_frame")>current.getInt("end_frame")')
+    # v0.24 keeps the corrected absolute-frame check in a testable helper.
+    # The older adapter still needs to fix unpatched v0.22 source.
+    if 'framesComplete(current)' not in (ROOT/batch).read_text():
+        patch(batch,'current.getInt("next_frame")>current.getInt("total_frames")',
+              'current.getInt("next_frame")>current.getInt("end_frame")')
     patch(batch,'if(result.optInt("completed_frames")<=current.getInt("completed_frames"))',
           'if(result.optInt("completed_frames")<=current.getInt("completed_frames"))')
 
