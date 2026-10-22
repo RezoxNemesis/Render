@@ -29,6 +29,10 @@ class StillQualityContract(unittest.TestCase):
         self.assertEqual(native["samples"],128)
         self.assertEqual(native["engine"],"CYCLES")
         self.assertEqual(native["frame_count"],1)
+        high=c.render_spec({"output_kind":"STILL","start":3,"end":3,
+                            "samples":8192,"engine":"CYCLES"})
+        self.assertEqual(high["samples"],8192)
+        self.assertEqual(high["width"],1280)
         self.assertEqual(c.render_spec({})["output_kind"],"ANIMATION")
         for payload in ({"output_kind":"RAW_PYTHON"},
                         {"output_kind":"STILL","start":1,"end":2},
