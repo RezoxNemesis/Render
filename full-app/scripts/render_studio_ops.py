@@ -58,7 +58,6 @@ def _asset(root,filename):
     filename=C.asset_name(stem,ext)
     path=C.owned_path(root/'Assets',filename)
     if not path.is_file():raise ValueError('OWNER_REFERENCE_NOT_IMPORTED')
-    if C.fingerprint({'placeholder':False}) is None:raise AssertionError('contract_unavailable')
     import hashlib
     h=hashlib.sha256()
     with path.open('rb') as stream:
@@ -206,7 +205,9 @@ def _geometry(scene,p):
     offset=p.get('offset',0);limit=p.get('limit',32)
     if type(offset) is not int or not 0<=offset<=100000000:raise ValueError('INVALID_OFFSET')
     if type(limit) is not int or not 1<=limit<=64:raise ValueError('INVALID_LIMIT')
-    vertices=[{'index':v.index,'co':list(v.co)} for v in list(ob.data.vertices)[offset:offset+limit]]
+    from itertools import islice
+    vertices=[{'index':v.index,'co':list(v.co)} for v in
+              islice(ob.data.vertices,offset,offset+limit)]
     return {'object':ob.name,'total_vertices':len(ob.data.vertices),
             'polygons':len(ob.data.polygons),'vertex_page':vertices,
             'materials':[m.name for m in ob.data.materials if m],
