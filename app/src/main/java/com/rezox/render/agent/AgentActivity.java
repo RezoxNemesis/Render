@@ -543,11 +543,15 @@ public final class AgentActivity extends Activity {
     });}
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){
         super.onActivityResult(requestCode,resultCode,data);
-        if(requestCode==StudioReferenceInbox.PICK_REFERENCE && resultCode==Activity.RESULT_OK)
-            receiveReferenceIntent(new Intent(Intent.ACTION_OPEN_DOCUMENT)
-                .setData(data==null?null:data.getData())
-                .setClipData(data==null?null:data.getClipData())
-                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION));
+        if(requestCode==StudioReferenceInbox.PICK_REFERENCE && resultCode==Activity.RESULT_OK){
+            Intent ownerSelected=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            if(data!=null){
+                ownerSelected.setData(data.getData());
+                ownerSelected.setClipData(data.getClipData());
+            }
+            ownerSelected.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            receiveReferenceIntent(ownerSelected);
+        }
         if(requestCode==ProductionDriveStorage.REQUEST_PICK_FOLDER){
             try{
                 boolean selected=ProductionDriveStorage.acceptFolderSelection(this,resultCode,data);
