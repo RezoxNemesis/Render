@@ -22,7 +22,7 @@ jobs:
           python-version: "3.13"
       - run: python tools/prepare_production_toolkit.py
       - name: Verify production and previous native contracts
-        run: PYTHONPATH=tools python -m unittest tools/test_assemble_full_native.py tools/test_blender_bpy_bridge.py tools/test_lively_scene_contract.py tools/test_lively_scene_mock.py tools/test_native_autonomy_security.py tools/test_blender_batch_assembly.py tools/test_production_contract.py tools/test_thermal_drive_inplace_contract.py tools/test_studio_v22_contract.py tools/test_v23_reference_contract.py tools/test_render_v24_contract.py tools/test_render_v25_contract.py -v
+        run: PYTHONPATH=tools python -m unittest tools/test_assemble_full_native.py tools/test_blender_bpy_bridge.py tools/test_lively_scene_contract.py tools/test_lively_scene_mock.py tools/test_native_autonomy_security.py tools/test_blender_batch_assembly.py tools/test_production_contract.py tools/test_thermal_drive_inplace_contract.py tools/test_studio_v22_contract.py tools/test_v23_reference_contract.py tools/test_render_v24_contract.py tools/test_render_v25_contract.py tools/test_long_foreground_contract.py -v
       - name: Verify adapter is repeatable
         run: python tools/prepare_production_toolkit.py
   blender-bpy-integration:
