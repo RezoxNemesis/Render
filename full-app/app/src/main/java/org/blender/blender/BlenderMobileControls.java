@@ -140,6 +140,8 @@ public final class BlenderMobileControls {
             tools.getVisibility()==View.VISIBLE?View.GONE:View.VISIBLE));
 
         add(activity,tools,"⌂  Render Home",()->confirmHome(activity));
+        add(activity,tools,"▣  Render Image (Protected)",()->send(activity,
+              "blender.render.plan_still",new JSONObject()));
         add(activity,tools,"▶  Render Animation",()->send(activity,
               "blender.render.plan_current",new JSONObject()));
         add(activity,tools,"↻  Resume Render / MP4",()->send(activity,
@@ -148,15 +150,15 @@ public final class BlenderMobileControls {
               "blender.project.save_session",new JSONObject()));
         add(activity,tools,"◉  Fix Viewport Flicker",()->send(activity,
               "blender.ui.stabilize_viewport",new JSONObject()));
-        add(activity,tools,"⬇  Export MP4 to Downloads",()->WORK.execute(()->{
+        add(activity,tools,"⬇  Export PNG / MP4",()->WORK.execute(()->{
             try {
                 String job=RenderManualJobs.status(activity).optString("job_id","");
                 if(job.isEmpty())job=RenderManualJobs.newestRecoverable(activity);
                 if(job.isEmpty())throw new IllegalStateException("NO_RENDER_JOB");
                 RenderManualJobs.export(activity,job);
-                toast(activity,"MP4 saved in Downloads / RenderStudio");
+                toast(activity,"Render exported to Downloads / RenderStudio");
             }catch(Exception error){
-                toast(activity,"MP4 export unavailable: "+error.getMessage());
+                toast(activity,"Render export unavailable: "+error.getMessage());
             }
         }));
         add(activity,tools,"▣  Focus viewport",()->send(activity,"blender.ui.focus_viewport",
