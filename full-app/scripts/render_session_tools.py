@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import re
 import time
+import threading
 
 import bpy
 
@@ -20,6 +21,8 @@ _ROOT = Path(SPOOL).resolve().parent / "Production" if SPOOL else None
 _ID = re.compile(r"^[a-f0-9]{32}$")
 _STARTED = False
 _RESTORE_ATTEMPTED = False
+_RESTORE_THREAD = None
+_RESTORE_RESULT = None
 _LAST_SAVE = 0
 
 def _root():
@@ -143,13 +146,41 @@ def restore_session(force=False):
         raise RuntimeError("SESSION_RESTORE_FAILED")
     return {"restored": True, "filename": candidate.name}
 
+def _scan_saved_project():
+    global _RESTORE_RESULT
+    try:
+        # Read only app-owned files off the Blender UI thread. bpy scene
+        # mutation and open_mainfile ALWAYS execute on the timer main thread.
+        _RESTORE_RESULT = _recoverable_session()
+    except Exception as error:
+        print("Render session scan failed:", type(error).__name__)
+        _RESTORE_RESULT = None
+
+
 def _restore_at_start():
-    global _RESTORE_ATTEMPTED
+    global _RESTORE_ATTEMPTED, _RESTORE_THREAD
     if _RESTORE_ATTEMPTED:
         return None
+    if bpy.data.filepath or bpy.data.is_dirty:
+        # Never discard a project opened or edited while checking storage.
+        _RESTORE_ATTEMPTED = True
+        return None
+    if _RESTORE_THREAD is None:
+        _RESTORE_THREAD = threading.Thread(
+            target=_scan_saved_project, name="render-session-integrity",
+            daemon=True)
+        _RESTORE_THREAD.start()
+        return 0.5
+    if _RESTORE_THREAD.is_alive():
+        return 0.5
     _RESTORE_ATTEMPTED = True
+    if _RESTORE_RESULT is None:
+        return None
     try:
-        restore_session()
+        result = bpy.ops.wm.open_mainfile(
+            filepath=str(_RESTORE_RESULT), load_ui=False)
+        if "FINISHED" not in result:
+            print("Render session requires explicit manual recovery")
     except Exception as error:
         print("Render session preserved for manual recovery:", type(error).__name__)
     return None
