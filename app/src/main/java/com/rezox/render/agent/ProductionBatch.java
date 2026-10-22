@@ -28,6 +28,7 @@ public final class ProductionBatch {
             .put("job_id",jobId).put("state",m.getString("state"))
             .put("next_frame",m.getInt("next_frame"))
             .put("total_frames",spec.getInt("frame_count"))
+            .put("start_frame",spec.getInt("start")).put("end_frame",spec.getInt("end"))
             .put("completed_frames",m.getJSONObject("frames").length())
             .put("fingerprint",m.getString("fingerprint"))
             .put("quality_reduced",false)
@@ -68,7 +69,7 @@ public final class ProductionBatch {
             while(produced<maxFrames && SystemClock.elapsedRealtime()-started<maxWall){
                 if(cancelled.get())return report(context,jobId,"PAUSED_USER_STOP",produced,SystemClock.elapsedRealtime()-started,ProductionThermalTelemetry.sample(context));
                 current=jobStatus(context,jobId);
-                if(current.getInt("next_frame")>current.getInt("total_frames")){
+                if(current.getInt("next_frame")>current.getInt("end_frame")){
                     reason="FRAMES_COMPLETE";break;
                 }
                 JSONObject reading=ProductionThermalTelemetry.sample(context);
