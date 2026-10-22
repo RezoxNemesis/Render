@@ -20,8 +20,8 @@ def prepare():
             ('tools/assemble_full_native.py','render_studio_contract.py'),
             ('app/src/main/java/com/rezox/render/agent/ProductionBridge.java','StudioReferenceInbox.list(context,p)'),
             ('full-app/scripts/render_production.py','render_studio_ops.py'),
-            ('full-app/app/build.gradle','versionCode 28'),
-            ('app/build.gradle.kts','versionCode = 28'),
+            ('full-app/app/build.gradle','versionCode 29'),
+            ('app/build.gradle.kts','versionCode = 29'),
         )
         if not all(marker in (ROOT/path).read_text() for path,marker in required):
             raise RuntimeError('INCOMPLETE_V022_BUILD_ADAPTER_STATE')
@@ -107,5 +107,18 @@ def prepare():
         source=source.replace(older,newer,1)
         source=source.replace('0.25.0-native-verified-recovery','0.26.0-omega-test-candidate')
         target.write_text(source)
-    print('RENDER OMEGA 0.26 candidate staged (versionCode 28); original application ID and signing identity unchanged')
+    # 0.27 retains the same com.rezox.render Android identity and the exact
+    # original install-compatible development signer. APK install is NEVER
+    # attempted by the build adapter.
+    for name in ('app/build.gradle.kts','full-app/app/build.gradle'):
+        target=ROOT/name
+        source=target.read_text()
+        old='versionCode = 28' if name.endswith('.kts') else 'versionCode 28'
+        new='versionCode = 29' if name.endswith('.kts') else 'versionCode 29'
+        if source.count(old)!=1:
+            raise RuntimeError('V027_MONOTONIC_VERSION_ADAPTER_DRIFT: '+name)
+        source=source.replace(old,new,1).replace(
+            '0.26.0-omega-test-candidate','0.27.0-resumable-long-render')
+        target.write_text(source)
+    print('RENDER 0.27 development candidate staged (versionCode 29); original package and signer unchanged')
 if __name__=='__main__':prepare()
