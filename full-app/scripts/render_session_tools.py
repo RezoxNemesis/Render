@@ -379,6 +379,8 @@ def install():
             bpy.utils.register_class(klass)
         except ValueError:
             pass
+    import render_assets
+    render_assets.install()
     bpy.types.TOPBAR_MT_file.append(_file_menu)
     try:
         bpy.types.STATUSBAR_HT_header.append(_statusbar)
