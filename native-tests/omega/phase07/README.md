@@ -7,8 +7,8 @@ The Blender module can be imported without `bpy` for pure validation tests.
 ## Operation: `omega.motion.create_actions`
 
 The default `kind: "walk"` creates **one actual Blender Action and NLA strip**
-on an existing armature using five pose F-curves: armature-local Root Y
-translation plus both thigh/shin X rotations. Input is an exact JSON object:
+on an existing armature using seven pose F-curves: three root-bone location channels mapped
+into armature-local +Y and both thigh/shin X rotations. Input is an exact JSON object:
 
 ```json
 {
