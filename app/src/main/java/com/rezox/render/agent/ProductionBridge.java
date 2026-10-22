@@ -1,0 +1,114 @@
+package com.rezox.render.agent;
+
+import android.app.ActivityManager;
+import android.content.Context;
+import android.content.Intent;
+import android.os.PowerManager;
+import org.json.JSONArray;
+import org.json.JSONObject;
+import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+/** Stable typed envelope. New operations are validated by Render, not guessed from a version string. */
+public final class ProductionBridge {
+    public static final String ACTION="production.execute";
+    private static final String[] OPS={"capabilities","device.profile","editor.open","screenshot.capture",
+        "artifact.read","artifact.export","reference.write","project.create","project.checkpoint",
+        "scene.inspect","mesh.create","material.assign","group.create","animation.keys","camera.aim",
+        "world.configure","instances.plan","instances.create","reference.attach",
+        "render.plan","render.step","render.status","render.encode"};
+    private static final Set<String> OPERATIONS=new HashSet<>(Arrays.asList(OPS));
+    private ProductionBridge(){}
+    public static void fields(JSONObject p,String allowed)throws Exception {
+        Set<String> names=new HashSet<>(Arrays.asList(allowed.split(",")));
+        java.util.Iterator<String> it=p.keys();while(it.hasNext())if(!names.contains(it.next()))throw new IllegalArgumentException("UNKNOWN_PRODUCTION_ARGUMENT");
+    }
+    public static long integer(JSONObject p,String key,long low,long high,long fallback)throws Exception {
+        Object value=p.opt(key);
+        if(value==null){if(fallback<low||fallback>high)throw new IllegalArgumentException("REQUIRED_INTEGER_MISSING");return fallback;}
+        if(!(value instanceof Integer)&&!(value instanceof Long))throw new IllegalArgumentException("INVALID_INTEGER");
+        long n=((Number)value).longValue();if(n<low||n>high)throw new IllegalArgumentException("INTEGER_OUT_OF_RANGE");return n;
+    }
+    public static void validate(JSONObject args)throws Exception {
+        fields(args,"operation,payload,target_id");
+        if(!(args.opt("operation") instanceof String)||!OPERATIONS.contains(args.getString("operation")))throw new IllegalArgumentException("PRODUCTION_OPERATION_UNAVAILABLE");
+        if(args.has("payload")&&!(args.opt("payload") instanceof JSONObject))throw new IllegalArgumentException("INVALID_PRODUCTION_PAYLOAD");
+        if(args.has("target_id")&&(!(args.opt("target_id") instanceof String)||!args.getString("target_id").matches("[a-fA-F0-9-]{36}")))throw new IllegalArgumentException("INVALID_TARGET_ID");
+        if(args.toString().getBytes(StandardCharsets.UTF_8).length>131072)throw new IllegalArgumentException("PRODUCTION_REQUEST_TOO_LARGE");
+    }
+    private static boolean editorReady(Context context){
+        File ready=new File(context.getFilesDir(),"render_bpy_jobs/ready");long age=System.currentTimeMillis()-ready.lastModified();return ready.isFile()&&age>=0&&age<15000;
+    }
+    public static JSONObject profile(Context context)throws Exception {
+        ActivityManager manager=context.getSystemService(ActivityManager.class);ActivityManager.MemoryInfo memory=new ActivityManager.MemoryInfo();
+        if(manager!=null)manager.getMemoryInfo(memory);
+        PowerManager power=context.getSystemService(PowerManager.class);int thermal=power==null?-1:power.getCurrentThermalStatus();
+        return new JSONObject().put("available_memory_bytes",memory.availMem).put("total_memory_bytes",memory.totalMem)
+            .put("low_memory",memory.lowMemory).put("thermal_status",thermal).put("native_editor_ready",editorReady(context))
+            .put("maximum_instance_request",10_000_000).put("ten_million_device_test_passed",false)
+            .put("quality_reduction_policy","never_silent").put("full_desktop_parity_verified",false);
+    }
+    public static JSONObject execute(Context context,JSONObject args,AtomicBoolean cancelled)throws Exception {
+        validate(args);String operation=args.getString("operation");JSONObject p=args.optJSONObject("payload");if(p==null)p=new JSONObject();
+        String publicId=new AgentSecrets(context).renderPublicId();
+        if(!operation.equals("capabilities")&&!operation.equals("device.profile")){
+            if(!publicId.equals(args.optString("target_id","")))throw new IllegalArgumentException("RENDER_TARGET_ID_REQUIRED_OR_MISMATCH");
+        }
+        if(cancelled.get())throw new IllegalStateException("CANCELLED_BEFORE_NATIVE_START");
+        if(operation.equals("capabilities")){
+            fields(p,"");JSONArray operations=new JSONArray();for(String op:OPS)operations.put(op);
+            return new JSONObject().put("schema_version",1).put("envelope",ACTION).put("operations",operations)
+                .put("render_public_id",publicId).put("target_package",context.getPackageName()).put("target_app","Render Studio")
+                .put("requires_target_id",true).put("maximum_request_bytes",131072).put("maximum_artifact_chunk_bytes",24576)
+                .put("native_editor_ready",editorReady(context)).put("native_window_capture_ready",ProductionCapture.available())
+                .put("android_h264_encoder_available",ProductionVideoEncoder.available()).put("cloud_rendering",false)
+                .put("automatic_image_to_3d_provider_installed",false).put("visual_quality_verified",false)
+                .put("render_protocol","plan_then_step_each_frame_then_encode_then_export");
+        }
+        if(operation.equals("device.profile")){fields(p,"");return profile(context);}
+        if(operation.equals("editor.open")){
+            fields(p,"");Intent intent=new Intent().setClassName(context,"com.rezox.render.EditorLaunchActivity").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            context.startActivity(intent);
+            return new JSONObject().put("launch_requested",true).put("editor_ready",editorReady(context))
+                .put("completed_editor_start",false).put("note","Android may require the owner to foreground Render; verify native heartbeat before editing.");
+        }
+        if(operation.equals("screenshot.capture")){fields(p,"");return ProductionCapture.capture(context);}
+        if(operation.equals("artifact.read"))return ProductionFiles.read(context,p);
+        if(operation.equals("artifact.export"))return ProductionFiles.export(context,p);
+        if(operation.equals("reference.write"))return ProductionFiles.writeReference(context,p);
+        if(operation.equals("render.status")){
+            fields(p,"job_id");File manifest=ProductionFiles.file(context,p.getString("job_id"),"manifest.json");
+            if(!manifest.isFile()||manifest.length()>16*1024*1024)throw new IllegalArgumentException("RENDER_MANIFEST_UNAVAILABLE");
+            JSONObject m=new JSONObject(new String(Files.readAllBytes(manifest.toPath()),StandardCharsets.UTF_8));
+            return new JSONObject().put("job_id",m.getString("job_id")).put("state",m.getString("state"))
+                .put("completed_frames",m.getJSONObject("frames").length()).put("spec",m.getJSONObject("spec"))
+                .put("next_frame",m.getInt("next_frame")).put("quality_reduced",false)
+                .put("video",m.optJSONObject("video"));
+        }
+        JSONObject device=profile(context);
+        if(operation.equals("render.encode")){
+            fields(p,"job_id");
+            try(NativeWakeGuard wake=NativeWakeGuard.acquire(context,"blender.scene.render_video")){
+                return ProductionVideoEncoder.encode(context,p.getString("job_id"),cancelled);
+            }
+        }
+        if(operation.equals("render.step")||operation.equals("instances.create")){
+            if(device.optBoolean("low_memory")||device.optLong("available_memory_bytes")<256L*1024*1024)throw new IllegalStateException("PAUSED_MEMORY_PRESSURE");
+            if(device.optInt("thermal_status")>=PowerManager.THERMAL_STATUS_SEVERE)throw new IllegalStateException("PAUSED_THERMAL_PRESSURE");
+        }
+        JSONObject nativePayload=new JSONObject(p.toString());
+        if(operation.equals("instances.plan")||operation.equals("instances.create")){
+            if(p.has("available_memory_bytes"))throw new IllegalArgumentException("DEVICE_MEMORY_IS_NATIVE_ONLY");
+            nativePayload.put("available_memory_bytes",device.getLong("available_memory_bytes"));
+        }
+        JSONObject nativeArgs=new JSONObject().put("operation",operation).put("payload",nativePayload);
+        try(NativeWakeGuard wake=NativeWakeGuard.acquire(context,operation.equals("render.step")?"blender.scene.render_still":"blender.scene.batch_assembly")){
+            return new BlenderSpool(context).execute("blender.production.execute",nativeArgs,cancelled);
+        }
+    }
+}
