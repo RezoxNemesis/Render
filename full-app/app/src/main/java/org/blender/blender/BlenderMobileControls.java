@@ -11,6 +11,8 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.Gravity;
+import android.view.MotionEvent;
+import android.view.ViewConfiguration;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
@@ -20,7 +22,10 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.ProgressBar;
+import android.widget.ScrollView;
 import com.rezox.render.agent.RenderManualJobs;
+import com.rezox.render.omega.engine.OverlayBounds;
+import com.rezox.render.omega.engine.EngineEvidence;
 import android.widget.Toast;
 
 import java.io.File;
@@ -124,9 +129,17 @@ public final class BlenderMobileControls {
             ViewGroup.LayoutParams.WRAP_CONTENT,ViewGroup.LayoutParams.WRAP_CONTENT));
         FrameLayout.LayoutParams position=new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT,ViewGroup.LayoutParams.WRAP_CONTENT,
-            Gravity.END|Gravity.CENTER_VERTICAL);
-        position.rightMargin=px(activity,3);
+            Gravity.END|Gravity.TOP);
+        position.rightMargin=px(activity,5);
+        final int screenHeight=activity.getResources().getDisplayMetrics().heightPixels;
+        final int safeMargin=px(activity,8);
+        int savedTop=activity.getSharedPreferences(SETTINGS,Activity.MODE_PRIVATE)
+            .getInt("overlay_top_px",px(activity,96));
+        position.topMargin=OverlayBounds.clampTop(savedTop,screenHeight,
+            px(activity,130),safeMargin);
         activity.addContentView(content,position);
+        // An attached control surface is observed; a rendered Vulkan frame is NOT.
+        EngineEvidence.record(activity,EngineEvidence.Stage.NATIVE_CONTROLS_ATTACHED);
 
         TextView handle=button(activity,"R  ☰");
         handle.setBackground(shape(0xEEA05F32,14,activity));
@@ -134,10 +147,68 @@ public final class BlenderMobileControls {
             px(activity,58),px(activity,50)));
         LinearLayout tools=new LinearLayout(activity);
         tools.setOrientation(LinearLayout.VERTICAL);
-        tools.setVisibility(View.GONE);
-        buttons.addView(tools);
-        handle.setOnClickListener(v->tools.setVisibility(
-            tools.getVisibility()==View.VISIBLE?View.GONE:View.VISIBLE));
+        ScrollView menuScroll=new ScrollView(activity);
+        menuScroll.setVerticalScrollBarEnabled(true);
+        menuScroll.setFillViewport(false);
+        menuScroll.addView(tools,new ScrollView.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT));
+        menuScroll.setVisibility(View.GONE);
+        int menuHeight=OverlayBounds.scrollHeight(
+            Math.max(px(activity,70),screenHeight-px(activity,230)),
+            px(activity,360),px(activity,115));
+        buttons.addView(menuScroll,new LinearLayout.LayoutParams(px(activity,207),menuHeight));
+        // A real drag on this owner-visible handle moves ONLY the overlay; it
+        // never injects a fake Blender touch or changes the underlying scene.
+        final float[] drag=new float[3]; // X, Y, original top pixel
+        final boolean[] dragged={false};
+        final int touchSlop=ViewConfiguration.get(activity).getScaledTouchSlop();
+        handle.setOnTouchListener((view,event)->{
+            switch(event.getActionMasked()){
+                case MotionEvent.ACTION_DOWN:
+                    drag[0]=event.getRawX();
+                    drag[1]=event.getRawY();
+                    drag[2]=((FrameLayout.LayoutParams)content.getLayoutParams()).topMargin;
+                    dragged[0]=false;
+                    return true;
+                case MotionEvent.ACTION_MOVE: {
+                    if(!OverlayBounds.isTap(drag[0],drag[1],
+                            event.getRawX(),event.getRawY(),touchSlop))
+                        dragged[0]=true;
+                    if(dragged[0]){
+                        FrameLayout.LayoutParams p=(FrameLayout.LayoutParams)content.getLayoutParams();
+                        p.topMargin=OverlayBounds.clampTop(
+                            Math.round(drag[2]+event.getRawY()-drag[1]),
+                            activity.getResources().getDisplayMetrics().heightPixels,
+                            Math.max(px(activity,70),content.getHeight()),safeMargin);
+                        content.setLayoutParams(p);
+                    }
+                    return true;
+                }
+                case MotionEvent.ACTION_UP:
+                    if(!dragged[0] && OverlayBounds.isTap(drag[0],drag[1],
+                            event.getRawX(),event.getRawY(),touchSlop)){
+                        menuScroll.setVisibility(
+                            menuScroll.getVisibility()==View.VISIBLE?View.GONE:View.VISIBLE);
+                        // Expansion changes actual panel height. Reposition
+                        // after layout so options never fall below navigation.
+                        menuScroll.post(()->{
+                            if(activity.isFinishing()||activity.isDestroyed())return;
+                            FrameLayout.LayoutParams layout=(FrameLayout.LayoutParams)content.getLayoutParams();
+                            layout.topMargin=OverlayBounds.clampTop(layout.topMargin,
+                                activity.getResources().getDisplayMetrics().heightPixels,
+                                Math.max(px(activity,70),content.getHeight()),safeMargin);
+                            content.setLayoutParams(layout);
+                        });
+                    }
+                    activity.getSharedPreferences(SETTINGS,Activity.MODE_PRIVATE).edit()
+                        .putInt("overlay_top_px",
+                            ((FrameLayout.LayoutParams)content.getLayoutParams()).topMargin).apply();
+                    return true;
+                case MotionEvent.ACTION_CANCEL:
+                    return true;
+                default:return false;
+            }
+        });
 
         add(activity,tools,"⌂  Render Home",()->confirmHome(activity));
         add(activity,tools,"▣  Render Image (Protected)",()->send(activity,
@@ -310,6 +381,7 @@ public final class BlenderMobileControls {
     }
 
     public static void detach(BlenderActivity activity){
+        EngineEvidence.record(activity,EngineEvidence.Stage.CONTROLS_DETACHED);
         if(Build.VERSION.SDK_INT>=33 && activity.renderBackCallback!=null){
             activity.getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(
                 activity.renderBackCallback);
