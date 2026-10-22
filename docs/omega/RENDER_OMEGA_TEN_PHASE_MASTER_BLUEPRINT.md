@@ -445,3 +445,99 @@ Each of the 13 sections is an actual engineering workstream, not a feature wish 
 **Pass evidence:** material nodes and links inspected, scene pass settings saved/reopened, gamma/grade operation truly affects pixels if actual rendering available, raw original unaltered, no hidden renderer replacement. EXR/pass output is complete only when real file bytes and metadata were inspected.
 
 **Failure traps:** unsupported shader sockets silently ignored, compositing with wrong color space, viewport-material preview called final raytracing, image artifact without scene revision, wrong fluid provenance.
+
+
+## PHASE 10 — CROSS-PHASE API REGISTRY / PACKAGING / TEST AND RELEASE GATES
+
+**Assigned agent:** 10. **Branch:** feature/omega-P10-integration-20261022. **Own:** exact shared entry points in §1.5, omega_registry.py and app/src/main/java/com/rezox/render/omega/integration/**, owned tests. Only P10 edits the shared operation dispatch, Blender startup packager, permissions schema, build adapters and release/CI wiring.
+
+**Mission:** Allow all independent phase modules to become discoverable, strictly validated, safely dispatched native tools without merging incompatible code, degrading existing Blender or disturbing stored user projects. Preserve ABI/package/installed signer while verifying combined behavior.
+
+**Implementation requirements:**
+- Create a static allowlisted capability registry for phase module names and reserved operation IDs in §3; validate schema and operation presence and expose only verified installed modules. During independent development, modules may be absent: absence must show NOT_INSTALLED, not crash native Blender startup.
+- Package full-app/scripts/omega and omega_registry.py into the actual Blender runtime startup zip, ensure Python paths/import order work in the native Android process and correctly bridge typed JSON args through existing authenticated Render MCP/Binder/spool. Do not expose arbitrary Python, OS paths, shell or generic bpy operator IDs.
+- Implement cross-phase adapters for P03 planner → P11 tool executor → P12 evaluation loop, with stage IDs, expected revision, bounded iteration and receipts. Honor P02 atomic job storage, P05 rig-ready neutral model contract and P13 simulation caches without directly mutating phase-owned implementation code.
+- Add source ownership CI gate comparing changed files against §2. Reject unexpected phases editing another phase's module or common startup, build files, signing and UI. Integrator may propose corrective new adapter, not stealth-rewrite other agent work.
+- Preserve com.rezox.render package, existing bridge ID, owner data, pinned real Blender native libraries, and exact installed certificate. Read actual installed/version metadata when accessible. No downgrade or accidental preview APK replacing original app.
+- Require signed APK certificate and version checks, runtime ZIP contents, Blender startup health, Android JNI, real bpy native fixture and Java tests before release. A successful CI screenshot or a 300-MB APK is not proof that phone GPU rendering works.
+
+**30-minute verified slice:** optional module registry and no-crash integration smoke test with synthetic phase module(s) and a packaged Blender startup import test. Further integration proceeds when other phase PRs land.
+
+**Pass evidence:** supported/unsupported operations accurately listed; one request travels from typed bridge to actual native Blender and returns real data; invalid actions rejected; missing phase module is graceful; packaging repeated twice without duplicate startup scripts; signing check is enforced; no main merge or owner data change.
+
+**Failure traps:** import-time Blender exceptions disabling all MCP tools, permissive eval, underdeclared scopes, circular imports between 13 modules, CI changing app ID, test port without runtime ZIP packaging, synthetic preview released as production.
+
+## PHASE 11 — TRUE AUTONOMOUS ARTIST TOOL CONTROLLER (THE HANDS)
+
+**Assigned agent:** 11. **Branch:** feature/omega-P11-artist-controller-20261022. **Own:** full-app/scripts/omega/phase11_artist.py and app/src/main/java/com/rezox/render/omega/artist/** plus owned tests. Phase 11 does not own the existing BlenderMobileControls, shared registry or P03 journal.
+
+**Mission:** Give ChatGPT authentic, observable, programmable artistic control of real Blender—the ability to choose objects/modes and perform sculpt, mesh, paint, rig pose, modifier, node, animation timeline and scene operations as an artist would. This is central to the user's request: from a single project description to visible work with minimal owner intervention.
+
+**Design: two complementary control modes:**
+
+1. **Semantic native tools (default):** controlled bpy/BMesh/Blender operator operations with explicit target object ID, expected Blender mode, bounded parameters, editor context and verified postconditions. This is faster and more reliable than pressing a virtual finger for every vertex. For a sculpt stroke, target actual native object, selected brush/action and coordinates mapped to the Blender sculpt surface; verify mesh vertex displacement or data changes. For a node edit, verify actual nodes/links. For a pose, verify bone transforms or pose evaluators. Never rename a call “brush painting” when it only adds a sphere.
+2. **Visible UI/control channel (when needed):** scoped focus, mode switching, editor area selection, toolbar/menu selection, touchscreen drags, stylus pressure when available, keyboard modifiers, graph handles and camera orbit. Actual executed GUI events may show a small hand/touch marker; semantic bpy actions must show a work badge/target and receipt rather than fabricated finger coordinates.
+
+**Required implementation:**
+- Read-only inspection of active scene, object mode/type, selection, active tool, supported operators, current editor areas, workspaces and viewport camera/matrix. UI state must come from actual Blender, not assumed context.
+- A **bounded tool taxonomy** (exact action + schema, never raw operator string): object select/transform/duplicate/delete-with-checkpoint; mesh edit loop/face operations; sculpt brush sample/stroke; modifier add/configure; shader node create/link; rig pose and constraints; F-curve point edit/NLA control; lighting/camera/world changes; safe project save and render request. A 30-minute first slice need not implement every category, but categories remain frozen extension slots.
+- For each action, validate preconditions, expected scene revision, target object existence, owner-scoped project, finite geometry coordinates, bounded vertex/stroke count and cancellation at safe boundaries. Map tool actions onto actual bpy context; avoid UI dependence where a native semantic operation is more stable.
+- Show current operation, named target and actual progress on top of Blender, integrated later by P10 with P03 work journal. The icon never lies about clicking, loading or finishing.
+- Tool output must describe old/new native state and verifiable geometry or node/pose diff; use scene checkpoint or undo for rollback. Multi-step plans cannot continue after a failed postcondition.
+- Support visual screenshots/captures routed through existing owner-authorized screenshot mechanism. No Gallery enumeration or other-app control. The source video can inspire action choreography but is not automatically a verified machine-readable Blender macro.
+- Owner can safely pause/stop/resume; no endless mouse loops, no permanently stuck modifier keys, and no unexpected active-mode changes after failure.
+
+**30-minute verified slice:** execute one real sculpt or edit sequence on a synthetic editable Blender mesh (for example two native sculpt strokes plus modifier adjustments), inspect the topology change, save/reopen and expose a receipt. A second tiny fixture must prove a mode switch and object selection really occurred.
+
+**Pass evidence:** actual native Blender tool execution, before/after mesh hash/vertex displacement, UI context correctness, optional real touch overlay observation, undo or rollback. A script printing “sculpt complete” without mesh changes fails.
+
+**Failure traps:** arbitrary bpy eval as agent access, simulated touches at invented coordinates, Blender context override crash, zero brush influence but fake success, moving mouse for minutes instead of using Blender API, leaving app in unintended editor state, clipboard or other apps accessed with broad privileges.
+
+## PHASE 12 — VISUAL INTELLIGENCE / SELF-CRITIQUE / ITERATIVE CORRECTION (THE EYES)
+
+**Assigned agent:** 12. **Branch:** feature/omega-P12-visual-quality-20261022. **Own:** full-app/scripts/omega/phase12_quality.py and app/src/main/java/com/rezox/render/omega/quality/** plus owned tests. P12 may read but never modify P05 character, P06 rig, P07 animation or P11 artist executor modules.
+
+**Mission:** Prevent the 0.24 distorted human and other visually unconvincing assets from being treated as complete merely because object creation calls succeeded. Assess real geometry, rig performance, composition and rendered images, issue typed repair proposals and verify improvements with repeatable evidence.
+
+**Required implementation:**
+- **Geometry inspection:** side/front/three-quarter bounds, human landmarks and ratio outliers, left/right symmetry, shoulders/neck continuity, self-intersections and near-coplanar surfaces, UV/material completeness, missing facial/hair/hands detail. Distinguish objective metrics from aesthetic judgment.
+- **Rig/motion inspection:** skinned mesh deformation under known poses, weight issues, foot/paw world-position drift, action-loop discontinuities, wrist/elbow overrotation, collision candidates and intended movement mismatch. Do not call a skinned mesh good merely because a vertex group exists.
+- **Scene inspection:** active camera framing, clipped subjects, missing lights/world, scene graph instancing vs huge duplication, render passes, missing textures and viewport-vs-final differences.
+- **Pixel inspection:** inspect actual captured Blender viewport or verified PNG/EXR with their frame, camera, size and source revision. Compare to owner-supplied reference images when explicitly accessible. Do not assume on-device neural image scoring or reference input is available; return INSPECTION_UNAVAILABLE rather than fabricating a similarity percentage.
+- **Revision engine:** return a finite prioritized list of typed, object-specific proposals to the P03/P11 control loop. Each proposal includes current defect evidence, target object/channel, planned operation, expected measurable improvement, max attempts and rollback checkpoint. The quality evaluator does not execute unapproved arbitrary Python.
+- **Bounded feedback:** iterate only while postconditions improve and resource budgets permit. If a target requires manual artistic judgment, say so and leave a saved editable project rather than endlessly deforming it.
+- Support omega.quality.inspect and omega.quality.revise_plan with machine-parseable metrics, screenshot provenance, confidence/uncertainty and honest visual_quality_verified state.
+
+**30-minute verified slice:** inspect a known intentionally bad humanoid mesh (oversized shoulders, small head, no joint geometry) and report grounded defect metrics; produce a bounded native repair proposal; confirm a simple corrected mesh achieves the targeted metric without damaging other data.
+
+**Pass evidence:** deterministic good-vs-bad fixture, screenshot/frame hash binding when available, genuine measurements, repair loop limited by max iteration/revision, no aesthetic “100% match” claim without real comparable data, clear distinction between issue diagnosed and issue actually repaired.
+
+**Failure traps:** hallucinated annotations or polygons, false photoreal similarity scores, endless “make it better” cycles, corrections that worsen neighboring anatomy, pixel review on a stale frame, treating a rendered PNG as the underlying editable 3D asset.
+
+## PHASE 13 — PHYSICS / DESTRUCTION / DYNAMIC VEGETATION / FLUID-CACHE INTERCHANGE
+
+**Assigned agent:** 13. **Branch:** feature/omega-P13-physics-simulation-20261022. **Own:** full-app/scripts/omega/phase13_simulation.py and app/src/main/java/com/rezox/render/omega/simulation/** plus owned tests. Read but never modify P08 world generation, P09 VFX code or P02 renderer.
+
+**Mission:** Enable genuine Blender dynamic scenes: cinematic urban debris/destruction, rigid-body contact, cloth/vegetation/wind and water simulation interoperability. Do not claim fake fluid simulation from a reflective water plane.
+
+**Required implementation:**
+- Create or configure actual Blender collision shapes/rigid bodies with correct mass, friction, collision groups, keyframe activation and deterministic initial conditions. Simulate modest debris/vehicle impacts, inspect evaluated transforms and verify they differ from static keyframing.
+- Explicitly separate **native physical simulation**, **imported baked fluid/particle caches**, and **visual-only shader animation**. Runtime reports which path is used. An imported mesh sequence should have frame range, object names, size and hash receipts and missing-cache handling.
+- Bounded rigid-body bake/cache with resumable folder stages, source fingerprint and checksums where Blender exposes stable baking mechanisms. No untrusted absolute paths, decompress bombs or remote arbitrary data execution.
+- Support real vegetation dynamics via native scene modifiers or simple wind deformation if supported, and report false/not installed for hair/cloth/fluid features that cannot be evaluated on current Android engine.
+- For waterway reference 1000071906, implement an import/export validation boundary for legitimate mesh/particles/foam frames from separate simulation tools. Do not integrate proprietary code or claim LiquiGen is part of Blender. Google Drive may store owner-approved outputs.
+- Provide omega.simulation.bake and omega.simulation.inspect_cache with source settings, frame range, cached file receipts, native simulation engine identity, output geometry checks and truthful unsupported status.
+
+**30-minute verified slice:** native Blender rigid-body drop/impact with at least two colliders, 24+ evaluated frames, identifiable changed object transforms and a saved/cached state. A cache-verification fixture is a separate small acceptance.
+
+**Pass evidence:** actual Blender physics properties and evaluated motion, collisions producing non-static state, intact source project, cache revision/hash handling, bounded memory and explicit lack of fluid-solver capability if unavailable.
+
+**Failure traps:** hand-keyframed debris pretending to be physics, video overlay pretending to be a simulation mesh, claiming static water material is collision-aware liquid, unbounded simulation frames, unsafe external cache extraction, huge GPU bake at severe thermal pressure.
+
+### Cross-phase artistic end-to-end target
+
+After P10 integrates tested capabilities, Render must be able to process the following owner request as a real production DAG:
+
+> Create a detailed adult humanoid and a quadruped, refine their anatomy and hair, build an atmospheric ruined courtyard with vegetation and a waterway, rig the characters, choreograph a natural walk and a three-strike combat sequence, move the camera dramatically, create RAW and FINAL lighting/compositing passes, render every frame with the user's requested settings, recover safely from interruption, save the editable .blend and export verified image/video to owner-approved storage.
+
+This is the **final integrated acceptance scene**, NOT a promise that every feature can be engineered and visually validated in a single 30-minute sprint. If an individual feature remains absent, the integrated planner must produce an explicit missing capability report and a recoverable partial project, not a substituted screenshot or fake success.
