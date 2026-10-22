@@ -49,7 +49,7 @@ jobs:
       - name: Execute actual bpy fixture (not mocks)
         env:
           LIBGL_ALWAYS_SOFTWARE: "1"
-        run: blender -b -noaudio --python-exit-code 1 --python tools/omega/test_phase10_bpy.py
+        run: /usr/bin/blender -b -noaudio --python-exit-code 1 --python tools/omega/test_phase10_bpy.py
   android-bridge:
     if: startsWith(github.head_ref, 'feature/omega-P10-')
     needs: ownership
