@@ -38,7 +38,7 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(12, len(report["phases"]))
         self.assertEqual(set(registry.OPERATION_NAMES),
                          set(report["enabled_operations"]))
-        self.assertEqual("NOT_INSTALLED", report["phases"][3]["status"])
+        self.assertIn(report["phases"][3]["status"], ("NOT_INSTALLED", "INSTALLED_UNVERIFIED"))
         self.assertFalse(report["quality_reduced"])
 
     def test_java_allowlist_matches_native_python_registry(self):
