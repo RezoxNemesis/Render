@@ -16,13 +16,26 @@ C = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(C)
 
 def _phase2():
-    # Blender runtime packaging/registration belongs to the Phase 10 agent.
-    # Loading only on render commands keeps unrelated editor tools usable.
+    # Blender runtime packaging/registration belongs to P10. In installed
+    # Blender the 'omega' package lives on the actual startup search path.
+    # Headless bpy tests sometimes load this file with spec_from_file_location
+    # (rather than as a package), so use only the adjacent pinned module as
+    # a safe, deterministic fallback; never import user-requested code.
     try:
         from omega import phase02_render
-    except ImportError as error:
-        raise ValueError('RENDER_PHASE02_MODULE_NOT_INSTALLED') from error
-    return phase02_render
+        return phase02_render
+    except ModuleNotFoundError as error:
+        if error.name not in ('omega', 'omega.phase02_render'):
+            raise
+    adjacent = Path(__file__).resolve().parent / 'omega' / 'phase02_render.py'
+    if not adjacent.is_file():
+        raise ValueError('RENDER_PHASE02_MODULE_NOT_INSTALLED')
+    spec = importlib.util.spec_from_file_location('render_omega_phase02_local', adjacent)
+    if spec is None or spec.loader is None:
+        raise ValueError('RENDER_PHASE02_MODULE_NOT_INSTALLED')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 def _write(path, value):
     tmp=path.with_suffix(path.suffix+'.tmp')
