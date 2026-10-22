@@ -224,15 +224,35 @@ public final class StudioReferenceInbox {
             if(at>duration)throw new IllegalArgumentException("VIDEO_SAMPLE_OUTSIDE_DURATION");
             b=r.getScaledFrameAtTime(at*1000,MediaMetadataRetriever.OPTION_CLOSEST_SYNC,width,height);
             if(b==null)throw new IllegalStateException("VIDEO_FRAME_DECODE_FAILED");
-            File file=ProductionFiles.file(context,"Assets",asset.substring(0,64)+"_frame_"+at+".png");
-            try(FileOutputStream output=new FileOutputStream(file)){
-                if(!b.compress(Bitmap.CompressFormat.PNG,100,output))throw new IllegalStateException("VIDEO_FRAME_ENCODE_FAILED");
-                output.getFD().sync();
-            }
-            JSONObject out=ProductionFiles.receipt(file,"Assets");
-            out.put("sample_time_ms",at).put("video_source_hash",asset.substring(0,64))
-                .put("sample_is_full_resolution",false).put("original_video_untouched",true);
-            return out;
+            File temporary=ProductionFiles.file(context,"Assets",
+                    "VideoSample_"+UUID.randomUUID().toString().replace("-","")+".partial");
+            try{
+                try(FileOutputStream output=new FileOutputStream(temporary)){
+                    if(!b.compress(Bitmap.CompressFormat.PNG,100,output))
+                        throw new IllegalStateException("VIDEO_FRAME_ENCODE_FAILED");
+                    output.getFD().sync();
+                }
+                String imageHash=ProductionFiles.sha(temporary);
+                File file=ProductionFiles.file(context,"Assets",imageHash+".png");
+                if(file.isFile()){
+                    if(!ProductionFiles.sha(file).equals(imageHash))
+                        throw new IllegalStateException("VIDEO_FRAME_HASH_CONFLICT");
+                }else{
+                    try{Files.move(temporary.toPath(),file.toPath(),StandardCopyOption.ATOMIC_MOVE);}
+                    catch(java.nio.file.AtomicMoveNotSupportedException e){
+                        Files.move(temporary.toPath(),file.toPath());
+                    }
+                }
+                JSONObject result=ProductionFiles.receipt(file,"Assets");
+                result.put("asset",file.getName()).put("extension","png")
+                      .put("kind","image").put("width",b.getWidth()).put("height",b.getHeight())
+                      .put("exif_orientation",ExifInterface.ORIENTATION_NORMAL)
+                      .put("sample_time_ms",at).put("video_source_hash",asset.substring(0,64))
+                      .put("sample_is_full_resolution",false).put("original_video_untouched",true)
+                      .put("native_import_verified",true).put("gallery_browsed",false);
+                writeMetadata(context,result);
+                return result;
+            }finally{if(temporary.isFile())temporary.delete();}
         }finally{if(b!=null)b.recycle();r.release();}
     }
 }
