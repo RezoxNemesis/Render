@@ -94,10 +94,10 @@ def run():
                "dry_run": False, "cancellation_requested": False}
     created = M.execute("omega.motion.create_actions", request, context)
     assert created["state"] == "succeeded" and created["native_execution_verified"], created
-    assert len(bpy.data.actions) >= 1 and created["fcurve_count"] == 5, created
+    assert len(bpy.data.actions) >= 1 and created["fcurve_count"] == 7, created
     audited = M.execute("omega.motion.audit", {"rig": rig.name, "clip": "WalkCycle"}, context)
-    assert audited["fcurve_count"] == 5, audited
-    assert audited["keyframes"] == 125, audited
+    assert audited["fcurve_count"] == 7, audited
+    assert audited["keyframes"] == 175, audited
     assert abs(audited["root_motion"]["stride"] - .36) < 1e-5, audited
     assert audited["loop_seam_rotation_error_radians"] < 1e-5, audited
     assert audited["contact"]["max_planted_drift"] < .035, audited
@@ -156,7 +156,7 @@ def run():
         assert persisted["nla"]["scale"] == 1.5
         assert bpy.data.objects["OMEGA07_UnchangedSceneObject"].location == Vector(original_location)
 
-    print("PASS: genuine bpy pose-bone walk, five F-curves/125 keys, native NLA retime")
+    print("PASS: genuine bpy pose-bone walk, seven F-curves/175 keys, native NLA retime")
     print("PASS: planted shin-tip contact metrics, two camera projections and .blend reopen")
     print("NOT CLAIMED: foot mesh contact, photoreal choreography, Android/Vulkan render")
 
