@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.SystemClock;
 import org.json.JSONObject;
+import org.json.JSONArray;
 import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -119,11 +120,28 @@ public final class RenderManualJobs {
                         ending="succeeded";
                         break;
                     }
-                    publish(app,jobId,"encoding","Creating H.264 MP4",done,total);
-                    JSONObject result=ProductionVideoEncoder.encode(app,jobId,STOP);
+                    publish(app,jobId,"encoding","Encoding verified H.264 parts",done,total);
+                    JSONObject result;
+                    try{
+                        result=ProductionVideoEncoder.encode(app,jobId,STOP);
+                    }catch(IllegalStateException interrupted){
+                        String cause=interrupted.getMessage();
+                        if(cause!=null&&(cause.equals("PAUSED_THERMAL_PRESSURE")||
+                            cause.equals("PAUSED_MEMORY_PRESSURE")||
+                            cause.equals("PAUSED_STORAGE_PRESSURE"))){
+                            // Previously encoded, checksum-verified MP4 parts
+                            // remain committed. Wait for the REAL Android
+                            // sensor and resume only the current partial part.
+                            publish(app,jobId,"cooling",cause,done,total);
+                            for(int t=0;t<60&&!STOP.get();t+=5)Thread.sleep(5000L);
+                            continue;
+                        }
+                        throw interrupted;
+                    }
                     if(result.optString("sha256").length()!=64)
                         throw new IllegalStateException("ENCODER_RECEIPT_MISSING");
-                    publish(app,jobId,"encoded","MP4 ready for export",done,total);
+                    publish(app,jobId,"encoded",result.optBoolean("segmented")?
+                        "All MP4 segments ready":"MP4 ready for export",done,total);
                     ending="succeeded";break;
                 }
                 JSONObject request=new JSONObject().put("job_id",jobId)
@@ -232,8 +250,40 @@ public final class RenderManualJobs {
         if(!"encoded".equals(state.getString("state")))
             throw new IllegalStateException("VIDEO_NOT_YET_ENCODED");
         JSONObject video=data.getJSONObject("video");
+        if(video.optBoolean("segmented")){
+            JSONArray parts=video.getJSONArray("segments");
+            JSONArray exported=new JSONArray();
+            for(int i=0;i<parts.length();i++)
+                exported.put(exportSegment(context,job,i));
+            JSONObject index=ProductionFiles.export(context,new JSONObject()
+                .put("category",job).put("filename",video.getString("filename"))
+                .put("expected_sha256",video.getString("sha256")));
+            return new JSONObject().put("segmented",true).put("job_id",job)
+                .put("segments",exported).put("index",index)
+                .put("all_parts_downloads_verified",true)
+                .put("no_quality_reduction",true);
+        }
         return ProductionFiles.export(context,new JSONObject()
             .put("category",job).put("filename",video.getString("filename"))
             .put("expected_sha256",video.getString("sha256")));
+    }
+
+    /** Each 768MiB part can be exported separately; an MCP call never
+     * needs to stream an entire 10GB movie before returning a result. */
+    public static JSONObject exportSegment(Context context,String job,int index)throws Exception{
+        if(index<0||index>100000||!ProductionSegmentedEncoder.partName(job,index)
+                .matches("Production_[a-f0-9]{32}_part_[0-9]{5}\\.mp4"))
+            throw new IllegalArgumentException("INVALID_SEGMENT_INDEX");
+        JSONObject manifest=readManifest(context,job);
+        JSONObject receipts=manifest.optJSONObject("encoded_segments");
+        if(receipts==null||!receipts.has(Integer.toString(index)))
+            throw new IllegalStateException("VIDEO_PART_NOT_YET_ENCODED");
+        JSONObject part=ProductionSegmentedEncoder.readVerified(context,job,
+            receipts.getJSONObject(Integer.toString(index)));
+        if(part==null)throw new IllegalStateException("VIDEO_PART_CHECKSUM_MISMATCH");
+        JSONObject exported=ProductionFiles.export(context,new JSONObject()
+            .put("category",job).put("filename",part.getString("filename"))
+            .put("expected_sha256",part.getString("sha256")));
+        return exported.put("segment_index",index).put("frames",part.getInt("frames"));
     }
 }
