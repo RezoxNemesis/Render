@@ -1,6 +1,8 @@
 package com.rezox.render.agent;
 
 import android.content.Context;
+import android.app.ActivityManager;
+import android.app.ApplicationExitInfo;
 import org.json.JSONObject;
 import java.io.File;
 import java.io.FileInputStream;
@@ -8,6 +10,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.security.MessageDigest;
 import java.util.Locale;
+import java.util.List;
 
 /**
  * Read-only, app-owned Blender continuity evidence, independent of
@@ -49,6 +52,37 @@ public final class RenderRecoveryStatus {
         return expected.equals(hash.toString());
     }
 
+    private static String reasonLabel(int reason){
+        if(reason==ApplicationExitInfo.REASON_CRASH_NATIVE)return "CRASH_NATIVE";
+        if(reason==ApplicationExitInfo.REASON_LOW_MEMORY)return "LOW_MEMORY";
+        if(reason==ApplicationExitInfo.REASON_ANR)return "ANR";
+        if(reason==ApplicationExitInfo.REASON_CRASH)return "JAVA_CRASH";
+        if(reason==ApplicationExitInfo.REASON_SIGNALED)return "SIGNALLED";
+        if(reason==ApplicationExitInfo.REASON_USER_REQUESTED)return "USER_REQUESTED";
+        if(reason==ApplicationExitInfo.REASON_EXIT_SELF)return "PROCESS_EXIT";
+        return "OTHER_OR_UNKNOWN";
+    }
+    private static JSONObject systemExitEvidence(Context context){
+        JSONObject result=new JSONObject();
+        try{
+            ActivityManager manager=context.getSystemService(ActivityManager.class);
+            if(manager==null)return result.put("available",false);
+            List<ApplicationExitInfo> events=manager.getHistoricalProcessExitReasons(
+                context.getPackageName(),0,5);
+            if(events==null||events.isEmpty())return result.put("available",false);
+            ApplicationExitInfo item=events.get(0);
+            return result.put("available",true)
+                .put("reason",reasonLabel(item.getReason()))
+                .put("reason_code",item.getReason())
+                .put("occurred_at_epoch_ms",item.getTimestamp())
+                .put("peak_pss_kb",item.getPss())
+                .put("resident_rss_kb",item.getRss())
+                .put("is_proof_of_which_render_failed",false);
+        }catch(Exception error){
+            try{return result.put("available",false);}catch(Exception ignored){return result;}
+        }
+    }
+
     /** Supported status comes from actual files, never from a caller's claim. */
     public static JSONObject inspect(Context context){
         JSONObject report=new JSONObject();
@@ -83,6 +117,7 @@ public final class RenderRecoveryStatus {
                 // Render diagnostics are noncritical; a malformed log must
                 // NEVER hide a separately verified recovery snapshot.
             }
+            report.put("latest_android_process_exit",systemExitEvidence(context));
             report.put("device_render_crash_root_cause_verified",false)
                   .put("render_output_automatically_verified",false);
         }catch(Exception error){
