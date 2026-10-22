@@ -192,7 +192,7 @@ public final class StudioReferenceInbox {
     public static JSONObject details(Context context,JSONObject p)throws Exception{
         ProductionBridge.fields(p,"asset");
         String asset=p.getString("asset");
-        if(!asset.matches("[a-f0-9]{64}\\\\.(png|jpg|jpeg|webp|mp4)"))
+        if(!asset.matches("[a-f0-9]{64}\\.(png|jpg|jpeg|webp|mp4)"))
             throw new IllegalArgumentException("INVALID_IMPORTED_ASSET_NAME");
         String hash=asset.substring(0,64);
         File meta=ProductionFiles.file(context,"Assets",hash+".meta.json");
@@ -210,6 +210,8 @@ public final class StudioReferenceInbox {
         if(!asset.matches("[a-f0-9]{64}\\.mp4"))throw new IllegalArgumentException("VIDEO_ASSET_NAME_REQUIRED");
         File source=ProductionFiles.file(context,"Assets",asset);
         if(!source.isFile())throw new IllegalArgumentException("VIDEO_REFERENCE_NOT_IMPORTED");
+        if(!asset.substring(0,64).equals(ProductionFiles.sha(source)))
+            throw new IllegalArgumentException("VIDEO_REFERENCE_HASH_MISMATCH");
         int width=(int)ProductionBridge.integer(p,"width",64,1280,640);
         int height=(int)ProductionBridge.integer(p,"height",64,1280,640);
         if((long)width*height>1280L*1280L)throw new IllegalArgumentException("FRAME_SAMPLE_TOO_LARGE");
