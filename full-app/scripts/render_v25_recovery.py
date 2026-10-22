@@ -194,6 +194,7 @@ def install():
     if hooks is not None and not _HOOKS_INSTALLED:
         persister = getattr(hooks, "persistent", lambda callback: callback)
         for name, handler in (
+            ("render_pre", _on_render_init),
             ("render_init", _on_render_init),
             ("render_complete", _on_render_complete),
             ("render_cancel", _on_render_cancel),
