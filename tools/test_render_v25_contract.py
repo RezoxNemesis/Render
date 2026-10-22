@@ -60,6 +60,15 @@ class StillQualityContract(unittest.TestCase):
                 self.assertEqual(first["sha256"],second["sha256"])
                 folder=Path(d)/"Production/Projects"
                 self.assertTrue((folder/"CurrentSession.previous.json").is_file())
+                # SHA scan must run off the Blender UI thread, then open the
+                # verified scene only from the subsequent main-timer callback.
+                fake.data.filepath=""
+                fake.data.is_dirty=False
+                self.assertEqual(studio._restore_at_start(),0.5)
+                studio._RESTORE_THREAD.join(timeout=3)
+                self.assertFalse(studio._RESTORE_THREAD.is_alive())
+                self.assertIsNone(studio._restore_at_start())
+                self.assertEqual(len(fake.loaded_paths),1)
                 (folder/"CurrentSession.blend").write_bytes(b"broken")
                 self.assertEqual("CurrentSession.previous.blend",studio._recoverable_session().name)
                 (folder/"CurrentSession.previous.blend").write_bytes(b"changed")
