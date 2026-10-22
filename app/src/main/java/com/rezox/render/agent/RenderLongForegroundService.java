@@ -328,8 +328,11 @@ public final class RenderLongForegroundService extends Service {
         }catch(RuntimeException ignored){/* Never fail native Blender for UI. */}
     }
     private void tick(){
-        if(destroyed||startPending)return;
+        if(destroyed)return;
+        // Pause wins over an in-flight deferred executor start; otherwise a
+        // startPending flag could strand an idle FGS after user clicked Stop.
         if(ownerPause){
+            startPending=false;
             if(RenderManualJobs.active()){
                 update("Finishing the current frame before pausing");
                 return;
@@ -339,6 +342,7 @@ public final class RenderLongForegroundService extends Service {
             stopSelf();
             return;
         }
+        if(startPending)return;
         JSONObject status=RenderManualJobs.status(this);
         String state=status.optString("state","");
         if(RenderManualJobs.active()){
