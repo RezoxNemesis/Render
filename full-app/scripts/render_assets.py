@@ -338,6 +338,7 @@ def create_asset(scene, preset, name=None):
 class RENDERSTUDIO_OT_free_asset(bpy.types.Operator):
     bl_idname="renderstudio.add_free_asset"
     bl_label="Add Free Procedural Asset"
+    bl_options={"REGISTER","UNDO"}
     bl_description="Generate editable native Blender geometry, not a static low-res picture"
     preset: bpy.props.EnumProperty(items=[(key,title,title) for key,title in PRESETS])
     def execute(self, context):
