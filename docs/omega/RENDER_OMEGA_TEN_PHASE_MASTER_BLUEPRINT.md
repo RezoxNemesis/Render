@@ -1,13 +1,14 @@
 # RENDER OMEGA — ONE MASTER ENGINEERING BLUEPRINT
 ### Thirteen independent phases · Thirteen ChatGPT engineering agents · One frozen master contract
 
-**Contract:** RENDER-OMEGA-13P-20261022 / revision 2.0  
+**Contract:** RENDER-OMEGA-13P-20261022 / revision 2.0
+**Frozen plan policy:** One GitHub document only; do not create alternate phase blueprints. If the owner approves a new contract revision, the integrator must publish it as a deliberate new seed before any agent resumes, never edit this file in a phase PR.  
 **Established:** 22 October 2026  
 **Repository:** https://github.com/RezoxNemesis/Render  
 **Frozen source baseline:** e334d7b6bc5a60f4cc6b5ca0029fa973007cb7e0  
 **Baseline branch:** feature/025-no-downgrade-render-recovery-20261022  
 **Integration branch:** integration/render-omega-ten-phases-20261022  
-**Canonical document:** docs/omega/RENDER_OMEGA_TEN_PHASE_MASTER_BLUEPRINT.md  
+**Canonical document:** docs/omega/RENDER_OMEGA_TEN_PHASE_MASTER_BLUEPRINT.md (historical filename retained so prior links work; contents govern **13** phases)  
 **Primary target:** genuine Blender capabilities on native Android, controlled by human touch or ChatGPT through verified native actions, without silent reduction of final output fidelity.
 
 > THIS IS THE ONE AUTHORITATIVE ENGINEERING CONTRACT. All thirteen agents read this exact file and receive only their assigned phase number in the launch message. Do not fork another master blueprint, rename phases, quietly alter shared contracts, or claim success from a proposed design instead of working code.
@@ -78,7 +79,7 @@ A phase must not simply copy a rendered frame from a reference and label it edit
 
 ## 1. Parallel delivery operating system
 
-### 1.1 Ten agents and assignment
+### 1.1 Thirteen agents and assignment
 
 Each ChatGPT instance is assigned **exactly one integer N from 1 through 13** in the user's phase launch message. There is no negotiation, re-planning, or dependency on previous chat state. It follows this blueprint's phase N, owns only those paths, and publishes one PR against the shared integration branch.
 
@@ -121,7 +122,7 @@ Mandatory final report fields: phase number/title, branch, PR URL, commit SHA(s)
 
 ### 1.5 Exact freeze rules
 
-Only the integrator/Phase 10 may change these **shared entry points** after seed:
+Only Phase 10 may edit the following **shared source entry points**, and only within its isolated phase branch; this master blueprint itself is frozen:
 
 - full-app/scripts/render_agent_startup.py
 - app/src/main/java/com/rezox/render/agent/ProductionBridge.java
@@ -132,7 +133,7 @@ Only the integrator/Phase 10 may change these **shared entry points** after seed
 - tools/prepare_production_toolkit.py and tools/prepare_v23_reference.py
 - app/build.gradle.kts, full-app/app/build.gradle
 - .github/workflows/**, signing utilities, AndroidManifest sources
-- this master blueprint.
+- phase integration data and shared registration schemas (but NOT the frozen master blueprint).
 
 Phase teams may read these and propose changes in their PR text; they cannot edit them. Phase 10 must not rewrite owned Phase 1–9 implementation files and can only add reversible adapters around their exported interfaces.
 
@@ -165,7 +166,7 @@ G6: Owner approves installing a **verified** original-package in-place APK. No r
 | **07** | Animation curves, contact, NLA/action choreography | full-app/scripts/omega/phase07_motion.py; tools/omega/test_phase07_*.py; native-tests/omega/phase07/** | Rig generator, renderer, bridge |
 | **08** | Free assets, instanced worlds, camera/terrain/scatter | full-app/scripts/render_assets.py; full-app/scripts/omega/phase08_world.py; tools/omega/test_phase08_*.py; native-tests/omega/phase08/** | Geometry ops, VFX shader code, shared registry |
 | **09** | PBR/lookdev/compositing, simulation cache interchange | full-app/scripts/omega/phase09_vfx.py; tools/omega/test_phase09_*.py; native-tests/omega/phase09/** | Render core, world generator, bridge |
-| **10** | Exact typed registry, Android/native packaging and release gates | all explicitly listed **shared entry points** in §1.5; full-app/scripts/omega/__init__.py; full-app/scripts/omega_registry.py; app/src/main/java/com/rezox/render/omega/integration/**; tools/omega/test_phase10_*.py; docs/omega/phase10-interface-test-data/** | No rewriting P1–9 implementation modules |
+| **10** | Exact typed registry, Android/native packaging and release gates | shared source entry points in §1.5 (excluding this frozen master blueprint); full-app/scripts/omega/__init__.py; full-app/scripts/omega_registry.py; app/src/main/java/com/rezox/render/omega/integration/**; tools/omega/test_phase10_*.py; docs/omega/phase10-interface-test-data/** | No rewriting P1–9 implementation modules |
 | **11** | Observable artist-like tool executor, viewport, sculpt brushes and native UI workflow | full-app/scripts/omega/phase11_artist.py; app/src/main/java/com/rezox/render/omega/artist/**; app/src/test/java/com/rezox/render/omega/artist/**; tools/omega/test_phase11_*.py; native-tests/omega/phase11/** | Existing mobile controls, Phase 1, shared bridge or startup, other phase files |
 | **12** | Vision/geometry inspection, iterative self-critique and actionable repairs | full-app/scripts/omega/phase12_quality.py; app/src/main/java/com/rezox/render/omega/quality/**; app/src/test/java/com/rezox/render/omega/quality/**; tools/omega/test_phase12_*.py; native-tests/omega/phase12/** | Character, rig, animation and artist executor implementation files |
 | **13** | Native physics/destruction/cache interchange and deterministic simulation | full-app/scripts/omega/phase13_simulation.py; app/src/main/java/com/rezox/render/omega/simulation/**; app/src/test/java/com/rezox/render/omega/simulation/**; tools/omega/test_phase13_*.py; native-tests/omega/phase13/** | Render core, VFX implementation, P8 world generator and shared registry |
