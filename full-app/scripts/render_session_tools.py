@@ -86,6 +86,11 @@ def save_session():
         if not receipt["source_path_retained"]:
             raise RuntimeError("OPEN_PROJECT_PATH_CHANGED")
         if latest.exists():
+            manifest = folder / "CurrentSession.json"
+            prior_manifest = folder / "CurrentSession.previous.json"
+            if _receipt_matches(manifest, latest):
+                old = json.loads(manifest.read_text(encoding="utf8"))
+                _atomic_json(prior_manifest, dict(old, filename=previous.name))
             os.replace(latest, previous)
         try:
             os.replace(stage, latest)
@@ -102,20 +107,25 @@ def save_session():
         if stage.exists():
             stage.unlink()
 
+def _receipt_matches(receipt_path, target):
+    if not receipt_path.is_file() or not _blend_file(target):
+        return False
+    try:
+        data = json.loads(receipt_path.read_text(encoding="utf8"))
+        return (data.get("filename") == target.name and
+                data.get("bytes") == target.stat().st_size and
+                data.get("sha256") == _sha(target))
+    except (OSError, ValueError, TypeError):
+        return False
+
+
 def _recoverable_session():
     folder = _session_dir()
     latest = folder / "CurrentSession.blend"
     previous = folder / "CurrentSession.previous.blend"
-    manifest = folder / "CurrentSession.json"
-    if manifest.is_file() and _blend_file(latest):
-        try:
-            data = json.loads(manifest.read_text(encoding="utf8"))
-            if data.get("filename") == latest.name and data.get("bytes") == latest.stat().st_size and data.get("sha256") == _sha(latest):
-                return latest
-        except (OSError, ValueError, TypeError):
-            pass
-    # Old good backup survives an interrupted rename or a damaged latest file.
-    if _blend_file(previous):
+    if _receipt_matches(folder / "CurrentSession.json", latest):
+        return latest
+    if _receipt_matches(folder / "CurrentSession.previous.json", previous):
         return previous
     return None
 
