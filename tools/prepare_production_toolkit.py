@@ -11,6 +11,22 @@ def replace(path,before,after):
     target.write_text(text.replace(before,after,1))
 
 def prepare():
+    # Build adapters run twice in CI. The v0.22 extension intentionally adds
+    # on top of the v0.21 source patch; a second run must verify the complete
+    # extension rather than trying to reapply the older intermediate pattern.
+    stage=(ROOT/'tools/assemble_full_native.py').read_text()
+    if 'StudioLiveHandOverlay.attach(this);' in stage:
+        required=(
+            ('tools/assemble_full_native.py','render_studio_contract.py'),
+            ('app/src/main/java/com/rezox/render/agent/ProductionBridge.java','StudioReferenceInbox.list(context,p)'),
+            ('full-app/scripts/render_production.py','render_studio_ops.py'),
+            ('full-app/app/build.gradle','versionCode 25'),
+            ('app/build.gradle.kts','versionCode = 25'),
+        )
+        if not all(marker in (ROOT/path).read_text() for path,marker in required):
+            raise RuntimeError('INCOMPLETE_V022_BUILD_ADAPTER_STATE')
+        print('Render 0.22 reference studio adapter already verified; no second mutation')
+        return
     prefix='app/src/main/java/com/rezox/render/agent/'
     replace(prefix+'AgentPolicy.java','registry.put("engine.status", Collections.emptySet());','registry.put("engine.status", Collections.emptySet());\n        registry.put("production.execute", fields("operation", "payload", "target_id"));')
     replace(prefix+'AgentActions.java','if(field.equals("assembly")){','if(field.equals("operation")){\n                    prop.put("type","string");\n                }else if(field.equals("payload")){\n                    prop.put("type","object");\n                }else if(field.equals("target_id")){\n                    prop.put("type","string").put("pattern","^[a-fA-F0-9-]{36}$");\n                }else if(field.equals("assembly")){')
