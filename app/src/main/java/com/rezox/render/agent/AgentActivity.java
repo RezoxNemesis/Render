@@ -310,7 +310,8 @@ public final class AgentActivity extends Activity {
     }
     @Override protected void onNewIntent(Intent intent){
         super.onNewIntent(intent);
-        receiveReferenceIntent(intent);
+        if(StudioReferenceInbox.isExplicitOwnerMediaIntent(intent))
+            confirmSharedReference(intent);
     }
     private void addAction(LinearLayout parent,String title,int style,Runnable action) {
         TextView view=StudioUi.action(this,title,style);
