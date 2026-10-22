@@ -27,6 +27,14 @@ with tempfile.TemporaryDirectory(prefix="omega-native-render-") as directory:
     assert scene is not None
     scene.render.engine = "CYCLES"
     scene.cycles.samples = 1
+    # The CI Blender binary may be built without OpenImageDenoiser. This
+    # lossless checkpoint/resume fixture explicitly requests no denoiser;
+    # never change user-requested denoising in the installed Render engine.
+    if hasattr(scene.cycles, "use_denoising"):
+        scene.cycles.use_denoising = False
+    for view in scene.view_layers:
+        if hasattr(view, "cycles") and hasattr(view.cycles, "use_denoising"):
+            view.cycles.use_denoising = False
     scene.render.resolution_x = 16
     scene.render.resolution_y = 16
     scene.render.resolution_percentage = 100
