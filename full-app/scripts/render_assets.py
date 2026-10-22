@@ -30,6 +30,33 @@ PRESETS = (
     ("QUADRUPED", "Four-legged Rig Proxy"),
     ("STUDIO", "Camera + Area Lights"),
 )
+_CATEGORIES = {
+    "COLUMN": "Architecture", "ARCH": "Architecture", "STAIRS": "Architecture",
+    "WALL": "Architecture", "WINDOW": "Architecture", "ROOF": "Architecture",
+    "TREE": "Vegetation", "SHRUB": "Vegetation", "GRASS": "Vegetation",
+    "ROCK": "Terrain", "WATER": "Terrain", "TERRAIN": "Terrain",
+    "BENCH": "Furniture", "LAMP": "Furniture", "HUMANOID": "Rig Proxies",
+    "QUADRUPED": "Rig Proxies", "STUDIO": "Cameras and Lighting",
+}
+
+
+def search_presets(query="", category=None):
+    """Search the 17 built-in editable presets; no external asset catalog call."""
+    if type(query) is not str or len(query) > 80:
+        raise ValueError("INVALID_ASSET_QUERY")
+    if category is not None and (type(category) is not str or
+                                 category not in set(_CATEGORIES.values())):
+        raise ValueError("INVALID_ASSET_CATEGORY")
+    needle = query.strip().casefold()
+    return [{"id": key, "label": title, "category": _CATEGORIES[key],
+             "source": "Render Studio first-party procedural generator",
+             "license": "GPL-2.0-or-later", "external_download": False}
+            for key, title in PRESETS
+            if (category is None or _CATEGORIES[key] == category)
+            and (not needle or needle in (key + " " + title + " " +
+                                          _CATEGORIES[key]).casefold())]
+
+
 _IDS = {key for key, _ in PRESETS}
 _INSTALLED = False
 
@@ -226,6 +253,12 @@ def create_asset(scene, preset, name=None):
     collection["source"]="Render Studio built-in procedural generator"
     collection["commercial_asset_dependency"]=False
     collection["editable_geometry"]=True
+    collection["rs_preset_id"]=preset
+    collection["rs_category"]=_CATEGORIES[preset]
+    collection["rs_license"]="GPL-2.0-or-later"
+    collection["rs_asset_id"]=uuid.uuid4().hex
+    # A stable *suggested* filename, not a claim that an extra file was exported.
+    collection["rs_suggested_filename"]="RS_"+preset+"_"+collection["rs_asset_id"]+".blend"
     try:
         stone=_material("Stone",(.46,.48,.5))
         dark=_material("DarkMetal",(.1,.12,.15),.22,.65)
@@ -350,11 +383,28 @@ class RENDERSTUDIO_OT_free_asset(bpy.types.Operator):
             self.report({"ERROR"}, str(error))
             return {"CANCELLED"}
 
+class RENDERSTUDIO_OT_find_free_asset(bpy.types.Operator):
+    bl_idname="renderstudio.find_free_asset"
+    bl_label="Search Free Procedural Assets"
+    bl_property="preset"
+    preset: bpy.props.EnumProperty(
+        items=[(key, _CATEGORIES[key] + " / " + title, title)
+               for key, title in PRESETS])
+
+    def invoke(self, context, event):
+        context.window_manager.invoke_search_popup(self)
+        return {"RUNNING_MODAL"}
+
+    def execute(self, context):
+        return bpy.ops.renderstudio.add_free_asset(preset=self.preset)
+
+
 class RENDERSTUDIO_MT_free_assets(bpy.types.Menu):
     bl_idname="RENDERSTUDIO_MT_free_assets"
     bl_label="Render Studio / Free Assets"
     def draw(self, context):
         layout=self.layout
+        layout.operator("renderstudio.find_free_asset",text="Search 17 Free Assets")
         for preset,label in PRESETS:
             item=layout.operator("renderstudio.add_free_asset",text=label)
             item.preset=preset
@@ -368,6 +418,7 @@ def install():
     if _INSTALLED or getattr(bpy.app,"background",False):
         return
     bpy.utils.register_class(RENDERSTUDIO_OT_free_asset)
+    bpy.utils.register_class(RENDERSTUDIO_OT_find_free_asset)
     bpy.utils.register_class(RENDERSTUDIO_MT_free_assets)
     bpy.types.VIEW3D_MT_add.append(_add_menu)
     _INSTALLED=True
