@@ -45,6 +45,8 @@ public final class RenderLongForegroundService extends Service {
     private volatile boolean destroyed;
     private volatile boolean ownerPause;
     private boolean monitorScheduled;
+    private volatile boolean startPending;
+    private int startAttempts;
     private String jobId="";
     private int idlePolls;
     private long lastNotice;
@@ -207,19 +209,46 @@ public final class RenderLongForegroundService extends Service {
             update("Open Render Studio to restart the native Blender engine");
             stopSelf();return START_NOT_STICKY;
         }
-        if(!RenderManualJobs.active()){
-            if(!RenderManualJobs.start(this,jobId)){
-                state(this,jobId,"WAITING_FOR_NATIVE_EXECUTOR",true);
-                update("Blender busy — resume when native executor is ready");
-                stopSelf();return START_NOT_STICKY;
-            }
-        }
-        state(this,jobId,"RENDERING",true);
+        startPending=true;
+        startAttempts=0;
+        // Remote VideoStudio commands temporarily hold the native Binder lock.
+        // Start the FGS immediately, then retry the job only AFTER the
+        // original command returns; never return false and lose the request.
+        monitor.schedule(this::attemptStart,2,TimeUnit.SECONDS);
         if(!monitorScheduled){
             monitorScheduled=true;
-            monitor.scheduleWithFixedDelay(this::tick,2,5,TimeUnit.SECONDS);
+            monitor.scheduleWithFixedDelay(this::tick,4,5,TimeUnit.SECONDS);
         }
         return START_STICKY;
+    }
+
+    private void attemptStart(){
+        if(destroyed||ownerPause)return;
+        if(!getSharedPreferences(PREFS,MODE_PRIVATE).getBoolean(WANTED,false)){
+            startPending=false;stopSelf();return;
+        }
+        if(!editorReady(this)){
+            startPending=false;
+            state(this,jobId,"AWAITING_EDITOR_FOREGROUND",true);
+            update("Open Render to restart its native Blender editor");
+            stopSelf();return;
+        }
+        if(RenderManualJobs.active()||RenderManualJobs.start(this,jobId)){
+            startPending=false;
+            state(this,jobId,"RENDERING",true);
+            update("Rendering verified frames");
+            return;
+        }
+        if(++startAttempts<12){
+            state(this,jobId,"WAITING_FOR_NATIVE_EXECUTOR",true);
+            update("Native Blender busy; waiting to claim frame executor");
+            monitor.schedule(this::attemptStart,3,TimeUnit.SECONDS);
+        }else{
+            startPending=false;
+            state(this,jobId,"WAITING_FOR_NATIVE_EXECUTOR",true);
+            update("Native executor busy; open Render to resume");
+            stopSelf();
+        }
     }
 
     private void update(String message){
@@ -231,7 +260,7 @@ public final class RenderLongForegroundService extends Service {
         }catch(RuntimeException ignored){/* Never fail native Blender for UI. */}
     }
     private void tick(){
-        if(destroyed||ownerPause)return;
+        if(destroyed||ownerPause||startPending)return;
         JSONObject status=RenderManualJobs.status(this);
         String state=status.optString("state","");
         if(RenderManualJobs.active()){
