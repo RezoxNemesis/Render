@@ -5,8 +5,8 @@
   "status": "Partial",
   "seed_sha": "ed7ef34fa85d9e361bc9c92d554d8ec937755cc2",
   "head_branch": "feature/omega-P07-motion-20261022",
-  "head_sha": "ef1663ef73f3057f6d4118cc0dde37e167818e25",
-  "head_sha_note": "Exact tested implementation commit; the subsequent report-only commit becomes branch HEAD.",
+  "head_sha": "6f68288ca1e6f8b0eb339d3152d1abf565e97b81",
+  "head_sha_note": "Latest implementation/native-fixture fix commit; final branch HEAD includes this subsequent report-only update commit.",
   "pr_url": "https://github.com/RezoxNemesis/Render/pull/13",
   "target_branch": "integration/render-omega-ten-phases-20261022",
   "owned_paths_changed": [
@@ -96,5 +96,9 @@
   ],
   "source_ownership_checked": true,
   "unexpected_errors": [],
-  "last_word_status": "Partial"
+  "last_word_status": "Partial",
+  "implementation_commits": [
+    "ef1663ef73f3057f6d4118cc0dde37e167818e25",
+    "6f68288ca1e6f8b0eb339d3152d1abf565e97b81"
+  ]
 }
