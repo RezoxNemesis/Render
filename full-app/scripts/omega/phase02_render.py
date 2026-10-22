@@ -18,6 +18,7 @@ CONTRACT_VERSION = "RENDER-OMEGA-1"
 OPERATION_NAMES = ("omega.render.preflight", "omega.render.job_status")
 _ID = re.compile(r"^[0-9a-f]{32}$")
 _PNG = b"\x89PNG\r\n\x1a\n"
+_JOB_CACHE = {}  # Process-local only; never used as proof across Android restarts.
 
 
 def _fingerprint(value):
@@ -218,7 +219,14 @@ def _validated_spec(manifest):
     return spec
 
 
-def reconcile_manifest(folder, manifest, persist=False):
+def _cache_stamp(folder, manifest):
+    snapshot = folder / "snapshot.blend"
+    info = snapshot.stat()
+    return (manifest["fingerprint"], info.st_size, info.st_mtime_ns,
+            manifest["next_frame"], len(manifest["frames"]), manifest["state"])
+
+
+def reconcile_manifest(folder, manifest, persist=False, cached=False):
     """Recover first missing/corrupt absolute frame without duplicating good PNGs.
 
     Pre-rename sidecar receipts are fsynced before the final PNG rename. If the
@@ -229,6 +237,20 @@ def reconcile_manifest(folder, manifest, persist=False):
     if folder.is_symlink() or folder.name != _safe_job_id(manifest.get("job_id")):
         raise ValueError("JOB_OUTSIDE_SCOPE")
     spec = _validated_spec(manifest)
+    # Real native bpy process caches full integrity scans between successive
+    # frames. On an Android process restart this cache is empty and EVERY
+    # old frame and the frozen Blender checkpoint is SHA-verified again.
+    # Explicit status/audit calls always bypass the cache.
+    if cached:
+        try:
+            if _JOB_CACHE.get(str(folder.resolve())) == _cache_stamp(folder, manifest):
+                return manifest, {"first_missing": (
+                    None if manifest["next_frame"] > spec["end"]
+                    else manifest["next_frame"]),
+                    "verified_frames": len(manifest["frames"]), "adopted_frames": [],
+                    "invalid_receipts": [], "changed": False, "process_cache_hit": True}
+        except (OSError, KeyError, TypeError):
+            pass
     _snapshot_verified(folder, manifest)
     fingerprint = manifest["fingerprint"]
     old_frames = manifest.get("frames")
@@ -269,6 +291,8 @@ def reconcile_manifest(folder, manifest, persist=False):
         "frames", "next_frame", "state"))
     if persist and changed:
         atomic_json(folder / "manifest.json", updated)
+    if persist:
+        _JOB_CACHE[str(folder.resolve())] = _cache_stamp(folder, updated)
     return updated, {"first_missing": None if missing > spec["end"] else missing,
                      "verified_frames": len(frames), "adopted_frames": adopted,
                      "invalid_receipts": invalid, "changed": changed}
@@ -306,6 +330,7 @@ def commit_png(folder, manifest, frame, temporary):
     manifest["state"] = ("frames_complete" if manifest["next_frame"] > spec["end"]
                          else "ready")
     atomic_json(folder / "manifest.json", manifest)
+    _JOB_CACHE[str(folder.resolve())] = _cache_stamp(folder, manifest)
     return receipt
 
 
