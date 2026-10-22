@@ -1,0 +1,100 @@
+{
+  "contract": "RENDER-OMEGA-13P-20261022",
+  "phase": 7,
+  "title": "Root motion / gait / strikes / action curves / NLA",
+  "status": "Partial",
+  "seed_sha": "ed7ef34fa85d9e361bc9c92d554d8ec937755cc2",
+  "head_branch": "feature/omega-P07-motion-20261022",
+  "head_sha": "ef1663ef73f3057f6d4118cc0dde37e167818e25",
+  "head_sha_note": "Exact tested implementation commit; the subsequent report-only commit becomes branch HEAD.",
+  "pr_url": "https://github.com/RezoxNemesis/Render/pull/13",
+  "target_branch": "integration/render-omega-ten-phases-20261022",
+  "owned_paths_changed": [
+    "full-app/scripts/omega/phase07_motion.py",
+    "tools/omega/test_phase07_motion_contract.py",
+    "native-tests/omega/phase07/test_native_motion.py",
+    "reports/omega/PHASE_07_RESULT.json"
+  ],
+  "implementation": {
+    "operations": [
+      "omega.motion.create_actions",
+      "omega.motion.audit"
+    ],
+    "native_code": "real bpy pose-bone keyframe insertion into Blender Action, NLA strip/retime and audit",
+    "first_slice": "bounded biped FK walk only",
+    "native_evidence": "not yet executed in Blender",
+    "assumptions": [
+      "straight-down biped leg armature",
+      "XYZ FK bone rotation",
+      "forward motion in local +Y",
+      "contact measured at shin tip, not skinned foot"
+    ]
+  },
+  "pure_python_tests": {
+    "state": "PASSED",
+    "command": "python -m unittest discover -s tools/omega -p 'test_phase07_*.py' -v",
+    "results": [
+      "7 tests passed",
+      "input validation and rejection",
+      "analytic leg solution",
+      "stable replay digest",
+      "explicit unsupported-bpy error"
+    ]
+  },
+  "python_compilation": {
+    "state": "PASSED",
+    "command": "python -m compileall -q full-app/scripts/omega tools/omega native-tests/omega/phase07",
+    "note": "Run on staged Phase-07-owned files; no syntax errors"
+  },
+  "real_bpy_tests": {
+    "state": "NOT_RUN",
+    "commands": [
+      "blender -b -noaudio --python-exit-code 1 --python native-tests/omega/phase07/test_native_motion.py"
+    ],
+    "results": [],
+    "reason": "Blender executable is absent in this environment and importlib.util.find_spec('bpy') returned None",
+    "required_pass": [
+      "real Action/NLA and 125 keyed samples",
+      "planted shin-tip drift <0.035 m and penetration <0.025 m",
+      "two genuine Blender camera projections",
+      "exact FPS/base and render settings preserved",
+      "save/reopen and retime/reopen with original F-curve digest"
+    ]
+  },
+  "android_tests": {
+    "state": "NOT_RUN",
+    "reason": "No attached Android test device/runtime in this engineering context; phase owns no Java files."
+  },
+  "native_receipts": [],
+  "artifacts": [
+    {
+      "path": "native-tests/omega/phase07/test_native_motion.py",
+      "kind": "headless bpy fixture",
+      "verified": "compiled only, execution pending"
+    },
+    {
+      "path": "tools/omega/test_phase07_motion_contract.py",
+      "kind": "pure unit suite",
+      "verified": "7 tests passed"
+    },
+    {
+      "path": "full-app/scripts/omega/phase07_motion.py",
+      "kind": "phase-owned Blender Python module",
+      "verified": "compiled; actual bpy runtime pending"
+    }
+  ],
+  "quality_reduced": false,
+  "residual_blockers": [
+    "Execute real bpy fixture on pinned Blender runner and debug any action/armature compatibility or foot-contact failures.",
+    "Run Android packaged startup/bridge and on-device motion smoke tests after Phase 10 registry integration.",
+    "Actual jab/cross/hook and quadruped gait are follow-up scope, not part of the proven 30-minute first slice."
+  ],
+  "unverified_claims": [
+    "Actual bone deformation, shin-tip world-space planting and NLA retiming in Blender have not been confirmed by live native execution.",
+    "A saved .blend file and two-camera native fixture are specified but no generated .blend artifact has been produced in this environment.",
+    "Film-quality gait, rig skinning and on-device render performance are not claimed."
+  ],
+  "source_ownership_checked": true,
+  "unexpected_errors": [],
+  "last_word_status": "Partial"
+}
