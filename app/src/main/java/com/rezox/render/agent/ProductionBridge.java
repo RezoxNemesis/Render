@@ -19,7 +19,7 @@ public final class ProductionBridge {
     public static final String ACTION="production.execute";
     private static final String[] OPS={"capabilities","device.profile","editor.open","screenshot.capture",
         "artifact.read","artifact.export","reference.write","project.create","project.checkpoint",
-        "scene.inspect","mesh.create","material.assign","group.create","animation.keys","camera.aim",
+        "scene.inspect","mesh.create","asset.create","material.assign","group.create","animation.keys","camera.aim",
         "world.configure","instances.plan","instances.create","reference.attach",
         "render.plan","render.step","render.batch","render.status","render.encode","drive.status","drive.backup"};
     private static final Set<String> OPERATIONS=new HashSet<>(Arrays.asList(OPS));
@@ -70,7 +70,7 @@ public final class ProductionBridge {
                 .put("android_h264_encoder_available",ProductionVideoEncoder.available()).put("cloud_rendering",false)
                 .put("automatic_image_to_3d_provider_installed",false).put("visual_quality_verified",false)
                 .put("render_protocol","plan_then_batch_up_to_12_frames_with_cooldown_then_encode_then_export")
-                .put("render_batch_max_frames",12)
+                .put("render_batch_max_frames",12).put("free_procedural_asset_presets",17).put("free_assets_native_editable",true)
                 .put("thermal_severe_is_safely_paused",true)
                 .put("drive_backup_via","user-granted Android Storage Access Framework; cloud storage only")
                 .put("drive_folder_granted",ProductionDriveStorage.status(context).getBoolean("folder_granted"))
