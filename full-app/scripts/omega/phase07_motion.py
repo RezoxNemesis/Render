@@ -93,6 +93,16 @@ def _bpy_scene(context):
     return bpy, context["scene"]
 
 
+def _guard_context(context):
+    # P10 supplies trusted executor state, not a caller-supplied filesystem path.
+    # A rejected dry run must never create a real action and call it a preview.
+    if context.get("dry_run", False):
+        raise ValueError("UNSUPPORTED_NATIVE_FEATURE: motion dry_run")
+    cancel = context.get("cancellation_requested", False)
+    if (cancel() if callable(cancel) else cancel):
+        raise ValueError("CANCELLED_BY_OWNER")
+
+
 def _rig(scene, name):
     ob = scene.objects.get(name)
     if ob is None or ob.type != "ARMATURE":
@@ -278,6 +288,7 @@ def execute(operation, payload, context):
     bpy, scene = _bpy_scene(context)
     if operation == "omega.motion.audit":
         return audit(operation, payload, context)
+    _guard_context(context)
     rig = _rig(scene, p["rig"])
     track, strip = _find_strip(rig, p["clip"])
     if p["kind"] == "retime":
@@ -309,6 +320,12 @@ def execute(operation, payload, context):
     action_name = _action_name(rig.name, p["clip"])
     if bpy.data.actions.get(action_name) is not None:
         raise ValueError("CHECKPOINT_CONFLICT")
+    job_id = context.get("job_id")
+    if job_id is not None:
+        if not isinstance(job_id, str) or re.fullmatch(r"[0-9a-f]{32}", job_id) is None:
+            raise ValueError("INVALID_ARGUMENTS")
+        if any(a.get("omega_motion_job_id") == job_id for a in bpy.data.actions):
+            raise ValueError("CHECKPOINT_CONFLICT")
     anim = rig.animation_data_create()
     if anim.action is not None or any(not t.mute for t in anim.nla_tracks):
         raise ValueError("CHECKPOINT_CONFLICT")
@@ -331,8 +348,11 @@ def execute(operation, payload, context):
         action["omega_motion_bones"] = json.dumps(names, sort_keys=True)
         action["omega_motion_fps"] = scene.render.fps
         action["omega_motion_fps_base"] = scene.render.fps_base
+        if job_id is not None:
+            action["omega_motion_job_id"] = job_id
         anim.action = action
         for frame, root_y, ang in plan:
+            _guard_context(context)  # Bounded cancellation at keyframe boundaries.
             pose["root"].location.y = root_y
             pose["root"].keyframe_insert(data_path="location", index=1,
                                           frame=frame, group="OMEGA07 Root Motion")
