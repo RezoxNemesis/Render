@@ -1,12 +1,8 @@
 name: Render Full Native Blender + Agent APK
 on:
   push:
-    branches: ["feature/native-production-toolkit-20261022"]
-    paths:
-      - "full-app/**"
-      - "app/**"
-      - "tools/**"
-      - ".github/workflows/full-native-apk.yml"
+    branches: [feature/native-production-toolkit-20261022]
+    paths: ["full-app/**", "app/**", "tools/**", ".github/workflows/full-native-apk.yml"]
   workflow_dispatch:
 permissions:
   contents: read
@@ -22,8 +18,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - name: Prepare additive typed production integration
-        run: python tools/prepare_production_toolkit.py
+      - run: python tools/prepare_production_toolkit.py
       - name: Verify production and previous native contracts
         run: PYTHONPATH=tools python -m unittest tools/test_assemble_full_native.py tools/test_blender_bpy_bridge.py tools/test_lively_scene_contract.py tools/test_lively_scene_mock.py tools/test_native_autonomy_security.py tools/test_blender_batch_assembly.py tools/test_production_contract.py -v
       - name: Verify adapter is repeatable
@@ -55,11 +50,22 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-      - name: Restore stable DEVELOPMENT certificate (not the owner release key)
+      - name: Restore DEVELOPMENT certificate only
         uses: actions/cache@v4
         with:
-          path: ~/.android/debug.keystore
+          path: ~/.android/render-production-development.keystore
           key: render-production-development-signing-v1
+      - name: Configure explicit preview development signing
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$HOME/.android"
+          KEY="$HOME/.android/render-production-development.keystore"
+          if [ ! -s "$KEY" ]; then
+            keytool -genkeypair -keystore "$KEY" -storepass android -keypass android -alias androiddebugkey -dname 'CN=Render Production Preview Development,O=Render,C=IN' -keyalg RSA -keysize 2048 -validity 10000
+          fi
+          echo "RENDER_DEVELOPMENT_KEYSTORE=$KEY" >> "$GITHUB_ENV"
+          keytool -list -v -keystore "$KEY" -storepass android -alias androiddebugkey > "$RUNNER_TEMP/render-development-key-proof.txt"
       - name: Install Android SDK NDK and CMake
         shell: bash
         run: |
@@ -73,7 +79,7 @@ jobs:
           gradle-version: "8.11.1"
       - name: Test and build native JNI and Android production bridge
         run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
-      - name: Download and verify pinned Android Blender engine
+      - name: Download verified pinned Android Blender engine
         run: |
           curl -fL --retry 3 --connect-timeout 15 "https://github.com/simfeo/blender/releases/download/android-alpha-4/blender-full.apk" -o "$RUNNER_TEMP/blender-full.apk"
           echo "3fe775a1e14470ebfcd3c25ae32b57003433f04552f896880631ae98b1f18aea  $RUNNER_TEMP/blender-full.apk" | sha256sum --check --status
@@ -89,8 +95,7 @@ jobs:
           git -C "$RUNNER_TEMP/full-blender-src" checkout --detach -q FETCH_HEAD
           test "$(git -C "$RUNNER_TEMP/full-blender-src" rev-parse HEAD)" = "d93bd33cba768e19ee4387a31c0ea137ee2f0047"
       - name: Stage actual engine and production runtime
-        run: |
-          python tools/assemble_full_native.py --engine-apk "$RUNNER_TEMP/blender-full.apk" --bridge-apk app/build/outputs/apk/debug/app-debug.apk --upstream-source "$RUNNER_TEMP/full-blender-src" --output full-app/stage
+        run: python tools/assemble_full_native.py --engine-apk "$RUNNER_TEMP/blender-full.apk" --bridge-apk app/build/outputs/apk/debug/app-debug.apk --upstream-source "$RUNNER_TEMP/full-blender-src" --output full-app/stage
       - name: Compile original-package development candidate
         run: gradle -p full-app --no-daemon :app:assembleDebug
       - name: Verify APK runtime manifest and certificate
@@ -107,17 +112,19 @@ jobs:
           import io,zipfile
           with zipfile.ZipFile('full-app/app/build/outputs/apk/debug/app-debug.apk') as a:
               with zipfile.ZipFile(io.BytesIO(a.read('assets/blender_runtime.zip'))) as z:
-                  for name in ('render_production.py','render_production_contract.py'):
+                  for name in ('render_production.py','render_production_contract.py','render_production_detail.py'):
                       assert 'scripts/startup/'+name in z.namelist()
           print('PASS: production runtime packaged with native Blender')
           PY
           cp "$APK" "$RUNNER_TEMP/Render-0.20.0-production-original-development.apk"
           sha256sum "$RUNNER_TEMP/Render-0.20.0-production-original-development.apk" > "$RUNNER_TEMP/render-production-sha256.txt"
-      - name: Build safe side-by-side candidate without altering installed Render
+      - name: Build isolated preview without altering installed Render
         run: |
           gradle -p full-app --no-daemon -PrenderSideBySide=true :app:assembleDebug
           cp full-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/Render-0.20.0-production-preview-development.apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$RUNNER_TEMP/Render-0.20.0-production-preview-development.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$RUNNER_TEMP/Render-0.20.0-production-preview-development.apk" > "$RUNNER_TEMP/render-preview-signature.txt"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$RUNNER_TEMP/Render-0.20.0-production-preview-development.apk" > "$RUNNER_TEMP/render-preview-badging.txt"
+          grep -Fq "name='com.rezox.render.preview'" "$RUNNER_TEMP/render-preview-badging.txt"
           sha256sum "$RUNNER_TEMP/Render-0.20.0-production-preview-development.apk" >> "$RUNNER_TEMP/render-production-sha256.txt"
       - uses: actions/upload-artifact@v4
         with:
@@ -133,12 +140,56 @@ jobs:
           compression-level: 0
           retention-days: 7
           if-no-files-found: error
+      - name: Detect protected permanent owner release signing
+        env:
+          SIGNING_B64: ${{ secrets.RENDER_ANDROID_SIGNING_KEYSTORE_B64 }}
+          STORE_PASS: ${{ secrets.RENDER_ANDROID_SIGNING_STORE_PASSWORD }}
+          SIGN_ALIAS: ${{ secrets.RENDER_ANDROID_SIGNING_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.RENDER_ANDROID_SIGNING_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SIGNING_B64" ]; then
+            echo 'Permanent owner signing secrets absent; DEVELOPMENT artifacts only, not an in-place update claim.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          test -n "$STORE_PASS" && test -n "$SIGN_ALIAS" && test -n "$KEY_PASS"
+          umask 077
+          printf '%s' "$SIGNING_B64" | base64 --decode > "$RUNNER_TEMP/render-owner-release.p12"
+          keytool -list -v -storetype PKCS12 -keystore "$RUNNER_TEMP/render-owner-release.p12" -storepass "$STORE_PASS" -alias "$SIGN_ALIAS" > "$RUNNER_TEMP/render-owner-cert.txt"
+          grep -Fq '03:01:F0:84:CB:37:45:7B:E8:23:53:A8:A0:7E:88:14:35:17:5B:FD:5B:F0:CF:EA:FA:2C:3D:D4:B2:5F:CF:57' "$RUNNER_TEMP/render-owner-cert.txt"
+          echo "RENDER_ANDROID_SIGNING_STORE_FILE=$RUNNER_TEMP/render-owner-release.p12" >> "$GITHUB_ENV"
+          echo 'RENDER_OWNER_SIGNER_READY=1' >> "$GITHUB_ENV"
+      - name: Build protected owner-signed release when configured
+        if: env.RENDER_OWNER_SIGNER_READY == '1'
+        env:
+          RENDER_ANDROID_SIGNING_STORE_PASSWORD: ${{ secrets.RENDER_ANDROID_SIGNING_STORE_PASSWORD }}
+          RENDER_ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.RENDER_ANDROID_SIGNING_KEY_PASSWORD }}
+          RENDER_ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.RENDER_ANDROID_SIGNING_KEY_ALIAS }}
+        run: |
+          gradle -p full-app --no-daemon :app:assembleRelease
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs full-app/app/build/outputs/apk/release/app-release.apk > "$RUNNER_TEMP/render-owner-release-proof.txt"
+          grep -Fqi '0301f084cb37457be82353a8a07e881435175bfd5bf0cfeafa2c3dd4b25fcf57' "$RUNNER_TEMP/render-owner-release-proof.txt"
       - uses: actions/upload-artifact@v4
+        if: env.RENDER_OWNER_SIGNER_READY == '1'
+        with:
+          name: Render-0.20.0-PERMANENT-OWNER-RELEASE
+          path: full-app/app/build/outputs/apk/release/app-release.apk
+          compression-level: 0
+          retention-days: 7
+          if-no-files-found: error
+      - name: Remove temporary owner signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/render-owner-release.p12"
+      - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: Render-0.20.0-build-and-signature-proof
           path: |
             ${{ runner.temp }}/render-production-signature.txt
             ${{ runner.temp }}/render-production-badging.txt
+            ${{ runner.temp }}/render-preview-signature.txt
+            ${{ runner.temp }}/render-preview-badging.txt
             ${{ runner.temp }}/render-production-sha256.txt
+            ${{ runner.temp }}/render-owner-release-proof.txt
             app/build/test-results/testDebugUnitTest/
           retention-days: 14
