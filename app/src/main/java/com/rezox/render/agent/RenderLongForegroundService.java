@@ -219,8 +219,14 @@ public final class RenderLongForegroundService extends Service {
         if(command!=null && PAUSE.equals(command.getAction())){
             ownerPause=true;RenderManualJobs.pause();
             state(this,jobId,"PAUSING_AFTER_FRAME",false);
-            update("Pausing after current frame");
-            stopSelf();return START_NOT_STICKY;
+            update("Current Blender frame will finish before service stops");
+            // Preserve foreground priority until the current native frame
+            // stops; stopping immediately risks killing Blender mid-frame.
+            if(!monitorScheduled){
+                monitorScheduled=true;
+                monitor.scheduleWithFixedDelay(this::tick,2,5,TimeUnit.SECONDS);
+            }
+            return START_STICKY;
         }
 
         boolean wanted=getSharedPreferences(PREFS,MODE_PRIVATE).getBoolean(WANTED,false);
@@ -322,7 +328,17 @@ public final class RenderLongForegroundService extends Service {
         }catch(RuntimeException ignored){/* Never fail native Blender for UI. */}
     }
     private void tick(){
-        if(destroyed||ownerPause||startPending)return;
+        if(destroyed||startPending)return;
+        if(ownerPause){
+            if(RenderManualJobs.active()){
+                update("Finishing the current frame before pausing");
+                return;
+            }
+            state(this,jobId,"PAUSED_OWNER",false);
+            update("Paused at verified frame boundary");
+            stopSelf();
+            return;
+        }
         JSONObject status=RenderManualJobs.status(this);
         String state=status.optString("state","");
         if(RenderManualJobs.active()){
