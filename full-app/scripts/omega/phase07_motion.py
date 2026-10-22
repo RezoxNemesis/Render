@@ -351,11 +351,17 @@ def execute(operation, payload, context):
         if job_id is not None:
             action["omega_motion_job_id"] = job_id
         anim.action = action
+        # PoseBone.location is in the ROOT BONE's local basis, not armature
+        # axes. Convert armature-local forward +Y so an upright Root does not
+        # accidentally animate vertical motion.
+        from mathutils import Vector
+        root_local_forward = pose["root"].bone.matrix_local.to_3x3().inverted() @ Vector((0., 1., 0.))
         for frame, root_y, ang in plan:
             _guard_context(context)  # Bounded cancellation at keyframe boundaries.
-            pose["root"].location.y = root_y
-            pose["root"].keyframe_insert(data_path="location", index=1,
-                                          frame=frame, group="OMEGA07 Root Motion")
+            for axis in range(3):
+                pose["root"].location[axis] = root_y * root_local_forward[axis]
+                pose["root"].keyframe_insert(data_path="location", index=axis,
+                                              frame=frame, group="OMEGA07 Root Motion")
             for side in ("left", "right"):
                 for alias, angle in ((side+"_thigh", ang[side][0]),
                                      (side+"_shin", ang[side][1])):
@@ -364,7 +370,7 @@ def execute(operation, payload, context):
                     pb.keyframe_insert(data_path="rotation_euler", index=0,
                                        frame=frame, group="OMEGA07 Foot Contact")
         curves = _fcurves(action)
-        if len(curves) != 5 or any(len(c.keyframe_points) != p["frames"] for c in curves):
+        if len(curves) != 7 or any(len(c.keyframe_points) != p["frames"] for c in curves):
             raise ValueError("NATIVE_ACTION_UNCONFIRMED")
         for curve in curves:
             for point in curve.keyframe_points:
@@ -421,16 +427,22 @@ def _inspect(scene, rig, track, strip):
     stride = float(action["omega_motion_stride"])
     contact_z = float(action["omega_motion_contact_z"])
     curves = _fcurves(action)
-    if len(curves) < 5:
+    if len(curves) < 7:
         raise ValueError("NATIVE_ACTION_UNCONFIRMED")
     root_path = 'pose.bones["%s"].location' % names["root"]
-    root_curve = next((c for c in curves if c.data_path == root_path and c.array_index == 1), None)
-    if root_curve is None:
+    root_curves = {c.array_index: c for c in curves if c.data_path == root_path}
+    if set(root_curves) != {0, 1, 2}:
         raise ValueError("NATIVE_ACTION_UNCONFIRMED")
-    root = [float(root_curve.evaluate(start+i*(frames-1)/4)) for i in range(5)]
+    from mathutils import Vector
+    root_basis = rig.data.bones[names["root"]].matrix_local.to_3x3()
+    root = []
+    for i in range(5):
+        fr = start+i*(frames-1)/4
+        local_vector = Vector(tuple(float(root_curves[j].evaluate(fr)) for j in range(3)))
+        root.append(float((root_basis @ local_vector).y))
     # Verify local rotation loop seam from actual F-curves. Root uses offset cycle.
     seam = max((abs(float(c.evaluate(start)) - float(c.evaluate(start+frames-1)))
-                for c in curves if c is not root_curve), default=math.inf)
+                for c in curves if c.data_path != root_path), default=math.inf)
     saved = (scene.frame_current, scene.frame_subframe)
     feet = {"left": [], "right": []}
     try:
