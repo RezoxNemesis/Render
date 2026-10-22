@@ -158,6 +158,29 @@ public final class AgentActivity extends Activity {
         addAction(localBridge,"STOP VIDEOSTUDIO BRIDGE",StudioUi.DANGER,
             ()->disableDirectBridge());
         StudioUi.add(page,localBridge);
+        StudioUi.space(page,14);
+        LinearLayout cloudBackup=StudioUi.card(this);
+        StudioUi.add(cloudBackup,StudioUi.label(this,"OPTIONAL / GOOGLE DRIVE BACKUP"));
+        StudioUi.space(cloudBackup,7);
+        StudioUi.add(cloudBackup,StudioUi.text(this,
+            "Choose a folder in Google Drive (if its Android document provider supports folders), or another document provider. Blender still renders on this phone. Saved .blend, PNG and MP4 files can be copied to the chosen location without Gallery access.",
+            12,StudioUi.MUTED,false));
+        StudioUi.space(cloudBackup,10);
+        addAction(cloudBackup,"CHOOSE BACKUP FOLDER",StudioUi.SECONDARY,()->{
+            try{ProductionDriveStorage.chooseFolder(this);}
+            catch(Exception e){Toast.makeText(this,"Folder picker unavailable: "+e.getClass().getSimpleName(),Toast.LENGTH_LONG).show();}
+        });
+        StudioUi.add(page,cloudBackup);
+        LinearLayout referenceCard=StudioUi.card(this);
+        StudioUi.add(referenceCard,StudioUi.label(this,"REFERENCE IMAGE / VIDEO INBOX"));
+        StudioUi.add(referenceCard,StudioUi.text(this,
+            "Import only photos or videos you choose. Render checks the real file bytes and saves a private checksum. It never browses Gallery or guesses the unseen side of a character.",
+            12,StudioUi.MUTED,false));
+        addAction(referenceCard,"IMPORT PHOTOS / VIDEOS INTO RENDER",StudioUi.SECONDARY,()->{
+            try{StudioReferenceInbox.openPicker(this);}
+            catch(Exception e){Toast.makeText(this,"Reference picker unavailable: "+e.getClass().getSimpleName(),Toast.LENGTH_LONG).show();}
+        });
+        StudioUi.add(page,referenceCard);
         StudioUi.space(page,17);
 
         // Keep legacy cloud modes supported but do not confuse them with
@@ -269,6 +292,35 @@ public final class AgentActivity extends Activity {
             "SCREEN CAPTURE ENABLED  •  Secret fields remain masked. This connection never uses cloud Blender rendering. Device and permission limitations still apply.",
             11,StudioUi.MUTED,false));
         ui.post(refresh);
+        if(StudioReferenceInbox.isExplicitOwnerMediaIntent(getIntent()))confirmSharedReference(getIntent());
+    }
+    private void confirmSharedReference(Intent inbound){
+        if(inbound==null || !StudioReferenceInbox.isExplicitOwnerMediaIntent(inbound))return;
+        new AlertDialog.Builder(this)
+            .setTitle("Import these images/videos into Render?")
+            .setMessage("Only the files explicitly selected or shared with Render are copied into its private reference inbox. No Gallery browsing occurs.")
+            .setNegativeButton("Cancel",null)
+            .setPositiveButton("Import",(dialog,which)->receiveReferenceIntent(inbound))
+            .show();
+    }
+    private void receiveReferenceIntent(Intent inbound){
+        if(inbound==null||!StudioReferenceInbox.isExplicitOwnerMediaIntent(inbound))return;
+        // Permission-limited source URIs are used only for this owner-selected copy.
+        setIntent(new Intent(this,AgentActivity.class));
+        background.execute(()->{
+            try{
+                JSONObject receipt=StudioReferenceInbox.receive(getApplicationContext(),inbound);
+                int count=receipt.getInt("imported");
+                ui.post(()->Toast.makeText(this,"Imported "+count+" reference(s); inspect reference.list through your existing Render bridge.",Toast.LENGTH_LONG).show());
+            }catch(Exception e){
+                ui.post(()->Toast.makeText(this,"Reference import failed: "+e.getMessage(),Toast.LENGTH_LONG).show());
+            }
+        });
+    }
+    @Override protected void onNewIntent(Intent intent){
+        super.onNewIntent(intent);
+        if(StudioReferenceInbox.isExplicitOwnerMediaIntent(intent))
+            confirmSharedReference(intent);
     }
     private void addAction(LinearLayout parent,String title,int style,Runnable action) {
         TextView view=StudioUi.action(this,title,style);
@@ -499,6 +551,28 @@ public final class AgentActivity extends Activity {
         return "LOCAL SELF-CHECK ONLY — not a ChatGPT connection test.\n"+
             new AgentActions(this).execute(cmd,new AtomicBoolean(false)).toString(2);
     });}
+    @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){
+        super.onActivityResult(requestCode,resultCode,data);
+        if(requestCode==StudioReferenceInbox.PICK_REFERENCE && resultCode==Activity.RESULT_OK){
+            Intent ownerSelected=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            if(data!=null){
+                ownerSelected.setData(data.getData());
+                ownerSelected.setClipData(data.getClipData());
+            }
+            ownerSelected.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            receiveReferenceIntent(ownerSelected);
+        }
+        if(requestCode==ProductionDriveStorage.REQUEST_PICK_FOLDER){
+            try{
+                boolean selected=ProductionDriveStorage.acceptFolderSelection(this,resultCode,data);
+                Toast.makeText(this,selected?
+                    "Backup folder linked; Render can copy verified files to this provider.":
+                    "No backup folder selected.",Toast.LENGTH_LONG).show();
+            }catch(Exception e){
+                Toast.makeText(this,"Backup folder permission failed: "+e.getClass().getSimpleName(),Toast.LENGTH_LONG).show();
+            }
+        }
+    }
     @Override public void onRequestPermissionsResult(int code,String[] permissions,int[] results){
         super.onRequestPermissionsResult(code,permissions,results);
         if(code==42&&results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED)startSession();

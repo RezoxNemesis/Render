@@ -15,11 +15,39 @@ _spec = importlib.util.spec_from_file_location('render_production_contract', _pa
 C = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(C)
 
+def _phase2():
+    # Blender runtime packaging/registration belongs to P10. In installed
+    # Blender the 'omega' package lives on the actual startup search path.
+    # Headless bpy tests sometimes load this file with spec_from_file_location
+    # (rather than as a package), so use only the adjacent pinned module as
+    # a safe, deterministic fallback; never import user-requested code.
+    try:
+        from omega import phase02_render
+        return phase02_render
+    except ModuleNotFoundError as error:
+        if error.name not in ('omega', 'omega.phase02_render'):
+            raise
+    adjacent = Path(__file__).resolve().parent / 'omega' / 'phase02_render.py'
+    if not adjacent.is_file():
+        raise ValueError('RENDER_PHASE02_MODULE_NOT_INSTALLED')
+    spec = importlib.util.spec_from_file_location('render_omega_phase02_local', adjacent)
+    if spec is None or spec.loader is None:
+        raise ValueError('RENDER_PHASE02_MODULE_NOT_INSTALLED')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
 def _write(path, value):
     tmp=path.with_suffix(path.suffix+'.tmp')
     with tmp.open('w',encoding='utf8') as out:
         json.dump(value,out,sort_keys=True,allow_nan=False);out.flush();os.fsync(out.fileno())
     os.replace(tmp,path)
+    # Directory durability after the atomic rename is filesystem-dependent.
+    try:
+        fd=os.open(str(path.parent),os.O_RDONLY|getattr(os,'O_DIRECTORY',0))
+        try:os.fsync(fd)
+        finally:os.close(fd)
+    except OSError:pass
 
 def _root(spool):
     if not spool:raise ValueError('SPOOL_UNAVAILABLE')
@@ -163,8 +191,13 @@ def _plan_render(scene,p,root):
     ident=uuid.uuid4().hex;folder=_job(root,ident);folder.mkdir(mode=0o700)
     checkpoint=folder/'snapshot.blend'
     # Snapshot all referenced native Blender data; source project path is unchanged.
-    if 'FINISHED' not in bpy.ops.wm.save_as_mainfile(filepath=str(checkpoint),copy=True,compress=True,check_existing=False):raise RuntimeError('CHECKPOINT_FAILED')
+    if 'FINISHED' not in bpy.ops.wm.save_as_mainfile(filepath=str(checkpoint),copy=True,compress=False,check_existing=False):raise RuntimeError('CHECKPOINT_FAILED')
+    _phase2().sync_file(checkpoint)
+    _phase2().sync_directory(folder)
     receipt=C.file_receipt(checkpoint)
+    # Fractional frame time belongs to the real scene, not a guessed Android
+    # integer fps. Existing typed render.plan payload stays backward compatible.
+    spec['fps_base']=float(scene.render.fps_base)
     manifest={'version':1,'job_id':ident,'source_scene':scene.name,'spec':spec,'snapshot':receipt,
               'fingerprint':C.fingerprint({'spec':spec,'snapshot':receipt}),'state':'ready',
               'frames':{},'next_frame':spec['start'],'quality_reduced':False}
@@ -181,12 +214,14 @@ def _step(root,p):
     C.fields(p,('job_id',),('job_id',));folder=_job(root,p['job_id']);path=folder/'manifest.json'
     manifest=json.loads(path.read_text());spec=manifest['spec']
     if manifest['fingerprint']!=C.fingerprint({'spec':spec,'snapshot':manifest['snapshot']}):raise ValueError('RENDER_MANIFEST_CONFLICT')
-    if not C.frame_matches(folder,manifest['snapshot']):raise ValueError('CHECKPOINT_HASH_MISMATCH')
+    # Phase 02's reconciliation verifies the SHA-bound snapshot once per
+    # native session rather than twice for every potentially huge frame.
+    # A stale next_frame after power loss or an earlier corrupt PNG must not
+    # skip a gap. Two-phase sidecars can adopt valid frames committed between
+    # the PNG rename and the manifest rename without re-rendering them.
+    manifest, verification = _phase2().reconcile_manifest(folder,manifest,persist=True,cached=True)
     frame=manifest['next_frame']
     if frame>spec['end']:return _status(manifest)
-    existing=manifest['frames'].get(str(frame))
-    if existing and C.frame_matches(folder,existing):
-        manifest['next_frame']=frame+1;_write(path,manifest);return _status(manifest)
     scene=next((s for s in bpy.data.scenes if s.get('production_frozen_job')==manifest['job_id']),None)
     if scene is None:
         with bpy.data.libraries.load(str(folder/'snapshot.blend'),link=False) as (src,dst):
@@ -195,14 +230,16 @@ def _step(root,p):
         scene=dst.scenes[0];scene['production_frozen_job']=manifest['job_id']
     render=scene.render
     engine=spec['engine']
-    try:render.engine=engine
+    try:
+        render.engine=engine
     except (TypeError,ValueError):
-        if engine not in ('BLENDER_EEVEE','BLENDER_EEVEE_NEXT'):raise ValueError('RENDER_ENGINE_UNAVAILABLE')
-        alternate='BLENDER_EEVEE_NEXT' if engine=='BLENDER_EEVEE' else 'BLENDER_EEVEE'
-        try:render.engine=alternate
-        except (TypeError,ValueError):raise ValueError('RENDER_ENGINE_UNAVAILABLE')
+        # Never silently replace the user's renderer with a different engine.
+        # A different shading backend can change pixels even with identical
+        # samples, so prefer an explicit, recoverable unsupported-engine error.
+        raise ValueError('REQUESTED_RENDER_ENGINE_UNAVAILABLE')
     render.resolution_x=spec['width'];render.resolution_y=spec['height'];render.resolution_percentage=100
-    render.fps=spec['fps'];render.fps_base=1.0
+    render.fps=spec['fps']
+    render.fps_base=spec.get('fps_base',render.fps_base)
     if render.engine=='CYCLES':scene.cycles.samples=spec['samples']
     elif hasattr(scene,'eevee') and hasattr(scene.eevee,'taa_render_samples'):scene.eevee.taa_render_samples=spec['samples']
     render.image_settings.file_format='PNG';render.image_settings.color_mode='RGBA'
@@ -211,10 +248,12 @@ def _step(root,p):
     manifest['state']='rendering';_write(path,manifest)
     try:
         result=bpy.ops.render.render(write_still=True,scene=scene.name)
-        if 'FINISHED' not in result or not tmp.is_file() or tmp.stat().st_size<64:raise RuntimeError('FRAME_RENDER_FAILED')
-        os.replace(tmp,final);manifest['frames'][str(frame)]=C.file_receipt(final)
-        manifest['next_frame']=frame+1;manifest['state']='frames_complete' if frame==spec['end'] else 'ready'
-        _write(path,manifest)
+        if 'FINISHED' not in result or not tmp.is_file():
+            raise RuntimeError('FRAME_RENDER_FAILED')
+        # CRC and expected dimensions are checked BEFORE making the PNG
+        # immutable. Sidecar -> fsynced rename -> manifest prevents false
+        # completion after a crash between filesystem operations.
+        _phase2().commit_png(folder,manifest,frame,tmp)
     except Exception:
         manifest['state']='paused_error';_write(path,manifest);raise
     return _status(manifest)
@@ -233,9 +272,17 @@ def execute(args, spool, command_id):
                 'camera':scene.camera.name if scene.camera else None,'fps':scene.render.fps,
                 'frame_start':scene.frame_start,'frame_end':scene.frame_end,'visual_quality_verified':False}
     if operation=='render.status':
-        C.fields(p,('job_id',),('job_id',));return _status(json.loads((_job(root,p['job_id'])/'manifest.json').read_text()))
+        C.fields(p,('job_id',),('job_id',))
+        folder=_job(root,p['job_id'])
+        manifest=json.loads((folder/'manifest.json').read_text())
+        verified,details=_phase2().reconcile_manifest(folder,manifest,persist=False)
+        return dict(_status(verified),verification=details)
     if operation=='render.step':return _step(root,p)
     _editable(scene)
+    if operation=='asset.create':
+        C.fields(p, ('preset','name'), ('preset',))
+        import render_assets
+        return render_assets.create_asset(scene,p['preset'],p.get('name'))
     if operation=='project.create':
         C.fields(p,('name',),('name',));name=C.safe_name(p['name'])
         if name in bpy.data.scenes:raise ValueError('SCENE_NAME_EXISTS')
