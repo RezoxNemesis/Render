@@ -40,7 +40,7 @@ def create_mesh(name, offset=0.):
         v = d.cross(u).normalized()
         width = (.095 if bone_name in ("hips", "spine", "chest") else
                  .085 if bone_name.startswith("thigh") else
-                 .06 if bone_name.startswith("upper_arm", "shin", "neck", "head") else .04)
+                 .06 if bone_name.startswith(("upper_arm", "shin", "neck", "head")) else .04)
         first = len(verts)
         for t in (0., .5, 1.):
             center = a.lerp(b, t)
