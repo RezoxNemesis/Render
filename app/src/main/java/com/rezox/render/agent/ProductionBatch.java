@@ -35,6 +35,11 @@ public final class ProductionBatch {
             .put("source_checkpoint_preserved",true);
     }
 
+    /** Absolute frame bounds must be used, not the number of frames in the job. */
+    static boolean framesComplete(JSONObject state)throws Exception {
+        return state.getInt("next_frame")>state.getInt("end_frame");
+    }
+
     private static JSONObject report(Context context,String jobId,String reason,
                                      int processed,long elapsed,JSONObject reading)throws Exception{
         JSONObject out=jobStatus(context,jobId);
@@ -69,7 +74,7 @@ public final class ProductionBatch {
             while(produced<maxFrames && SystemClock.elapsedRealtime()-started<maxWall){
                 if(cancelled.get())return report(context,jobId,"PAUSED_USER_STOP",produced,SystemClock.elapsedRealtime()-started,ProductionThermalTelemetry.sample(context));
                 current=jobStatus(context,jobId);
-                if(current.getInt("next_frame")>current.getInt("end_frame")){
+                if(framesComplete(current)){
                     reason="FRAMES_COMPLETE";break;
                 }
                 JSONObject reading=ProductionThermalTelemetry.sample(context);
