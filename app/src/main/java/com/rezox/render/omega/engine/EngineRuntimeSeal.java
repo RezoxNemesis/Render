@@ -67,6 +67,7 @@ public final class EngineRuntimeSeal {
             throws IOException {
         if(!root.isDirectory()||Files.isSymbolicLink(root.toPath()))
             throw new IOException("BLENDER_RUNTIME_ROOT_UNSAFE");
+        seal(root,version); // Validate version BEFORE changing either marker.
         if(!sha256.matches("[0-9a-f]{64}"))throw new IOException("INVALID_ARCHIVE_DIGEST");
         atomicWrite(new File(root,DIGEST_FILE),sha256);
         atomicWrite(seal(root,version),packageStamp);
