@@ -72,10 +72,14 @@ with tempfile.TemporaryDirectory() as d:
     assert not inspection['render_quality_modified']
     assert before==(scene.render.resolution_x,scene.render.resolution_y)
     try:
-        ops.execute('viewport.configure',{'radius':1,'distance':2},folder,scene)
-        raise AssertionError('Headless Blender has no viewport; should fail explicitly')
+        clip=ops.execute('viewport.configure',{'radius':1,'distance':2},folder,scene)
+        assert len(clip['viewports'])>0 and clip['viewport_only'],clip
+        assert all(v['clip_end']/v['clip_start']<100000 for v in clip['viewports'])
+        assert not clip['render_settings_changed'] and not clip['geometry_decimated']
     except ValueError as error:
+        # -b can still hold VIEW_3D areas depending on the Blender fixture.
         assert 'NATIVE_VIEWPORT_NOT_OPEN' in str(error)
+    assert before==(scene.render.resolution_x,scene.render.resolution_y)
     for op in ('python.eval','console.execute','wm.open_mainfile'):
         try:ops.execute('operator.execute',
                         {'operator':op,'expected_object':'ModelFace',
