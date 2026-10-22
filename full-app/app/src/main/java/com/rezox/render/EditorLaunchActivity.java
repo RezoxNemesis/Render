@@ -139,14 +139,17 @@ public final class EditorLaunchActivity extends Activity {
         if(!starting.compareAndSet(false,true))return;
         new Thread(()->{
             try {
-                report("Checking verified project recovery and prior native render…");
-                JSONObject evidence=RenderRecoveryStatus.inspect(this);
-                recoveryEvidence=evidence;
-                if(!destroyed)runOnUiThread(()->{
-                    if(!isFinishing()&&!isDestroyed())
-                        deviceStatus.setText(collectDevice()+"\n\n"+
-                            RenderRecoveryStatus.ownerSummary(evidence));
-                });
+                // SHA-checking a multi-gigabyte .blend must never block engine
+                // startup. Device can open Blender while diagnostics verify.
+                new Thread(()->{
+                    JSONObject evidence=RenderRecoveryStatus.inspect(getApplicationContext());
+                    recoveryEvidence=evidence;
+                    if(!destroyed)runOnUiThread(()->{
+                        if(!isFinishing()&&!isDestroyed())
+                            deviceStatus.setText(collectDevice()+"\n\n"+
+                                RenderRecoveryStatus.ownerSummary(evidence));
+                    });
+                },"render-background-session-audit").start();
                 report("Checking installed Blender libraries…");
                 File nativeDir=new File(getApplicationInfo().nativeLibraryDir);
                 File library=new File(nativeDir,"libblender.so");
