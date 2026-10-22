@@ -42,6 +42,16 @@ public final class RenderManualJobs {
             "Frame "+done+"/"+Math.max(total,1)+" • "+detail,
             total>0?Math.min(100,(int)(done*100L/total)):-1);
     }
+    static JSONObject readManifest(Context context,String job)throws Exception{
+        File path=ProductionFiles.file(context,job,"manifest.json");
+        if(!path.isFile()||path.length()>16*1024*1024)
+            throw new IllegalArgumentException("RENDER_MANIFEST_UNAVAILABLE");
+        return new JSONObject(new String(Files.readAllBytes(path.toPath()),StandardCharsets.UTF_8));
+    }
+    static boolean stillImage(JSONObject manifest)throws Exception{
+        String kind=manifest.getJSONObject("spec").optString("output_kind","ANIMATION");
+        return "STILL".equals(kind);
+    }
     public static boolean active(){return ACTIVE.get();}
     public static String currentJob(){return runningJob;}
     public static void pause(){
@@ -70,7 +80,7 @@ public final class RenderManualJobs {
                 ACTIVE.set(false);return false;
             }
             STOP.set(false);runningJob=jobId;
-            AgentWorkPresence.begin(app,"render.manual_animation","owner-local");
+            AgentWorkPresence.begin(app,stillImage(readManifest(app,jobId)) ? "render.manual_image" : "render.manual_animation","owner-local");
             // Individual raytraced frames can last minutes. Keep the genuine
             // observed Android status fresh without faking frame completions.
             pulse=HEARTBEAT.scheduleAtFixedRate(()->{
@@ -97,11 +107,17 @@ public final class RenderManualJobs {
                 JSONObject before=ProductionBatch.jobStatus(app,jobId);
                 int done=before.getInt("completed_frames"),total=before.getInt("total_frames");
                 String state=before.getString("state");
+                boolean still=stillImage(readManifest(app,jobId));
                 publish(app,jobId,state,"encoded".equals(state)?"MP4 ready":"Rendering",done,total);
                 if("encoded".equals(state)){
                     ending="succeeded";break;
                 }
                 if("frames_complete".equals(state)||before.getInt("next_frame")>before.getInt("end_frame")){
+                    if(still){
+                        publish(app,jobId,"frames_complete","Verified full-resolution PNG ready",done,total);
+                        ending="succeeded";
+                        break;
+                    }
                     publish(app,jobId,"encoding","Creating H.264 MP4",done,total);
                     JSONObject result=ProductionVideoEncoder.encode(app,jobId,STOP);
                     if(result.optString("sha256").length()!=64)
@@ -193,10 +209,19 @@ public final class RenderManualJobs {
     /** Export is explicit; does not silently publish the user's render to Drive. */
     public static JSONObject export(Context context,String job)throws Exception{
         JSONObject state=ProductionBatch.jobStatus(context,job);
+        JSONObject data=readManifest(context,job);
+        if(stillImage(data)){
+            if(!"frames_complete".equals(state.getString("state")))
+                throw new IllegalStateException("STILL_FRAME_NOT_FINISHED");
+            JSONObject spec=data.getJSONObject("spec");
+            String frameKey=Integer.toString(spec.getInt("start"));
+            JSONObject png=data.getJSONObject("frames").getJSONObject(frameKey);
+            return ProductionFiles.export(context,new JSONObject()
+                .put("category",job).put("filename",png.getString("filename"))
+                .put("expected_sha256",png.getString("sha256")));
+        }
         if(!"encoded".equals(state.getString("state")))
             throw new IllegalStateException("VIDEO_NOT_YET_ENCODED");
-        File manifest=ProductionFiles.file(context,job,"manifest.json");
-        JSONObject data=new JSONObject(new String(Files.readAllBytes(manifest.toPath()),StandardCharsets.UTF_8));
         JSONObject video=data.getJSONObject("video");
         return ProductionFiles.export(context,new JSONObject()
             .put("category",job).put("filename",video.getString("filename"))
