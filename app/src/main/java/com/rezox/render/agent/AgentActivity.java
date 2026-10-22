@@ -292,7 +292,7 @@ public final class AgentActivity extends Activity {
             "SCREEN CAPTURE ENABLED  •  Secret fields remain masked. This connection never uses cloud Blender rendering. Device and permission limitations still apply.",
             11,StudioUi.MUTED,false));
         ui.post(refresh);
-        if(StudioReferenceInbox.isExplicitOwnerMediaIntent(getIntent()))receiveReferenceIntent(getIntent());
+        if(StudioReferenceInbox.isExplicitOwnerMediaIntent(getIntent()))confirmSharedReference(getIntent());
     }
     private void confirmSharedReference(Intent inbound){
         if(inbound==null || !StudioReferenceInbox.isExplicitOwnerMediaIntent(inbound))return;
