@@ -201,11 +201,12 @@ def _step(root,p):
     C.fields(p,('job_id',),('job_id',));folder=_job(root,p['job_id']);path=folder/'manifest.json'
     manifest=json.loads(path.read_text());spec=manifest['spec']
     if manifest['fingerprint']!=C.fingerprint({'spec':spec,'snapshot':manifest['snapshot']}):raise ValueError('RENDER_MANIFEST_CONFLICT')
-    if not C.frame_matches(folder,manifest['snapshot']):raise ValueError('CHECKPOINT_HASH_MISMATCH')
+    # Phase 02's reconciliation verifies the SHA-bound snapshot once per
+    # native session rather than twice for every potentially huge frame.
     # A stale next_frame after power loss or an earlier corrupt PNG must not
     # skip a gap. Two-phase sidecars can adopt valid frames committed between
     # the PNG rename and the manifest rename without re-rendering them.
-    manifest, verification = _phase2().reconcile_manifest(folder,manifest,persist=True)
+    manifest, verification = _phase2().reconcile_manifest(folder,manifest,persist=True,cached=True)
     frame=manifest['next_frame']
     if frame>spec['end']:return _status(manifest)
     scene=next((s for s in bpy.data.scenes if s.get('production_frozen_job')==manifest['job_id']),None)
