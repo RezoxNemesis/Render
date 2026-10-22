@@ -9,7 +9,7 @@ import re
 OPERATIONS = frozenset((
     'capabilities', 'device.profile', 'editor.open', 'screenshot.capture',
     'artifact.read', 'artifact.export', 'reference.write',
-    'project.create', 'project.checkpoint', 'scene.inspect', 'mesh.create',
+    'asset.create', 'project.create', 'project.checkpoint', 'scene.inspect', 'mesh.create',
     'material.assign', 'group.create', 'animation.keys', 'camera.aim',
     'world.configure', 'instances.plan', 'instances.create', 'reference.attach',
     'render.plan', 'render.step', 'render.status', 'render.encode',
