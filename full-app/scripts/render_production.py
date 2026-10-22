@@ -195,12 +195,13 @@ def _step(root,p):
         scene=dst.scenes[0];scene['production_frozen_job']=manifest['job_id']
     render=scene.render
     engine=spec['engine']
-    try:render.engine=engine
+    try:
+        render.engine=engine
     except (TypeError,ValueError):
-        if engine not in ('BLENDER_EEVEE','BLENDER_EEVEE_NEXT'):raise ValueError('RENDER_ENGINE_UNAVAILABLE')
-        alternate='BLENDER_EEVEE_NEXT' if engine=='BLENDER_EEVEE' else 'BLENDER_EEVEE'
-        try:render.engine=alternate
-        except (TypeError,ValueError):raise ValueError('RENDER_ENGINE_UNAVAILABLE')
+        # Never silently replace the user's renderer with a different engine.
+        # A different shading backend can change pixels even with identical
+        # samples, so prefer an explicit, recoverable unsupported-engine error.
+        raise ValueError('REQUESTED_RENDER_ENGINE_UNAVAILABLE')
     render.resolution_x=spec['width'];render.resolution_y=spec['height'];render.resolution_percentage=100
     render.fps=spec['fps'];render.fps_base=1.0
     if render.engine=='CYCLES':scene.cycles.samples=spec['samples']
