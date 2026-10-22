@@ -1,7 +1,7 @@
 name: Render reliability upgrade verification
 on:
   push:
-    branches: [feature/024-resumable-render-continuity-assets-20261022]
+    branches: [feature/024-resumable-render-continuity-assets-20261022, feature/025-no-downgrade-render-recovery-20261022]
     paths: ['app/**', 'full-app/**', 'tools/**', '.github/workflows/render-reliability-upgrade.yml']
   workflow_dispatch:
 permissions:
