@@ -694,10 +694,25 @@ def _poll():
         claimed.unlink(missing_ok=True)
     return 0.5
 
-if ROOT:
-    if _render_session is not None:
+def _install_render_ui_when_ready():
+    if _render_session is None or getattr(bpy.app, "background", False):
+        return None
+    try:
         _render_session.install()
+        return None
+    except (AttributeError, RuntimeError, ValueError, TypeError) as error:
+        count = getattr(_install_render_ui_when_ready, "attempts", 0) + 1
+        _install_render_ui_when_ready.attempts = count
+        print("Render native menus not ready:", type(error).__name__)
+        return 2.0 if count < 5 else None
+
+if ROOT:
+    # The command executor must remain available even if optional UI addon
+    # registration fails on a particular Blender startup ordering.
     bpy.app.timers.register(_poll, first_interval=0.5, persistent=True)
+    if _render_session is not None:
+        bpy.app.timers.register(_install_render_ui_when_ready,
+                                first_interval=3.0, persistent=False)
 
 if MOBILE_MODE in ("portrait", "landscape") and not getattr(bpy.app,"background",False):
     bpy.app.timers.register(_initial_mobile_setup, first_interval=2.0, persistent=False)
