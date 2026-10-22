@@ -11,6 +11,9 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -21,6 +24,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class RenderManualJobs {
     private static final ExecutorService WORK=Executors.newSingleThreadExecutor();
     private static final AtomicBoolean ACTIVE=new AtomicBoolean(false);
+    private static final ScheduledExecutorService HEARTBEAT=Executors.newSingleThreadScheduledExecutor();
+    private static volatile ScheduledFuture<?> pulse;
     private static final AtomicBoolean STOP=new AtomicBoolean(false);
     private static final String PREFS="render_manual_render";
     private static volatile String runningJob="";
@@ -66,6 +71,17 @@ public final class RenderManualJobs {
             }
             STOP.set(false);runningJob=jobId;
             AgentWorkPresence.begin(app,"render.manual_animation","owner-local");
+            // Individual raytraced frames can last minutes. Keep the genuine
+            // observed Android status fresh without faking frame completions.
+            pulse=HEARTBEAT.scheduleAtFixedRate(()->{
+                if(!ACTIVE.get())return;
+                SharedPreferences p=preferences(app);
+                int done=p.getInt("completed",0),total=p.getInt("total",0);
+                AgentWorkPresence.stage(app,
+                    "Render frame "+done+"/"+Math.max(total,1)+" • "+
+                        p.getString("detail","Native Blender working"),
+                    total>0?Math.min(100,(int)(done*100L/total)):-1);
+            },5,8,TimeUnit.SECONDS);
             WORK.execute(()->runJob(app,jobId));
             return true;
         }catch(Exception error){
@@ -128,6 +144,9 @@ public final class RenderManualJobs {
                     last.optInt("completed"),last.optInt("total"));
             ending="failed";
         }finally{
+            ScheduledFuture<?> ticker=pulse;
+            if(ticker!=null)ticker.cancel(false);
+            pulse=null;
             AgentWorkPresence.finish(app,ending);
             ACTIVE.set(false);
             runningJob="";
