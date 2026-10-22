@@ -11,9 +11,10 @@ class ThermalDriveInplaceTests(unittest.TestCase):
         self.assertIn('f3d63fb20be25ca0be8aa6a161d5cf13cd98ba2fa300c7a604cce35131b9eb30',ci.lower())
         self.assertNotIn('keytool -genkeypair',ci)
         self.assertNotIn('adb uninstall',ci)
-        self.assertIn("versionCode='24'",ci)
+        self.assertIn("versionCode='25'",ci)
         prep=source('tools/prepare_production_toolkit.py')
         self.assertIn('versionCode = 24',prep)
+        self.assertIn('versionCode = 25',(ROOT/'tools/prepare_v23_reference.py').read_text())
         self.assertIn('0.21.0-native-thermal-batch-drive',prep)
     def test_batch_uses_native_bpy_and_never_cloud_renders(self):
         s=source('app/src/main/java/com/rezox/render/agent/ProductionBatch.java')
