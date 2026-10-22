@@ -6,6 +6,16 @@ No arbitrary Blender/Python command or external filesystem path is accepted.
 """
 import math
 import re
+from pathlib import Path
+
+def owned_path(root, filename):
+    root=Path(root).resolve()
+    if not isinstance(filename,str) or not re.fullmatch(r'[a-f0-9]{64}\\.(?:png|jpg|jpeg|webp|mp4)',filename):
+        raise ValueError('INVALID_OWNED_REFERENCE_NAME')
+    candidate=root/filename
+    if candidate.is_symlink() or candidate.resolve().parent!=root:
+        raise ValueError('REFERENCE_PATH_OUTSIDE_SCOPE')
+    return candidate
 
 SCHEMAS = {
     'ui.state': {'fields': []},
