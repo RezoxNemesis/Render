@@ -108,8 +108,8 @@ def apply():
     capture='app/src/main/java/com/rezox/render/agent/ProductionCapture.java'
     patch(capture,'!a.isFinishing()&&a.hasWindowFocus()',
           '!a.isFinishing()&&a.getWindow().getDecorView().isAttachedToWindow()&&a.getWindow().getDecorView().isShown()')
-    patch(capture,'!activity.isFinishing()||!activity.hasWindowFocus()',
-          '!activity.isFinishing()||!activity.getWindow().getDecorView().isAttachedToWindow()||!activity.getWindow().getDecorView().isShown()')
+    patch(capture,'activity.isFinishing()||!activity.hasWindowFocus()',
+          'activity.isFinishing()||!activity.getWindow().getDecorView().isAttachedToWindow()||!activity.getWindow().getDecorView().isShown()')
 
     batch='app/src/main/java/com/rezox/render/agent/ProductionBatch.java'
     patch(batch,'.put("total_frames",spec.getInt("frame_count"))',
