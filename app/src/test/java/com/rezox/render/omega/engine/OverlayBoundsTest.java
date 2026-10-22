@@ -11,6 +11,7 @@ public class OverlayBoundsTest {
         assertEquals(8,OverlayBounds.clampTop(800,80,110,8));
         assertEquals(300,OverlayBounds.scrollHeight(300,1000,100));
         assertEquals(115,OverlayBounds.scrollHeight(800,115,80));
+        assertEquals(50,OverlayBounds.scrollHeight(50,100,80));
     }
     @Test public void tapAndDragDisambiguationDoesNotReinterpretBlenderTouches(){
         assertTrue(OverlayBounds.isTap(12,12,16,14,8));
