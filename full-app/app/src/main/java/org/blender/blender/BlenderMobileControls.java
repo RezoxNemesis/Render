@@ -185,9 +185,20 @@ public final class BlenderMobileControls {
                 }
                 case MotionEvent.ACTION_UP:
                     if(!dragged[0] && OverlayBounds.isTap(drag[0],drag[1],
-                            event.getRawX(),event.getRawY(),touchSlop))
+                            event.getRawX(),event.getRawY(),touchSlop)){
                         menuScroll.setVisibility(
                             menuScroll.getVisibility()==View.VISIBLE?View.GONE:View.VISIBLE);
+                        // Expansion changes actual panel height. Reposition
+                        // after layout so options never fall below navigation.
+                        menuScroll.post(()->{
+                            if(activity.isFinishing()||activity.isDestroyed())return;
+                            FrameLayout.LayoutParams layout=(FrameLayout.LayoutParams)content.getLayoutParams();
+                            layout.topMargin=OverlayBounds.clampTop(layout.topMargin,
+                                activity.getResources().getDisplayMetrics().heightPixels,
+                                Math.max(px(activity,70),content.getHeight()),safeMargin);
+                            content.setLayoutParams(layout);
+                        });
+                    }
                     activity.getSharedPreferences(SETTINGS,Activity.MODE_PRIVATE).edit()
                         .putInt("overlay_top_px",
                             ((FrameLayout.LayoutParams)content.getLayoutParams()).topMargin).apply();
