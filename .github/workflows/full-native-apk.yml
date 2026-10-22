@@ -1,71 +1,69 @@
 name: Render Full Native Blender + Agent APK
 on:
   push:
-    branches: ["feature/android-native-foundation-20261021", "feature/lively-building-native-animation-20261022", "feature/render-autonomy-live-status-signing-hardening-20261022"]
+    branches: ["feature/native-production-toolkit-20261022"]
     paths:
       - "full-app/**"
-      - "app/src/main/java/**"
-      - "app/src/main/cpp/**"
-      - "app/build.gradle.kts"
-      - "tools/test_blender_bpy_bridge.py"
-      - "tools/test_lively_scene_contract.py"
-      - "tools/test_lively_scene_mock.py"
-      - "tools/test_native_autonomy_security.py"
-      - "tools/test_blender_batch_assembly.py"
-      - "tools/configure_owner_signing.py"
-      - "tools/assemble_full_native.py"
-      - "app/src/test/java/**"
-      - "tools/test_real_blender_bpy.py"
-      - "tools/assemble_full_native.py"
-      - "tools/test_assemble_full_native.py"
+      - "app/**"
+      - "tools/**"
       - ".github/workflows/full-native-apk.yml"
   workflow_dispatch:
 permissions:
   contents: read
-# A stream of autonomous commits must not leave multiple expensive 300MB
-# Blender APK builds running concurrently for obsolete branch revisions.
 concurrency:
   group: render-native-debug-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   stage-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 6
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - name: Verify full-engine staging rejects tampered files
-        run: PYTHONPATH=tools python -m unittest tools/test_assemble_full_native.py tools/test_blender_bpy_bridge.py tools/test_lively_scene_contract.py tools/test_lively_scene_mock.py tools/test_native_autonomy_security.py tools/test_blender_batch_assembly.py -v
-
+      - name: Prepare additive typed production integration
+        run: python tools/prepare_production_toolkit.py
+      - name: Verify production and previous native contracts
+        run: PYTHONPATH=tools python -m unittest tools/test_assemble_full_native.py tools/test_blender_bpy_bridge.py tools/test_lively_scene_contract.py tools/test_lively_scene_mock.py tools/test_native_autonomy_security.py tools/test_blender_batch_assembly.py tools/test_production_contract.py -v
+      - name: Verify adapter is repeatable
+        run: python tools/prepare_production_toolkit.py
   blender-bpy-integration:
     runs-on: ubuntu-24.04
-    timeout-minutes: 12
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - name: Install real Blender for bpy semantic compatibility test
+      - run: python3 tools/prepare_production_toolkit.py
+      - name: Install Blender for semantic fixture tests only
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends blender
-      - name: Verify typed native bpy commands with real Blender context
+      - name: Verify existing and production bpy operations
         env:
           LIBGL_ALWAYS_SOFTWARE: "1"
-        run: blender -b -noaudio --python-exit-code 1 --python tools/test_real_blender_bpy.py
-
+        run: |
+          blender -b -noaudio --python-exit-code 1 --python tools/test_real_blender_bpy.py
+          blender -b -noaudio --python-exit-code 1 --python tools/test_real_production.py
   build-native-full:
-    needs: stage-tests
+    needs: [stage-tests, blender-bpy-integration]
     runs-on: ubuntu-24.04
     timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
+      - run: python3 tools/prepare_production_toolkit.py
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
-      - name: Install Android SDK, NDK and CMake
+      - name: Restore stable DEVELOPMENT certificate (not the owner release key)
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: render-production-development-signing-v1
+      - name: Install Android SDK NDK and CMake
         shell: bash
         run: |
+          set -euo pipefail
           SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -path "*/bin/sdkmanager" -type f | sort -V | tail -1)"
           test -x "$SDKMANAGER"
           yes | "$SDKMANAGER" --licenses >/dev/null || true
@@ -73,18 +71,14 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.11.1"
-      - name: Build Render native JNI and ChatGPT agent first
+      - name: Test and build native JNI and Android production bridge
         run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
-      - name: Download and verify pinned full native Blender engine APK
-        shell: bash
+      - name: Download and verify pinned Android Blender engine
         run: |
-          curl -fL --retry 3 --connect-timeout 15 \
-            "https://github.com/simfeo/blender/releases/download/android-alpha-4/blender-full.apk" \
-            -o "$RUNNER_TEMP/blender-full.apk"
+          curl -fL --retry 3 --connect-timeout 15 "https://github.com/simfeo/blender/releases/download/android-alpha-4/blender-full.apk" -o "$RUNNER_TEMP/blender-full.apk"
           echo "3fe775a1e14470ebfcd3c25ae32b57003433f04552f896880631ae98b1f18aea  $RUNNER_TEMP/blender-full.apk" | sha256sum --check --status
           test "$(stat -c%s "$RUNNER_TEMP/blender-full.apk")" = "286561495"
-      - name: Retrieve pinned upstream Android Java and resources
-        shell: bash
+      - name: Retrieve pinned upstream Android launcher
         run: |
           mkdir "$RUNNER_TEMP/full-blender-src"
           git -C "$RUNNER_TEMP/full-blender-src" init -q
@@ -94,42 +88,57 @@ jobs:
           git -C "$RUNNER_TEMP/full-blender-src" -c protocol.version=2 fetch --depth=1 --filter=blob:none origin d93bd33cba768e19ee4387a31c0ea137ee2f0047
           git -C "$RUNNER_TEMP/full-blender-src" checkout --detach -q FETCH_HEAD
           test "$(git -C "$RUNNER_TEMP/full-blender-src" rev-parse HEAD)" = "d93bd33cba768e19ee4387a31c0ea137ee2f0047"
-      - name: Stage Render full engine plus native agent
+      - name: Stage actual engine and production runtime
         run: |
-          python tools/assemble_full_native.py \
-            --engine-apk "$RUNNER_TEMP/blender-full.apk" \
-            --bridge-apk "app/build/outputs/apk/debug/app-debug.apk" \
-            --upstream-source "$RUNNER_TEMP/full-blender-src" \
-            --output "full-app/stage"
-      # Release secrets never enter push/PR feature-branch runners.
-      # Only render-owner-release.yml may sign after protected environment approval.
-      - name: Compile full native engine + agent Android APK
+          python tools/assemble_full_native.py --engine-apk "$RUNNER_TEMP/blender-full.apk" --bridge-apk app/build/outputs/apk/debug/app-debug.apk --upstream-source "$RUNNER_TEMP/full-blender-src" --output full-app/stage
+      - name: Compile original-package development candidate
         run: gradle -p full-app --no-daemon :app:assembleDebug
-      - name: Verify engine, agent, runtime and signature
-        shell: bash
+      - name: Verify APK runtime manifest and certificate
         run: |
+          set -euo pipefail
           APK=full-app/app/build/outputs/apk/debug/app-debug.apk
-          test -s "$APK"
           unzip -tqq "$APK"
           unzip -Z -1 "$APK" | grep -Fx 'lib/arm64-v8a/libblender.so'
           unzip -Z -1 "$APK" | grep -Fx 'lib/arm64-v8a/librender_bridge.so'
-          unzip -Z -1 "$APK" | grep -Fx 'assets/blender_runtime.zip'
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" > "$RUNNER_TEMP/render-full-badging.txt"
-          grep -q "package: name='com.rezox.render'" "$RUNNER_TEMP/render-full-badging.txt"
-          grep -q "launchable-activity: name='com.rezox.render.RenderHubActivity'" "$RUNNER_TEMP/render-full-badging.txt"
-          sha256sum "$APK" | tee "$RUNNER_TEMP/render-full-sha256.txt"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee "$RUNNER_TEMP/render-production-signature.txt"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | tee "$RUNNER_TEMP/render-production-badging.txt"
+          grep -Fq "versionCode='23'" "$RUNNER_TEMP/render-production-badging.txt"
+          python3 - <<'PY'
+          import io,zipfile
+          with zipfile.ZipFile('full-app/app/build/outputs/apk/debug/app-debug.apk') as a:
+              with zipfile.ZipFile(io.BytesIO(a.read('assets/blender_runtime.zip'))) as z:
+                  for name in ('render_production.py','render_production_contract.py'):
+                      assert 'scripts/startup/'+name in z.namelist()
+          print('PASS: production runtime packaged with native Blender')
+          PY
+          cp "$APK" "$RUNNER_TEMP/Render-0.20.0-production-original-development.apk"
+          sha256sum "$RUNNER_TEMP/Render-0.20.0-production-original-development.apk" > "$RUNNER_TEMP/render-production-sha256.txt"
+      - name: Build safe side-by-side candidate without altering installed Render
+        run: |
+          gradle -p full-app --no-daemon -PrenderSideBySide=true :app:assembleDebug
+          cp full-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/Render-0.20.0-production-preview-development.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$RUNNER_TEMP/Render-0.20.0-production-preview-development.apk"
+          sha256sum "$RUNNER_TEMP/Render-0.20.0-production-preview-development.apk" >> "$RUNNER_TEMP/render-production-sha256.txt"
       - uses: actions/upload-artifact@v4
         with:
-          name: render-full-native-blender-and-chatgpt-agent-debug
-          path: full-app/app/build/outputs/apk/debug/app-debug.apk
+          name: Render-0.20.0-original-development-NOT-INPLACE-VERIFIED
+          path: ${{ runner.temp }}/Render-0.20.0-production-original-development.apk
           compression-level: 0
-          retention-days: 3
+          retention-days: 7
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
-          name: render-full-native-build-provenance
-          path: |
-            ${{ runner.temp }}/render-full-badging.txt
-            ${{ runner.temp }}/render-full-sha256.txt
+          name: Render-0.20.0-preview-development-PRESERVES-ORIGINAL
+          path: ${{ runner.temp }}/Render-0.20.0-production-preview-development.apk
+          compression-level: 0
           retention-days: 7
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Render-0.20.0-build-and-signature-proof
+          path: |
+            ${{ runner.temp }}/render-production-signature.txt
+            ${{ runner.temp }}/render-production-badging.txt
+            ${{ runner.temp }}/render-production-sha256.txt
+            app/build/test-results/testDebugUnitTest/
+          retention-days: 14
