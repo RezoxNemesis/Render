@@ -67,7 +67,7 @@ with tempfile.TemporaryDirectory(prefix="omega-native-render-") as directory:
     job = receipt["job_id"]
     jobfolder = folder / "Production" / job
     manifest = json.loads((jobfolder / "manifest.json").read_text())
-    assert manifest["spec"]["fps_base"] == 1.001
+    assert abs(manifest["spec"]["fps_base"] - 1.001) < 0.0001
     assert manifest["snapshot"]["sha256"] == Durable._hash_file(
         jobfolder / "snapshot.blend")
     assert manifest["spec"]["samples"] == 1
@@ -112,7 +112,7 @@ with tempfile.TemporaryDirectory(prefix="omega-native-render-") as directory:
     assert scene.render.engine == "CYCLES"
     assert scene.cycles.samples == 1
     assert (scene.render.resolution_x, scene.render.resolution_y) == (16, 16)
-    assert scene.render.fps_base == 1.001
+    assert abs(scene.render.fps_base - 1.001) < 0.0001
     snapshot = jobfolder / "snapshot.blend"
     result_open = bpy.ops.wm.open_mainfile(filepath=str(snapshot), load_ui=False)
     assert "FINISHED" in result_open
@@ -121,7 +121,7 @@ with tempfile.TemporaryDirectory(prefix="omega-native-render-") as directory:
     assert restored.objects.get("Omega2NativeTriangle") is not None
     assert len(restored.objects) == saved_count
     assert restored.render.engine == "CYCLES"
-    assert restored.render.fps_base == 1.001
+    assert abs(restored.render.fps_base - 1.001) < 0.0001
     print("PASS: real bpy Cycles native render frames 101-105; restart 104/105 only;")
     print("PASS: corrupt PNG repaired, SHA CRC dimensions and source snapshot reopened;")
     print("PASS: native samples/engine/dimensions/fps_base unchanged, no downgrade.")
