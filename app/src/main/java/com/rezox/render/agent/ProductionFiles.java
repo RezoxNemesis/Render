@@ -108,7 +108,9 @@ public final class ProductionFiles {
             throw new IOException("ARTIFACT_REVISION_CONFLICT");
         String mime=source.getName().endsWith(".mp4")?"video/mp4":
             source.getName().endsWith(".png")?"image/png":
-            source.getName().endsWith(".blend")?"application/x-blender":null;
+            source.getName().endsWith(".blend")?"application/x-blender":
+            category.matches("[a-f0-9]{32}")&&
+            source.getName().endsWith("_segments.json")?"application/json":null;
         if(mime==null)throw new IllegalArgumentException("EXPORT_TYPE_UNAVAILABLE");
 
         // A user-approved export is content-addressed and idempotent. Checking
