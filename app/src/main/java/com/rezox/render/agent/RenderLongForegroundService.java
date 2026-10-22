@@ -126,6 +126,42 @@ public final class RenderLongForegroundService extends Service {
         return result;
     }
 
+    /**
+     * Called ONLY after the owner returns to the visible native Blender editor.
+     * A persisted opt-in is necessary; never re-run a previously cancelled or
+     * complete render, and never ask Android to bypass thermal/FGS policies.
+     */
+    public static void resumeConsentedVisibleJob(Context context){
+        Context c=context.getApplicationContext();
+        android.content.SharedPreferences prefs=c.getSharedPreferences(PREFS,MODE_PRIVATE);
+        if(!prefs.getBoolean(WANTED,false)||RenderManualJobs.active()||!editorReady(c))
+            return;
+        long now=SystemClock.elapsedRealtime();
+        long attempted=prefs.getLong("last_owner_visible_attempt_uptime",-1L);
+        if(attempted>=0&&now-attempted>=0&&now-attempted<30000L)return;
+        // Persist the throttle BEFORE attempting a new Android service launch.
+        prefs.edit().putLong("last_owner_visible_attempt_uptime",now).commit();
+        String job=prefs.getString(JOB,"");
+        if(!valid(job))return;
+        try{
+            JSONObject state=ProductionBatch.jobStatus(c,job);
+            if("encoded".equals(state.optString("state")))return;
+            JSONObject reading=ProductionThermalTelemetry.sample(c);
+            ProductionThermalPolicy.Decision decision=ProductionThermalPolicy.evaluate(
+                reading.optInt("thermal_status",-1),
+                reading.optBoolean("low_memory",false),
+                reading.optLong("available_memory_bytes",0),false);
+            if(!decision.renderAllowed){
+                state(c,job,decision.reason,true);
+                return;
+            }
+            request(c,job);
+        }catch(Exception ignored){
+            // A lost/corrupt manifest or Android quota denial requires a
+            // deliberate retry; no fabricated 100%-complete notification.
+        }
+    }
+
     public static boolean editorReady(Context c){
         File ready=new File(c.getFilesDir(),"render_bpy_jobs/ready");
         long age=System.currentTimeMillis()-ready.lastModified();
