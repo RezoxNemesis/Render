@@ -53,5 +53,7 @@ def prepare():
         path.write_text(s)
     from harden_production_runtime import apply
     apply(ROOT)
-    print('Prepared native production toolkit v0.21.0; original project data and endpoints unchanged')
+    from prepare_v23_reference import apply as install_reference_studio
+    install_reference_studio()
+    print('Prepared Render Studio native reference toolkit v0.22.0; package, data and VideoStudio MCP unchanged')
 if __name__=='__main__':prepare()
