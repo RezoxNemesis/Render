@@ -44,6 +44,7 @@ public final class RenderLongForegroundService extends Service {
     private final ScheduledExecutorService monitor=Executors.newSingleThreadScheduledExecutor();
     private volatile boolean destroyed;
     private volatile boolean ownerPause;
+    private boolean monitorScheduled;
     private String jobId="";
     private int idlePolls;
     private long lastNotice;
@@ -84,6 +85,18 @@ public final class RenderLongForegroundService extends Service {
                 .put("resume_from_checkpoint_available",true)
                 .put("quality_reduced",false);
         }
+    }
+
+    /** Explicit pause is recorded even if Android has already killed the UI. */
+    public static JSONObject requestPause(Context context)throws Exception{
+        Context c=context.getApplicationContext();
+        String job=c.getSharedPreferences(PREFS,MODE_PRIVATE).getString(JOB,"");
+        if(!valid(job))throw new IllegalStateException("NO_LONG_RENDER_JOB");
+        state(c,job,"PAUSING_AFTER_FRAME",false);
+        RenderManualJobs.pause();
+        return new JSONObject().put("job_id",job).put("pause_requested",true)
+            .put("will_stop_after_current_native_frame",true)
+            .put("quality_reduced",false);
     }
 
     public static JSONObject status(Context context)throws Exception{
@@ -202,7 +215,10 @@ public final class RenderLongForegroundService extends Service {
             }
         }
         state(this,jobId,"RENDERING",true);
-        monitor.scheduleWithFixedDelay(this::tick,2,5,TimeUnit.SECONDS);
+        if(!monitorScheduled){
+            monitorScheduled=true;
+            monitor.scheduleWithFixedDelay(this::tick,2,5,TimeUnit.SECONDS);
+        }
         return START_STICKY;
     }
 
