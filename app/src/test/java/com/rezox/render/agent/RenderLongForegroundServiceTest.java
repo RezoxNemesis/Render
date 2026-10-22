@@ -53,7 +53,7 @@ public class RenderLongForegroundServiceTest {
     }
     @Test public void bridgeExposesTypedSafeActionsWithNoArbitraryScript()throws Exception{
         for(String op:new String[]{"render.job.start","render.job.pause","render.job.status",
-                "render.job.export","render.storage.status","project.checkpoint_export"}){
+                "render.job.export","render.job.export_segment","render.storage.status","project.checkpoint_export"}){
             ProductionBridge.validate(new JSONObject().put("operation",op)
                 .put("target_id","01dfff8e-368e-4b4a-aedf-e1bec09e5490")
                 .put("payload",new JSONObject()));
