@@ -15,6 +15,8 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import com.rezox.render.ui.StudioUi;
+import com.rezox.render.omega.engine.EngineEvidence;
+import com.rezox.render.omega.engine.EngineRuntimeSeal;
 import com.rezox.render.agent.RenderRecoveryStatus;
 import org.json.JSONObject;
 import java.io.File;
@@ -39,6 +41,7 @@ public final class EditorLaunchActivity extends Activity {
     private static final String VERSION="5.3";
     private static final String RUNTIME="blender_runtime.zip";
     private static final String STATE_PREF="render_editor_launch";
+    private static final AtomicBoolean GLOBAL_PREFLIGHT = new AtomicBoolean(false);
     private TextView status,deviceStatus;
     private LinearLayout actions;
     private final AtomicBoolean starting=new AtomicBoolean(false);
@@ -47,6 +50,7 @@ public final class EditorLaunchActivity extends Activity {
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        EngineEvidence.record(this,EngineEvidence.Stage.PREFLIGHT_ACCEPTED);
         LinearLayout page=StudioUi.page(this);
         LinearLayout top=StudioUi.row(this);
         TextView back=StudioUi.action(this,"←",StudioUi.SECONDARY);
@@ -137,7 +141,13 @@ public final class EditorLaunchActivity extends Activity {
     }
     private void prepare() {
         if(!starting.compareAndSet(false,true))return;
+        if(!GLOBAL_PREFLIGHT.compareAndSet(false,true)){
+            starting.set(false);
+            report("Blender resources are already being prepared in this process.");
+            return;
+        }
         new Thread(()->{
+            boolean handedToUi=false;
             try {
                 // SHA-checking a multi-gigabyte .blend must never block engine
                 // startup. Device can open Blender while diagnostics verify.
@@ -155,30 +165,41 @@ public final class EditorLaunchActivity extends Activity {
                 File library=new File(nativeDir,"libblender.so");
                 if(!library.isFile() || library.length()<1048576)
                     throw new IllegalStateException("MISSING_BLENDER_NATIVE_LIBRARY");
+                EngineEvidence.record(this,EngineEvidence.Stage.LIBRARY_VALIDATED);
                 report("Checking local Blender Python and factory assets…");
                 prepareRuntime();
                 report("Loading Blender native engine…");
-                try {System.loadLibrary("blender");}
+                try {
+                    System.loadLibrary("blender");
+                    EngineEvidence.record(this,EngineEvidence.Stage.NATIVE_LIBRARY_LOADED);
+                }
                 catch(LinkageError e){
                     throw new IllegalStateException("NATIVE_BLENDER_LINK_ERROR",e);
                 }
                 report("Launching Blender Vulkan editor…");
-                if(!destroyed)runOnUiThread(()->{
-                    if(isFinishing()||isDestroyed())return;
+                handedToUi=true;
+                runOnUiThread(()->{
                     try{
+                        if(isFinishing()||isDestroyed())return;
                         Intent intent=new Intent().setClassName(this,
                             "org.blender.blender.BlenderActivity");
                         startActivity(intent);
-                        status.setText("Blender launched. If its window is black, return here for diagnostics.");
+                        EngineEvidence.record(this,EngineEvidence.Stage.EDITOR_ACTIVITY_REQUESTED);
+                        // StartActivity does not attest an actual GPU frame.
+                        status.setText("Native Blender activity requested; first Vulkan pixels remain unverified.");
                     }catch(Exception e) {
                         status.setText("EDITOR_ACTIVITY_LAUNCH_FAILED: "+e.getClass().getSimpleName());
-                    }
+                    }finally{GLOBAL_PREFLIGHT.set(false);}
                 });
             }catch(Exception error){
                 String text="Editor preparation failed: "+error.getMessage();
+                EngineEvidence.record(this,EngineEvidence.Stage.PREFLIGHT_FAILED);
                 report(text);
                 android.util.Log.e("RenderEditorLaunch",text,error);
-            }finally{starting.set(false);}
+            }finally{
+                starting.set(false);
+                if(!handedToUi)GLOBAL_PREFLIGHT.set(false);
+            }
         },"render-blender-preflight").start();
     }
     private void prepareRuntime()throws Exception {
@@ -186,12 +207,29 @@ public final class EditorLaunchActivity extends Activity {
         if(!container.isDirectory()&&!container.mkdirs())
             throw new java.io.IOException("RUNTIME_PARENT_NOT_WRITABLE");
         File root=new File(container,VERSION);
-        File marker=new File(root,".installed-"+VERSION);
+        File backup=new File(container,VERSION+".previous");
+        // Crash between root->backup and stage->root must not force a fresh
+        // project or discard a usable previous *engine* installation.
+        if(!root.exists()&&EngineRuntimeSeal.hasInstalledRuntime(backup,VERSION)){
+            if(!backup.renameTo(root))
+                throw new java.io.IOException("PREVIOUS_BLENDER_RUNTIME_RESTORE_FAILED");
+        }
         long stamp=getPackageManager().getPackageInfo(getPackageName(),0).lastUpdateTime;
         String versionStamp=Long.toString(stamp);
-        if(marker.isFile() && versionStamp.equals(new String(
-            Files.readAllBytes(marker.toPath()),StandardCharsets.UTF_8))){
-            report("Existing verified Blender runtime found.");
+        if(EngineRuntimeSeal.hasSamePackageStamp(root,VERSION,versionStamp)){
+            EngineEvidence.record(this,EngineEvidence.Stage.RUNTIME_CACHE_REUSED);
+            report("Existing Blender runtime seal found; no extraction needed.");
+            return;
+        }
+        // On an APK upgrade, compare stable archive identity; only changed
+        // runtime bytes require extraction. This read is off Android's UI thread.
+        report("Checking Blender runtime archive revision…");
+        String assetDigest=EngineRuntimeSeal.archiveSha256(getAssets().open(RUNTIME));
+        EngineEvidence.record(this,EngineEvidence.Stage.RUNTIME_ZIP_HASHED);
+        if(EngineRuntimeSeal.sameArchive(root,VERSION,assetDigest)){
+            EngineRuntimeSeal.refreshPackageStamp(root,VERSION,versionStamp,assetDigest);
+            EngineEvidence.record(this,EngineEvidence.Stage.RUNTIME_CACHE_REUSED);
+            report("Blender runtime unchanged across APK upgrade; saved workspace retained.");
             return;
         }
         File stage=new File(container,VERSION+".prepare");
@@ -199,6 +237,7 @@ public final class EditorLaunchActivity extends Activity {
         if(!stage.mkdirs())throw new java.io.IOException("CANNOT_CREATE_RUNTIME_STAGE");
         String stageCanonical=stage.getCanonicalPath()+File.separator;
         long total=0;int entries=0;
+        EngineEvidence.record(this,EngineEvidence.Stage.RUNTIME_EXTRACTION_STARTED);
         report("Unpacking Blender resources to app storage…");
         try(InputStream stream=getAssets().open(RUNTIME);
             ZipInputStream input=new ZipInputStream(stream)) {
@@ -233,10 +272,12 @@ public final class EditorLaunchActivity extends Activity {
             }
         }catch(Exception e){deleteOwnedTree(stage);throw e;}
         if(entries<20)throw new java.io.IOException("INCOMPLETE_BLENDER_RUNTIME");
-        Files.write(new File(stage,".installed-"+VERSION).toPath(),
-            versionStamp.getBytes(StandardCharsets.UTF_8));
+        EngineRuntimeSeal.writeSeal(stage,VERSION,versionStamp,assetDigest);
+        if(!EngineRuntimeSeal.hasInstalledRuntime(stage,VERSION))
+            throw new java.io.IOException("INCOMPLETE_BLENDER_STARTUP_FILES");
         // Do not erase the previously working runtime before the new one is complete.
-        File backup=new File(container,VERSION+".previous");
+        // The old runtime directory is replaceable. app/Production and .blend
+        // project files are NEVER touched by this operation.
         deleteOwnedTree(backup);
         boolean hadOld=root.exists();
         if(hadOld&&!root.renameTo(backup))
@@ -250,6 +291,7 @@ public final class EditorLaunchActivity extends Activity {
         File newConfig=new File(root,"config");
         if(oldConfig.isDirectory()&&!newConfig.exists())oldConfig.renameTo(newConfig);
         deleteOwnedTree(backup);
+        EngineEvidence.record(this,EngineEvidence.Stage.RUNTIME_ACTIVATED);
         report("Blender assets installed: "+entries+" files, "+(total/1024/1024)+" MiB.");
     }
     private static void deleteOwnedTree(File f)throws java.io.IOException {
@@ -273,6 +315,7 @@ public final class EditorLaunchActivity extends Activity {
             candidates.add(new File(getExternalFilesDir(null),"blender-startup.log"));
         StringBuilder data=new StringBuilder("RENDER EDITOR DIAGNOSTICS\n");
         data.append(collectDevice()).append("\n\n");
+        data.append(EngineEvidence.snapshot(this).toString()).append("\n\n");
         if(recoveryEvidence!=null)data.append("Project and native render evidence: ").append(recoveryEvidence.toString()).append("\n\n");
         data.append("Startup stage: ").append(getSharedPreferences(STATE_PREF,MODE_PRIVATE)
             .getString("stage","Unknown")).append("\n\n");
