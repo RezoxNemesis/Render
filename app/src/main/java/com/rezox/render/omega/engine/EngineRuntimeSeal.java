@@ -40,14 +40,14 @@ public final class EngineRuntimeSeal {
     }
     public static boolean hasSamePackageStamp(File root,String version,String stamp)throws IOException{
         return hasInstalledRuntime(root,version)&&stamp.equals(
-            Files.readString(seal(root,version).toPath(),StandardCharsets.UTF_8).trim());
+            new String(Files.readAllBytes(seal(root,version).toPath()),StandardCharsets.UTF_8).trim());
     }
     public static boolean sameArchive(File root,String version,String sha256)throws IOException{
         if(!hasInstalledRuntime(root,version)||!sha256.matches("[0-9a-f]{64}"))
             return false;
         File digest=new File(root,DIGEST_FILE);
         return regularFile(digest)&&sha256.equals(
-            Files.readString(digest.toPath(),StandardCharsets.UTF_8).trim());
+            new String(Files.readAllBytes(digest.toPath()),StandardCharsets.UTF_8).trim());
     }
     /** Hash the literal APK asset, not a partially consumed ZipInputStream. */
     public static String archiveSha256(InputStream input)throws IOException{
@@ -82,7 +82,7 @@ public final class EngineRuntimeSeal {
     private static void atomicWrite(File destination,String value)throws IOException {
         File temporary=File.createTempFile("runtime-seal-",".part",destination.getParentFile());
         try{
-            Files.writeString(temporary.toPath(),value,StandardCharsets.UTF_8);
+            Files.write(temporary.toPath(),value.getBytes(StandardCharsets.UTF_8));
             try{
                 Files.move(temporary.toPath(),destination.toPath(),
                     StandardCopyOption.REPLACE_EXISTING,StandardCopyOption.ATOMIC_MOVE);
