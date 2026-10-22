@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-"""Desktop CI semantic fixture tests only; not Android production rendering proof."""
+"""Desktop CI semantic fixtures only; not Android production rendering proof."""
 import importlib.util
 import json
 from pathlib import Path
@@ -15,13 +15,11 @@ with tempfile.TemporaryDirectory() as tmp:
     def run(operation,payload):
         return module.execute({'operation':operation,'payload':payload},str(spool),'a'*32)
     head=run('mesh.create',{'name':'ProductionTestHead','kind':'UV_SPHERE','segments':64,'rings':32,'location':[2,0,0],'scale':[0.8,0.7,1.0]})
-    assert head['vertices']>1000,head
-    assert head['polygons']>1000,head
+    assert head['vertices']>1000 and head['polygons']>1000,head
     run('material.assign',{'object':'ProductionTestHead','name':'ProductionTestSkin','color':[0.6,0.35,0.22],'roughness':0.55})
     ob=bpy.context.scene.objects['ProductionTestHead']
-    assert ob.data.materials[0].use_nodes
-    assert all(f.use_smooth for f in ob.data.polygons)
-    before=ob.matrix_world.copy();bpy.context.view_layer.update();before=ob.matrix_world.copy()
+    assert ob.data.materials[0].use_nodes and all(f.use_smooth for f in ob.data.polygons)
+    bpy.context.view_layer.update();before=ob.matrix_world.copy()
     run('group.create',{'name':'ProductionTestRoot','children':['ProductionTestHead'],'location':[0,0,0]})
     bpy.context.view_layer.update()
     assert (ob.matrix_world.translation-before.translation).length<0.0001
@@ -35,16 +33,30 @@ with tempfile.TemporaryDirectory() as tmp:
     assert not any(n.bl_idname=='GeometryNodeRealizeInstances' for n in group.nodes)
     run('camera.aim',{'name':'ProductionTestCamera','location':[14,-18,14],'target':[1,1,1],'lens':35})
     run('world.configure',{'color':[0.25,0.4,0.6],'strength':1.0})
+    # The Ubuntu fixture Blender has no OpenImageDenoiser. This explicit fixture
+    # setting is saved in the snapshot; runtime code must not disable it silently.
+    bpy.context.scene.cycles.use_denoising=False
+    for layer in bpy.context.scene.view_layers:
+        if hasattr(layer,'cycles') and hasattr(layer.cycles,'use_denoising'):layer.cycles.use_denoising=False
     checkpoint=run('project.checkpoint',{'name':'ProductionFixture'})
     assert checkpoint['bytes']>256
     page=run('scene.inspect',{'limit':1});assert len(page['objects'])==1 and page['next_offset']==1
-    plan=run('render.plan',{'width':64,'height':64,'fps':24,'start':1,'end':1,'samples':2,'engine':'CYCLES'})
-    done=run('render.step',{'job_id':plan['job_id']})
-    assert done['state']=='frames_complete' and done['completed_frames']==1,done
-    again=run('render.step',{'job_id':plan['job_id']});assert again['completed_frames']==1
+    original=bpy.context.scene;original_frame=original.frame_current
+    seen=[]
+    def record(scene,*unused):seen.append((scene.frame_current,scene.name))
+    bpy.app.handlers.render_pre.append(record)
+    try:
+        plan=run('render.plan',{'width':64,'height':64,'fps':24,'start':1,'end':1,'samples':2,'engine':'CYCLES'})
+        done=run('render.step',{'job_id':plan['job_id']})
+        assert done['state']=='frames_complete' and done['completed_frames']==1,done
+        assert seen and seen[0][0]==1,seen
+        assert bpy.context.scene==original and original.frame_current==original_frame
+        again=run('render.step',{'job_id':plan['job_id']});assert again['completed_frames']==1
+        assert len(seen)==1,seen
+    finally:bpy.app.handlers.render_pre.remove(record)
     manifest=json.loads((Path(tmp)/'Production'/plan['job_id']/'manifest.json').read_text())
     frame=Path(tmp)/'Production'/plan['job_id']/manifest['frames']['1']['filename']
     assert frame.read_bytes().startswith(b'\x89PNG\r\n\x1a\n')
     assert done['spec']['width']==64 and done['spec']['height']==64
-print('PASS: real bpy geometry, PBR, hierarchy, instancing, checkpoint, pagination and immutable frame job')
+print('PASS: real bpy geometry, PBR, hierarchy, instancing, checkpoint, pagination and exact immutable frame job')
 print('NOT CLAIMED: physical Android GPU, hardware encoder, screenshots, image-to-3D or 10-million device stress test')
