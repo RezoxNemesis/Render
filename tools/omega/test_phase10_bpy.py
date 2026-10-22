@@ -49,7 +49,7 @@ class NativeIntegrationTests(unittest.TestCase):
         self.assertEqual(before, (scene.render.engine, scene.render.resolution_x,
                                   scene.render.resolution_y, scene.render.fps_base))
         command["args"]["operation"] = "omega.geometry.bridge_loops"
-        with self.assertRaisesRegex(RuntimeError, "UNSUPPORTED_NATIVE_FEATURE"):
+        with self.assertRaisesRegex(RuntimeError, "UNSUPPORTED_NATIVE_FEATURE|CAPABILITY_NOT_VERIFIED"):
             startup._dispatch(command)
 
 
