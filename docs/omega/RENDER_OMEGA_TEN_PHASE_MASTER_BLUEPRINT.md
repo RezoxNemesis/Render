@@ -348,3 +348,100 @@ Each of the 13 sections is an actual engineering workstream, not a feature wish 
 **30-minute verified slice:** construct the two-column connected arch from 1000071924 using true bridge operation; persist, reopen and verify manifold topology.
 
 **Pass evidence:** actual Blender mesh data and geometric connectivity; real operation recorded, winding/manifold and undo tests. No claimed 3D model from an image alone.
+
+
+## PHASE 05 — ANATOMICAL CHARACTER AUTHORING / SCULPT / HAIR / CLOTHING
+
+**Assigned agent:** 5. **Branch:** feature/omega-P05-human-character-20261022. **Owned files:** see P05 in §2.
+
+**Mission:** Fix the unacceptable early 0.24 human: overly round shoulders, poorly modeled neck, flat torso, simplistic hands/feet, weak face and hair. Primitive blockout may be a step, never a completed professional character.
+
+**Implementation requirements:**
+- Stage explicit proportion/landmark → anatomical shape → facial features → retopology/UV → hair/clothing → rig-ready audit. Every stage must have honest state metadata such as BLOCKOUT, SCULPTED, RETOPO_READY, RIG_READY and FAILED_QUALITY_GATE.
+- Build native editable mesh topology with head/neck, shoulders, thorax, hips, knees, hands, feet, eye sockets, nose, mouth and at least interpretable hair geometry/curves. Geometric symmetry and anatomical landmarks are measurable; subjective beauty is not automatically provable.
+- Support genuine Blender sculpt modifiers, brush capability or mesh-refinement operations where supported by the pinned engine. Do not claim a textured primitive or connected blob has completed facial topology.
+- Provide front, side and three-quarter editable camera/viewpoint audit artifacts; actual raytraced images only count if rendered and inspected. Preserve reference-image provenance and exact source revision.
+- Output neutral mesh object names, joint landmark positions, topology/UV groups and optional material/hair component manifest so P06 can bind without importing P05 code.
+- Implement omega.character.create and omega.character.audit. Flag missing details openly; no invented facial similarity scores or image-to-rig magic.
+
+**30-minute verified slice:** a significantly improved stylized anatomical character over the crude 0.24 baseline, with native mesh, visible head/facial parts and believable silhouette from three angles. If only a blockout exists, mark Partial and retain actual work.
+
+**Pass evidence:** vertex/face count; mesh continuity or explicit seam annotation; symmetry/proportion checks; usable rig landmarks; saved and reopened .blend; images only from real native viewport/render. Evaluation cannot claim “film-ready” from a unit test alone.
+
+**Failure traps:** duplicated coincident surfaces at shoulders, scaled overlapping spheres, detached head, hand stump with no fingers when claiming finished hands, UV claims without layers, texture missing upon reopening, excessive density causing out-of-memory failures.
+
+## PHASE 06 — DEFORMING HUMANOID AND QUADRUPED ARMATURES
+
+**Assigned agent:** 6. **Branch:** feature/omega-P06-rigging-20261022. **Owned files:** see P06 in §2.
+
+**Mission:** Actual skinned, articulated Blender characters, not cosmetic armatures or unweighted child meshes. Enable film-capable motion editing, jaw/face controls when supported and stable human/dog/wolf posing.
+
+**Implementation requirements:**
+- Real ARMATURE objects and sensible hierarchy: hips/spine/neck/head, clavicles, shoulders, elbows, wrists, knees, ankles, hands/feet, and quadruped spine/tail/hips/paws where appropriate.
+- Armature deform modifier and normalized vertex groups: no zero-weight vertices, disallowed >1 total influence, reversed mirrored joints or explosive stretching under normal bending.
+- IK/FK control bones and pole targets with correct axes and stable bind/pose transformations. Face controls/shape keys remain optional but, if advertised, require real geometry movement.
+- Rigging must work on an independent synthetic mesh fixture if P05 output is not yet available. Publish required landmark/object metadata in the Blender scene so future character outputs bind through the neutral contract.
+- Use omega.rig.bind and omega.rig.audit; inspector must report bones, deform groups, max weights, evaluated before/after vertex positions and unsupported controller features.
+
+**30-minute verified slice:** one weighted humanoid or quadruped that visibly deforms under native pose changes and survives save/reopen.
+
+**Pass evidence:** Blender armature+modifier+vertex group test, joint bend displacement, normalized weight check, at least one constrained IK chain if offered, reusable pose without joint explosion. Static skeleton plus nondeforming body is NOT Complete.
+
+**Failure traps:** bones only for decoration, bone-parenting every solid mesh and calling it smooth skinning, invalid bind transforms, weight bleeding into nearby limbs, unspecified unit scaling, destructive duplicate armatures.
+
+## PHASE 07 — ROOT MOTION / GAIT / STRIKES / ACTION CURVES / NLA
+
+**Assigned agent:** 7. **Branch:** feature/omega-P07-motion-20261022. **Owned files:** see P07 in §2.
+
+**Mission:** Enable editable choreography in Blender's real Graph Editor/Dope Sheet/NLA with believable weight, timing, contact and camera-independent motion.
+
+**Implementation requirements:**
+- Native action creation and keyframing for walk/run/idle and named jab/cross/hook strikes where the rig channels exist. Root-motion and foot-plant data must be distinguishable from arbitrary translation.
+- Native F-curves, interpolation handles, cyclic transitions, NLA action strip start/end/scale metadata and non-destructive retiming. Keep fps/fps_base exact.
+- Body mechanics: hips lead striking torso; shoulder-elbow-wrist sequence; guard returns; optional target contact and foot-contact constraints. For quadruped, paw contact and four-foot gait phasing, not human biped animation renamed wolf.
+- Read scene rig metadata; never import or modify P06 module. Use an independent minimal humanoid/quadruped test armature so implementation can begin before P06 merges.
+- Provide omega.motion.create_actions and omega.motion.audit with native object/action names, root curve sample data, foot drift/penetration heuristics and clear unverified artistic aspects.
+
+**30-minute verified slice:** one native rig-driven walk cycle or a set of jab/cross/hook action clips, evaluated from two viewpoints, with saved Blender action and inspector data.
+
+**Pass evidence:** real action/strip objects, bone rotation varies over frames, loop seam and retiming assertions, contact audit tied to actual evaluated transforms, no unexplained pose reset on reopen.
+
+**Failure traps:** setting an object's location instead of pose bones, zero keyframes for advertised NLA, action overwritten on retime, bogus foot contact, exponential animation curve keys, poor arm joint bounds.
+
+## PHASE 08 — FREE ASSET LIBRARY / WORLDS / SCATTER / CINEMATIC STAGING
+
+**Assigned agent:** 8. **Branch:** feature/omega-P08-assets-world-20261022. **Owned files:** see P08 in §2.
+
+**Mission:** Provide a useful, reusable, independently licensed native 3D asset and environment authoring system for train landscapes, ornate buildings, ruins, vegetation and terrain.
+
+**Implementation requirements:**
+- Upgrade existing 17 in-app editable procedural presets without deleting legacy names. Build searchable categories, asset provenance/license metadata, stable persistent filenames and reuse/linked datablocks. Do not download or redistribute assets with uncertain licenses.
+- Native terrain, tracks, columns, walls, bridges, vegetation, roots, architectural modular pieces, wind-ready grass/tree data, functional cameras, world sky, scatter/instancing and fog-ready scene composition.
+- Explicitly distinguish preview proxy/culling from unchanged final mesh and material data. Scene scalability through instancing, bounding-box budgets, chunking and user-selected preview quality; no silent polygon decimation in final.
+- Actual scene assembly and snap/alignment; save/reopen deterministic transforms, material inheritance and verified asset presence. Prepare neutral scene names/collections for P09 VFX and P13 simulation.
+- Implement omega.world.build_scene and omega.world.audit with counts, instancing/proxy details, light/camera/world state, scene resource admission and provenance.
+
+**30-minute verified slice:** one deterministic railway/temple or landscaped courtyard with reusable geometry and camera, no missing textures, seeded scatter and saved Blender project.
+
+**Pass evidence:** true material/mesh/geometry-node instances, persistent scene hierarchy, zero unlicensed downloaded dependencies, assigned camera and world, reopening transform accuracy and scene count regression. Captured image is an illustrative output only, not an asset.
+
+**Failure traps:** full realization of million-element instances, memory estimates treated as guarantees, unrelated copyrighted reference models bundled as “free,” changing final quality because preview proxies exist, camera without useful composition.
+
+## PHASE 09 — LOOK DEVELOPMENT / RENDER PASSES / COLOR / SIM-CACHE INTEROP
+
+**Assigned agent:** 9. **Branch:** feature/omega-P09-lookdev-vfx-20261022. **Owned files:** see P09 in §2.
+
+**Mission:** Reproduce the iterative WIP → RAW RENDER → FINAL workflow with persistent native PBR shading, lighting, atmosphere, render-pass settings and repeatable compositing. Provide honest import/export bridges for external simulation caches.
+
+**Implementation requirements:**
+- Native Principled materials, texture/node graph templates, emission/roughness/normal/displacement nodes where available, lights/volumetrics, camera depth-of-field, world atmosphere and color-management presets with reversible settings.
+- Multi-view-layer/render-pass workflow and editable compositing nodes for bloom, contrast, grade, fog/mist and glow. Output named passes and exact scene revision. Do not bake post effects into final geometry without owner request.
+- WIP/RAW/FINAL comparison must use the same scene and frame, record engine/exposure/look/OCIO configuration; if any requested pass is unavailable in the Android engine, return UNSUPPORTED_NATIVE_FEATURE.
+- For waterways, support importing/validating owner-authorized cached mesh/particles/animation/foam assets and material surface; do not claim to run a proprietary simulation engine. P13 independently implements Blender-native physical simulations.
+- Provide omega.vfx.create_grade and omega.vfx.cache_inspect and validate safe file names, cache completeness, bounds and frame range. No arbitrary network/path import.
+
+**30-minute verified slice:** native Blender scene with a real Principled material, world/camera lighting, a functioning compositor and reproducible RAW/FINAL settings. Optional small cache schema smoke test.
+
+**Pass evidence:** material nodes and links inspected, scene pass settings saved/reopened, gamma/grade operation truly affects pixels if actual rendering available, raw original unaltered, no hidden renderer replacement. EXR/pass output is complete only when real file bytes and metadata were inspected.
+
+**Failure traps:** unsupported shader sockets silently ignored, compositing with wrong color space, viewport-material preview called final raytracing, image artifact without scene revision, wrong fluid provenance.
