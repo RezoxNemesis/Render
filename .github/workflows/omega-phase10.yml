@@ -20,11 +20,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ ! "$HEAD_BRANCH" =~ ^feature/omega-P(0[1-9]|1[0-3])-[a-z0-9-]+-20261022$ ]]; then
-            echo "::error::Unexpected phase branch"
+          if [[ "$HEAD_BRANCH" == "integration/omega-combined-candidate-20261022" ]]; then
+            python tools/omega/test_omega_integrated_ownership.py --base "$BASE_SHA" --head "$HEAD_SHA"
+          elif [[ "$HEAD_BRANCH" =~ ^feature/omega-P(0[1-9]|1[0-3])-[a-z0-9-]+-20261022$ ]]; then
+            python tools/omega/test_phase10_ownership.py --phase "$((10#${BASH_REMATCH[1]}))" --base "$BASE_SHA" --head "$HEAD_SHA"
+          else
+            echo "::error::Unexpected phase or integrator branch"
             exit 1
           fi
-          python tools/omega/test_phase10_ownership.py --phase "$((10#${BASH_REMATCH[1]}))" --base "$BASE_SHA" --head "$HEAD_SHA"
   registry-host:
     if: startsWith(github.head_ref, 'feature/omega-P10-')
     needs: ownership
