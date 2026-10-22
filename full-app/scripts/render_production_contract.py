@@ -100,7 +100,7 @@ def render_spec(data):
               'fps': integer(data.get('fps',24),1,120),
               'start': integer(data.get('start',1),1,100000),
               'end': integer(data.get('end',240),1,100000),
-              'samples': integer(data.get('samples',64),1,4096),
+              'samples': integer(data.get('samples',64),1,16_777_216),
               'bitrate': integer(data.get('bitrate',16000000),100000,200000000),
               'engine': data.get('engine','BLENDER_EEVEE'),
               'output_kind': data.get('output_kind','ANIMATION')}
