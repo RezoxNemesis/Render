@@ -24,6 +24,20 @@ public final class StudioLiveHandOverlay {
     private static volatile Overlay overlay;
     private static volatile float lastX=-1,lastY=-1;
     private static volatile long lastTouch=0L;
+    private static volatile String lastConfirmedObject="";
+    private static volatile String lastConfirmedOperation="";
+    private static volatile long lastNativeResultAt=0L;
+    /** Called only after a real bpy native result, never when queued/claimed. */
+    public static void recordConfirmedResult(String operation,JSONObject result){
+        if(result==null)return;
+        String target=result.optString("object",result.optString("name",""));
+        if(!target.matches("[A-Za-z][A-Za-z0-9_-]{0,63}"))target="";
+        lastConfirmedObject=target;
+        lastConfirmedOperation=operation==null?"":operation.replaceAll("[^A-Za-z0-9._-]","");
+        lastNativeResultAt=android.os.SystemClock.elapsedRealtime();
+        Overlay view=overlay;
+        if(view!=null)view.post(view::invalidate);
+    }
     private StudioLiveHandOverlay(){}
 
     public static void attach(Activity activity){
@@ -74,6 +88,8 @@ public final class StudioLiveHandOverlay {
         Activity active=owner.get();
         long age=android.os.SystemClock.elapsedRealtime()-lastTouch;
         boolean recent=lastTouch>0&&age>=0&&age<4000;
+        boolean confirmed=lastNativeResultAt>0&&
+                android.os.SystemClock.elapsedRealtime()-lastNativeResultAt<4000;
         return new JSONObject()
             .put("native_status",state.state)
             .put("native_action",state.action)
@@ -81,7 +97,9 @@ public final class StudioLiveHandOverlay {
             .put("progress",state.progress)
             .put("working",state.isWorking())
             .put("shown_in_native_editor",active!=null&&overlay!=null&&overlay.getParent()!=null)
-            .put("hand_tracking_mode",recent?"actual_owner_touch":state.isWorking()?"native_bpy_status":"idle")
+            .put("hand_tracking_mode",recent?"actual_owner_touch":state.isWorking()?"native_bpy_status":confirmed?"confirmed_native_result":"idle")
+            .put("confirmed_native_object",confirmed?lastConfirmedObject:JSONObject.NULL)
+            .put("confirmed_native_operation",confirmed?lastConfirmedOperation:JSONObject.NULL)
             .put("last_touch_is_real_user_event",recent)
             .put("last_owner_touch_x",recent?lastX:JSONObject.NULL)
             .put("last_owner_touch_y",recent?lastY:JSONObject.NULL)
@@ -106,18 +124,22 @@ public final class StudioLiveHandOverlay {
             AgentWorkPresence.Snapshot state=AgentWorkPresence.snapshot(getContext());
             long elapsed=android.os.SystemClock.elapsedRealtime()-lastTouch;
             boolean touched=lastTouch>0&&elapsed>=0&&elapsed<2500;
-            if(!state.isWorking()&&!touched)return;
+            boolean confirmed=lastNativeResultAt>0&&
+                    android.os.SystemClock.elapsedRealtime()-lastNativeResultAt<2200;
+            if(!state.isWorking()&&!touched&&!confirmed)return;
             float scale=getResources().getDisplayMetrics().density;
             paint.setColor(0xD9293037);paint.setStyle(Paint.Style.FILL);
             canvas.drawRoundRect(new RectF(0,0,getWidth(),getHeight()),14*scale,14*scale,paint);
             paint.setColor(Color.WHITE);paint.setTextSize(24*scale);
             canvas.drawText(touched?"☝":"✋",12*scale,36*scale,paint);
             paint.setTextSize(11*scale);
-            String label=touched?"Real finger gesture":state.action;
+            String label=touched?"Real finger gesture":state.isWorking()?state.action:
+                    (lastConfirmedObject.isEmpty()?lastConfirmedOperation:"Edited "+lastConfirmedObject);
             if(label.length()>28)label=label.substring(0,25)+"...";
             canvas.drawText(label,53*scale,27*scale,paint);
             paint.setColor(0xffa7d0ff);paint.setTextSize(10*scale);
-            canvas.drawText(touched?"Owner touch, passed through": "Native bpy API • no fake taps",
+            canvas.drawText(touched?"Owner touch, passed through":
+                    (confirmed&&!state.isWorking()?"Confirmed native receipt":"Native bpy API • no fake taps"),
                     53*scale,45*scale,paint);
             if(state.isWorking()&&state.progress>=0){
                 paint.setColor(0xff79b3ff);
