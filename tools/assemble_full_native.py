@@ -75,6 +75,7 @@ def merge_manifest(source):
     existing = {p.get(ANDROID + "name") for p in root.findall("uses-permission")}
     for permission in ("android.permission.FOREGROUND_SERVICE",
                        "android.permission.FOREGROUND_SERVICE_SPECIAL_USE",
+                       "android.permission.FOREGROUND_SERVICE_MEDIA_PROCESSING",
                        "android.permission.POST_NOTIFICATIONS",
                        "android.permission.WAKE_LOCK"):
         if permission not in existing:
@@ -119,6 +120,15 @@ def merge_manifest(source):
     ET.SubElement(service, "property", {
         ANDROID + "name": "android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE",
         ANDROID + "value": "User-started and visible remote native project-command session with notification, Stop and Revoke",
+    })
+    long_render = ET.SubElement(application, "service", {
+        ANDROID + "name": "com.rezox.render.agent.RenderLongForegroundService",
+        ANDROID + "exported": "false",
+        ANDROID + "foregroundServiceType": "mediaProcessing|specialUse",
+    })
+    ET.SubElement(long_render, "property", {
+        ANDROID + "name": "android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE",
+        ANDROID + "value": "Explicit user-requested native Blender frame rendering with visible status, pause and crash-safe checkpoints",
     })
     ET.SubElement(application, "service", {
         ANDROID + "name": "com.rezox.render.agent.VideoStudioNativeBridgeService",
