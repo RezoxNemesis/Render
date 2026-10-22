@@ -136,7 +136,7 @@ def run(output):
     ik_after = sampled_evaluated(ik_body)
     ik_delta = max_delta(ik_before, ik_after)
     assert .001 < ik_delta < 1.0, ik_delta
-    assert rig.audit("omega.rig.audit", ik_args, context)["audit"]["pass_weights"]
+    assert rig.audit("omega.rig.audit", {"object_name": ik_body.name}, context)["audit"]["pass_weights"]
     # Native serialization/recovery: an actual .blend file, not a JSON receipt.
     output.mkdir(parents=True, exist_ok=True)
     path = output / "phase06_weighted_bend.blend"
