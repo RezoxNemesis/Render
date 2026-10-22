@@ -51,5 +51,7 @@ def prepare():
         s=re.sub(r'versionCode\s*(?:=\s*)?\d+',lambda match:'versionCode = 23' if name.endswith('.kts') else 'versionCode 23',s,count=1)
         s=re.sub(r'versionName\s*(?:=\s*)?[\"\'][^\"\']+[\"\']',lambda match:'versionName = "0.20.0-native-production-toolkit"' if name.endswith('.kts') else "versionName '0.20.0-native-production-toolkit'",s,count=1)
         path.write_text(s)
+    from harden_production_runtime import apply
+    apply(ROOT)
     print('Prepared native production toolkit v0.20.0; original project data and endpoints unchanged')
 if __name__=='__main__':prepare()
