@@ -62,6 +62,7 @@ public final class RenderRecoveryStatus {
                   .put("recoverable",latest||previous)
                   .put("relies_on_quit_blend",false);
             File event=new File(new File(root,"Diagnostics"),"native_render_event.json");
+            try{
             if(!Files.isSymbolicLink(event.toPath()) && event.isFile() && event.length()>0 &&
                     event.length()<=8192){
                 JSONObject data=new JSONObject(new String(Files.readAllBytes(event.toPath()),StandardCharsets.UTF_8));
@@ -75,6 +76,12 @@ public final class RenderRecoveryStatus {
             }else{
                 report.put("last_native_render_state","not_recorded")
                       .put("last_native_render_unconfirmed",false);
+            }
+            }catch(Exception logError){
+                report.put("last_native_render_state","invalid_native_render_record")
+                      .put("last_native_render_unconfirmed",false);
+                // Render diagnostics are noncritical; a malformed log must
+                // NEVER hide a separately verified recovery snapshot.
             }
             report.put("device_render_crash_root_cause_verified",false)
                   .put("render_output_automatically_verified",false);
