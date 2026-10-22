@@ -94,7 +94,7 @@ def instance_plan(data, available_bytes):
             'estimate_is_guarantee': False}
 
 def render_spec(data):
-    fields(data, ('name','width','height','fps','start','end','samples','engine','bitrate'))
+    fields(data, ('name','width','height','fps','start','end','samples','engine','bitrate','output_kind'))
     result = {'width': integer(data.get('width',1280),16,8192),
               'height': integer(data.get('height',720),16,8192),
               'fps': integer(data.get('fps',24),1,120),
@@ -102,11 +102,16 @@ def render_spec(data):
               'end': integer(data.get('end',240),1,100000),
               'samples': integer(data.get('samples',64),1,4096),
               'bitrate': integer(data.get('bitrate',16000000),100000,200000000),
-              'engine': data.get('engine','BLENDER_EEVEE')}
+              'engine': data.get('engine','BLENDER_EEVEE'),
+              'output_kind': data.get('output_kind','ANIMATION')}
     if result['width']%2 or result['height']%2 or result['end']<result['start']:
         raise ValueError('INVALID_RENDER_RANGE_OR_DIMENSIONS')
     if result['engine'] not in ('BLENDER_EEVEE','BLENDER_EEVEE_NEXT','CYCLES'):
         raise ValueError('INVALID_RENDER_ENGINE')
+    if result['output_kind'] not in ('STILL','ANIMATION'):
+        raise ValueError('INVALID_RENDER_OUTPUT_KIND')
+    if result['output_kind']=='STILL' and result['start']!=result['end']:
+        raise ValueError('STILL_RENDER_MUST_BE_SINGLE_FRAME')
     if 'name' in data: result['name']=safe_name(data['name'])
     result['frame_count']=result['end']-result['start']+1
     integer(result['frame_count'],1,100000)
