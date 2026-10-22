@@ -93,7 +93,7 @@ class RenderSessionTests(unittest.TestCase):
 
     def test_native_render_keeps_absolute_101_to_105_frames_and_pixel_size(self):
         self.assertEqual(dict(width=800,height=450,start=101,end=105,
-            fps=24,samples=48,engine="CYCLES",bitrate=16000000),
+            fps=24,samples=48,engine="CYCLES",bitrate=16000000,output_kind="ANIMATION"),
             self.module._render_spec(self.fake.scene))
         def execute(args,spool,command_id):
             self.assertEqual("render.plan",args["operation"])
