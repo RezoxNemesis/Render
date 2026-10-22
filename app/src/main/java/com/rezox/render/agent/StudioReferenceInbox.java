@@ -182,7 +182,7 @@ public final class StudioReferenceInbox {
         java.util.Arrays.sort(found,(a,b)->a.getName().compareTo(b.getName()));
         JSONArray assets=new JSONArray();
         for(int i=offset;i<Math.min(found.length,offset+limit);i++){
-            String raw=Files.readString(found[i].toPath());
+            String raw=new String(Files.readAllBytes(found[i].toPath()),java.nio.charset.StandardCharsets.UTF_8);
             if(raw.length()>8192)throw new IllegalArgumentException("REFERENCE_METADATA_OVERSIZED");
             assets.put(new JSONObject(raw));
         }
@@ -199,7 +199,7 @@ public final class StudioReferenceInbox {
         File original=ProductionFiles.file(context,"Assets",asset);
         if(!meta.isFile()||!original.isFile()||meta.length()>8192)
             throw new IllegalArgumentException("IMPORTED_REFERENCE_NOT_FOUND");
-        JSONObject result=new JSONObject(Files.readString(meta.toPath()));
+        JSONObject result=new JSONObject(new String(Files.readAllBytes(meta.toPath()),java.nio.charset.StandardCharsets.UTF_8));
         if(!asset.equals(result.optString("asset"))||!hash.equals(ProductionFiles.sha(original)))
             throw new IllegalArgumentException("IMPORTED_REFERENCE_HASH_MISMATCH");
         return result;
