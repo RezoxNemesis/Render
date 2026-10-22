@@ -101,7 +101,8 @@ public final class RenderManualJobs {
     }
     private static void runJob(Context app,String jobId){
         String ending="paused";
-        int thermalRetries=0;
+        // Cooling can require hours. The foreground service owns lifetime;
+        // finished PNG frames are never retried or deleted during cooldown.
         try{
             while(!STOP.get()){
                 JSONObject before=ProductionBatch.jobStatus(app,jobId);
@@ -136,12 +137,17 @@ public final class RenderManualJobs {
                     // Another native command owns the frame executor; no fake retry.
                     ending="paused";break;
                 }
-                if(reason.equals("PAUSED_THERMAL_PRESSURE")){
-                    if(++thermalRetries>2){ending="paused";break;}
-                    // Real Android readings are checked afresh by ProductionBatch.
-                    Thread.sleep(15000L);continue;
+                if(reason.equals("PAUSED_THERMAL_PRESSURE") ||
+                   reason.equals("PAUSED_MEMORY_PRESSURE") ||
+                   reason.equals("PAUSED_STORAGE_PRESSURE")){
+                    // Wait safely without a wake-lock or any GPU work. Recheck
+                    // actual Android telemetry and storage admission later;
+                    // never change the requested engine, samples or geometry.
+                    publish(app,jobId,"cooling",reason,done,total);
+                    for(int elapsed=0;elapsed<60&&!STOP.get();elapsed+=5)
+                        Thread.sleep(5000L);
+                    continue;
                 }
-                thermalRetries=0;
                 if(reason.startsWith("PAUSED_")){ending="paused";break;}
             }
             if(STOP.get()){
