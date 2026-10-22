@@ -36,9 +36,18 @@ public final class ProductionFiles {
         return f;
     }
     public static String sha(File file)throws Exception {
+        try(InputStream input=new FileInputStream(file)){return sha(input);}
+    }
+    private static String sha(InputStream input)throws Exception{
         MessageDigest digest=MessageDigest.getInstance("SHA-256");
-        try(InputStream input=new FileInputStream(file)){byte[] b=new byte[1048576];int n;while((n=input.read(b))!=-1)digest.update(b,0,n);}
+        byte[] b=new byte[1048576];int n;
+        while((n=input.read(b))!=-1)if(n>0)digest.update(b,0,n);
         return AgentPolicy.hex(digest.digest());
+    }
+    private static boolean verifiedOwnedDownload(Context context,String uri,String expected){
+        try(InputStream input=context.getContentResolver().openInputStream(Uri.parse(uri))){
+            return input!=null&&expected.equals(sha(input));
+        }catch(Exception ignored){return false;}
     }
     public static JSONObject receipt(File file,String category)throws Exception {
         if(!file.isFile())throw new IOException("ARTIFACT_NOT_FOUND");
@@ -90,22 +99,72 @@ public final class ProductionFiles {
     }
     public static JSONObject export(Context context,JSONObject p)throws Exception {
         ProductionBridge.fields(p,"category,filename,expected_sha256");
-        String category=p.getString("category");File file=file(context,category,p.getString("filename"));
-        if(!file.isFile()||file.getName().contains("partial")||file.getName().endsWith(".tmp"))throw new IOException("ARTIFACT_INCOMPLETE");
-        String expected=p.getString("expected_sha256");if(!sha(file).equals(expected))throw new IOException("ARTIFACT_REVISION_CONFLICT");
-        String mime=file.getName().endsWith(".mp4")?"video/mp4":file.getName().endsWith(".png")?"image/png":file.getName().endsWith(".blend")?"application/x-blender":null;
+        String category=p.getString("category");
+        File source=file(context,category,p.getString("filename"));
+        if(!source.isFile()||source.getName().contains("partial")||source.getName().endsWith(".tmp"))
+            throw new IOException("ARTIFACT_INCOMPLETE");
+        String expected=p.getString("expected_sha256");
+        if(!expected.matches("[a-f0-9]{64}")||!sha(source).equals(expected))
+            throw new IOException("ARTIFACT_REVISION_CONFLICT");
+        String mime=source.getName().endsWith(".mp4")?"video/mp4":
+            source.getName().endsWith(".png")?"image/png":
+            source.getName().endsWith(".blend")?"application/x-blender":null;
         if(mime==null)throw new IllegalArgumentException("EXPORT_TYPE_UNAVAILABLE");
-        ContentValues values=new ContentValues();values.put(MediaStore.Downloads.DISPLAY_NAME,file.getName());values.put(MediaStore.Downloads.MIME_TYPE,mime);
-        values.put(MediaStore.Downloads.RELATIVE_PATH,Environment.DIRECTORY_DOWNLOADS+"/RenderStudio");values.put(MediaStore.Downloads.IS_PENDING,1);
-        Uri uri=context.getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI,values);
-        if(uri==null)throw new IOException("DOWNLOADS_UNAVAILABLE");boolean done=false;
+
+        // A user-approved export is content-addressed and idempotent. Checking
+        // the specific URI we created never requires Gallery enumeration.
+        android.content.SharedPreferences state=context.getSharedPreferences(
+            "render_verified_downloads_v1",Context.MODE_PRIVATE);
+        String receiptKey="sha_"+expected;
+        String existing=state.getString(receiptKey,null);
+        if(existing!=null&&verifiedOwnedDownload(context,existing,expected))
+            return receipt(source,category).put("downloads_uri",existing)
+                .put("downloads_directory","Download/RenderStudio")
+                .put("already_exported",true).put("readback_sha256_verified",true);
+
+        ContentValues values=new ContentValues();
+        values.put(MediaStore.Downloads.DISPLAY_NAME,source.getName());
+        values.put(MediaStore.Downloads.MIME_TYPE,mime);
+        values.put(MediaStore.Downloads.RELATIVE_PATH,
+            Environment.DIRECTORY_DOWNLOADS+"/RenderStudio");
+        values.put(MediaStore.Downloads.IS_PENDING,1);
+        Uri uri=context.getContentResolver().insert(
+            MediaStore.Downloads.EXTERNAL_CONTENT_URI,values);
+        if(uri==null)throw new IOException("DOWNLOADS_UNAVAILABLE");
+        boolean committed=false;
         try{
-            try(InputStream in=new FileInputStream(file);OutputStream out=context.getContentResolver().openOutputStream(uri,"w")){
-                if(out==null)throw new IOException("DOWNLOADS_UNAVAILABLE");byte[] b=new byte[1048576];int n;while((n=in.read(b))!=-1)out.write(b,0,n);
+            long copied=0;
+            try(InputStream in=new FileInputStream(source);
+                OutputStream out=context.getContentResolver().openOutputStream(uri,"w")){
+                if(out==null)throw new IOException("DOWNLOADS_UNAVAILABLE");
+                byte[] bytes=new byte[1024*1024];
+                int n;
+                while((n=in.read(bytes))!=-1){
+                    if(n>0){out.write(bytes,0,n);copied+=n;}
+                }
+                out.flush();
             }
-            ContentValues publish=new ContentValues();publish.put(MediaStore.Downloads.IS_PENDING,0);
-            if(context.getContentResolver().update(uri,publish,null,null)!=1)throw new IOException("EXPORT_COMMIT_FAILED");
-            done=true;return receipt(file,category).put("downloads_uri",uri.toString()).put("downloads_directory","Download/RenderStudio");
-        }finally{if(!done)context.getContentResolver().delete(uri,null,null);}
+            if(copied!=source.length())throw new IOException("DOWNLOADS_BYTE_COUNT_MISMATCH");
+            // Full readback, even for >4 GB: bounded 1 MiB buffer, 64-bit
+            // counters and an independent SHA prove the provider kept bytes.
+            if(!verifiedOwnedDownload(context,uri.toString(),expected))
+                throw new IOException("DOWNLOADS_READBACK_SHA256_MISMATCH");
+            ContentValues publish=new ContentValues();
+            publish.put(MediaStore.Downloads.IS_PENDING,0);
+            if(context.getContentResolver().update(uri,publish,null,null)!=1)
+                throw new IOException("DOWNLOADS_PUBLISH_FAILED");
+            committed=true;
+            state.edit().putString(receiptKey,uri.toString()).commit();
+            return receipt(source,category)
+                .put("downloads_uri",uri.toString())
+                .put("downloads_directory","Download/RenderStudio")
+                .put("bytes_written",copied)
+                .put("readback_sha256_verified",true)
+                .put("already_exported",false)
+                .put("owner_original_preserved",true);
+        }finally{
+            if(!committed)try{context.getContentResolver().delete(uri,null,null);}
+                catch(Exception ignored){}
+        }
     }
 }
