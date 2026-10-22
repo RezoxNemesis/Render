@@ -1,0 +1,61 @@
+package com.rezox.render.agent;
+
+import android.content.Context;
+import org.json.JSONObject;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.robolectric.RobolectricTestRunner;
+import org.robolectric.RuntimeEnvironment;
+import org.robolectric.annotation.Config;
+import java.io.File;
+import java.nio.file.Files;
+import java.util.concurrent.atomic.AtomicBoolean;
+import static org.junit.Assert.*;
+
+@RunWith(RobolectricTestRunner.class)
+@Config(sdk=33,manifest=Config.NONE)
+public class ProductionBridgeTest {
+    @Test public void acceptsTypedEnvelopeButNeverPythonOrGallery()throws Exception{
+        ProductionBridge.validate(new JSONObject().put("operation","mesh.create").put("payload",new JSONObject()));
+        for(String name:new String[]{"python.eval","shell.exec","gallery.list","read_arbitrary_file"}){
+            try{ProductionBridge.validate(new JSONObject().put("operation",name));fail(name);}catch(IllegalArgumentException expected){}
+        }
+        try{ProductionBridge.validate(new JSONObject().put("operation","project.create").put("code","x"));fail();}catch(IllegalArgumentException expected){}
+        try{ProductionBridge.validate(new JSONObject().put("operation","project.create").put("payload","x"));fail();}catch(IllegalArgumentException expected){}
+    }
+    @Test public void mutationsRequireCurrentRenderIdentity()throws Exception{
+        Context c=RuntimeEnvironment.getApplication();
+        try{ProductionBridge.execute(c,new JSONObject().put("operation","project.create").put("payload",new JSONObject().put("name","NewScene")),new AtomicBoolean(false));fail();}
+        catch(IllegalArgumentException expected){assertEquals("RENDER_TARGET_ID_REQUIRED_OR_MISMATCH",expected.getMessage());}
+    }
+    @Test public void pathsAreOwnedAndSymlinksRefused()throws Exception{
+        Context c=RuntimeEnvironment.getApplication();
+        for(String name:new String[]{"../secret","/secret","a/b","a\\b",""}){
+            try{ProductionFiles.file(c,"Assets",name);fail(name);}catch(IllegalArgumentException expected){}
+        }
+        try{ProductionFiles.file(c,"../../","x.png");fail();}catch(IllegalArgumentException expected){}
+        File outside=File.createTempFile("outside",".png");File link=new File(ProductionFiles.folder(c,"Captures"),"test-link.png");
+        try{Files.createSymbolicLink(link.toPath(),outside.toPath());try{ProductionFiles.file(c,"Captures",link.getName());fail();}catch(java.io.IOException expected){}}
+        finally{Files.deleteIfExists(link.toPath());outside.delete();}
+    }
+    @Test public void strictIntegersRejectCoercions()throws Exception{
+        assertEquals(24,ProductionBridge.integer(new JSONObject(),"fps",1,120,24));
+        for(Object value:new Object[]{true,"24",24.5}){
+            try{ProductionBridge.integer(new JSONObject().put("fps",value),"fps",1,120,24);fail();}catch(IllegalArgumentException expected){}
+        }
+    }
+    @Test public void colorConversionKeepsNeutralBlackAndWhite(){
+        assertArrayEquals(new int[]{16,128,128},ProductionVideoEncoder.yuv(0xff000000));
+        assertArrayEquals(new int[]{235,128,128},ProductionVideoEncoder.yuv(0xffffffff));
+        assertEquals(255,ProductionVideoEncoder.clamp(500));assertEquals(0,ProductionVideoEncoder.clamp(-100));
+    }
+    @Test public void referenceChunksAreChecksummedAndReplaySafe()throws Exception{
+        Context c=RuntimeEnvironment.getApplication();byte[] content=new byte[]{1,2,3,4};
+        java.security.MessageDigest md=java.security.MessageDigest.getInstance("SHA-256");String digest=AgentPolicy.hex(md.digest(content));
+        JSONObject p=new JSONObject().put("sha256",digest).put("extension","png").put("offset",0).put("total_bytes",4)
+            .put("base64",android.util.Base64.encodeToString(content,android.util.Base64.NO_WRAP)).put("finish",true);
+        JSONObject one=ProductionFiles.writeReference(c,p),two=ProductionFiles.writeReference(c,p);
+        assertTrue(one.getBoolean("complete"));assertEquals(one.getString("sha256"),two.getString("sha256"));
+        ProductionFiles.file(c,"Assets",one.getString("filename")).delete();
+    }
+}
