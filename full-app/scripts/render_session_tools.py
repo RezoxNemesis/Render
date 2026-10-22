@@ -199,15 +199,29 @@ def _render_spec(scene, output_kind='ANIMATION'):
     engine = render.engine
     if engine not in ("CYCLES", "BLENDER_EEVEE", "BLENDER_EEVEE_NEXT"):
         raise ValueError("RENDER_ENGINE_NOT_SUPPORTED")
-    samples = (int(scene.cycles.samples) if engine == "CYCLES" else
-               int(getattr(getattr(scene, "eevee", None), "taa_render_samples", 64)))
+    if engine == "CYCLES":
+        if getattr(scene, "cycles", None) is None:
+            raise ValueError("REQUESTED_CYCLES_ENGINE_NOT_AVAILABLE")
+        samples = int(scene.cycles.samples)
+    else:
+        settings = getattr(scene, "eevee", None)
+        if settings is None:
+            raise ValueError("REQUESTED_EEVEE_SAMPLE_CONTROL_UNAVAILABLE")
+        if hasattr(settings, "taa_render_samples"):
+            samples = int(settings.taa_render_samples)
+        elif hasattr(settings, "taa_samples"):
+            samples = int(settings.taa_samples)
+        else:
+            raise ValueError("REQUESTED_EEVEE_SAMPLE_CONTROL_UNAVAILABLE")
+    if samples < 1:
+        raise ValueError("INVALID_NATIVE_RENDER_SAMPLE_COUNT")
     if output_kind not in ("STILL", "ANIMATION"):
         raise ValueError("INVALID_RENDER_OUTPUT_KIND")
     first = int(scene.frame_current) if output_kind == "STILL" else int(scene.frame_start)
     last = first if output_kind == "STILL" else int(scene.frame_end)
     return {"width": width, "height": height, "start": first,
             "end": last, "fps": int(render.fps), "output_kind": output_kind,
-            "samples": max(1, min(samples, 4096)), "engine": engine,
+            "samples": samples, "engine": engine,
             "bitrate": 16000000}
 
 def queue_manual_render(resume=False, still=False):
