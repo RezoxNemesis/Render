@@ -1,4 +1,4 @@
-"""Exact-source build integration for verified render isolation and native detail tools."""
+"""Exact-source build integration for render isolation and native detail tools."""
 from pathlib import Path
 
 def apply(root):
@@ -57,3 +57,12 @@ def _step(root,p):''')
           'try{ProductionYuv.fill(bitmap,image);}finally{image.close();}')
     patch(java,'format.setInteger(MediaFormat.KEY_COLOR_FORMAT,MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible);',
           'format.setInteger(MediaFormat.KEY_COLOR_FORMAT,MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible);\n        format.setInteger(MediaFormat.KEY_COLOR_STANDARD,MediaFormat.COLOR_STANDARD_BT601_NTSC);\n        format.setInteger(MediaFormat.KEY_COLOR_RANGE,MediaFormat.COLOR_RANGE_LIMITED);')
+    patch('app/src/main/java/com/rezox/render/agent/AgentActivity.java',
+          'installedVideoStudioBuild()>=RenderConnectionCard.MIN_VIDEOSTUDIO_BUILD);',
+          'installedVideoStudioBuild()>=RenderConnectionCard.MIN_VIDEOSTUDIO_BUILD,getPackageName());')
+    capture=root/'app/src/main/java/com/rezox/render/agent/ProductionCapture.java'
+    text=capture.read_text()
+    if 'new Handler(Looperoper())' in text:
+        text=text.replace('new Handler(Looperoper())','new Handler(Looper.getMainLooper())')
+        text=text.replace('    private static Looper Looperoper(){return Looper.getMainLooper();}\n','')
+        capture.write_text(text)
