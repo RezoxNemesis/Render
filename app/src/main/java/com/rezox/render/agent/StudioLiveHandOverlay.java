@@ -22,6 +22,7 @@ import java.lang.ref.WeakReference;
 public final class StudioLiveHandOverlay {
     private static volatile WeakReference<Activity> owner=new WeakReference<>(null);
     private static volatile Overlay overlay;
+    private static volatile TouchMarker touchMarker;
     private static volatile float lastX=-1,lastY=-1;
     private static volatile long lastTouch=0L;
     private static volatile String lastConfirmedObject="";
@@ -56,14 +57,27 @@ public final class StudioLiveHandOverlay {
         FrameLayout.LayoutParams params=new FrameLayout.LayoutParams(width,height,Gravity.TOP|Gravity.END);
         params.topMargin=(int)(15*activity.getResources().getDisplayMetrics().density);
         params.rightMargin=(int)(12*activity.getResources().getDisplayMetrics().density);
+        TouchMarker marker=new TouchMarker(activity);
+        marker.setClickable(false);
+        marker.setFocusable(false);
+        marker.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        ((ViewGroup)root).addView(marker,new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.MATCH_PARENT));
         ((ViewGroup)root).addView(hand,params);
-        overlay=hand;hand.resume();
+        touchMarker=marker;overlay=hand;hand.resume();marker.resume();
     }
     public static void detach(Activity activity){
         if(Looper.myLooper()!=Looper.getMainLooper()){activity.runOnUiThread(()->detach(activity));return;}
         if(owner.get()==activity)detachInternal();
     }
     private static void detachInternal(){
+        TouchMarker oldMarker=touchMarker;
+        if(oldMarker!=null){
+            oldMarker.stop();
+            if(oldMarker.getParent() instanceof ViewGroup)
+                ((ViewGroup)oldMarker.getParent()).removeView(oldMarker);
+        }
+        touchMarker=null;
         Overlay previous=overlay;
         if(previous!=null){
             previous.stop();
@@ -81,6 +95,8 @@ public final class StudioLiveHandOverlay {
             lastTouch=android.os.SystemClock.elapsedRealtime();
             Overlay view=overlay;
             if(view!=null)view.post(view::invalidate);
+            TouchMarker cursor=touchMarker;
+            if(cursor!=null)cursor.post(cursor::invalidate);
         }
     }
     public static JSONObject snapshot(Context context)throws Exception{
@@ -106,6 +122,37 @@ public final class StudioLiveHandOverlay {
             .put("fabricated_ui_taps",false)
             .put("native_api_command_not_equivalent_to_menu_click",true)
             .put("unrelated_apps_controlled",false);
+    }
+    /** A genuine owner-touch marker at the actual Android event coordinates.
+     * This surface is nonclickable, never injects a touch and is not drawn for
+     * bpy operations that have no physical pointer action.
+     */
+    private static final class TouchMarker extends View {
+        private final Paint pen=new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Handler handler=new Handler(Looper.getMainLooper());
+        private boolean running;
+        private final Runnable tick=new Runnable(){@Override public void run(){
+            if(!running)return;
+            invalidate();handler.postDelayed(this,120);
+        }};
+        TouchMarker(Context context){super(context);}
+        void resume(){running=true;handler.post(tick);}
+        void stop(){running=false;handler.removeCallbacks(tick);}
+        @Override protected void onDraw(Canvas c){
+            super.onDraw(c);
+            long since=android.os.SystemClock.elapsedRealtime()-lastTouch;
+            if(lastTouch<=0||since<0||since>850||lastX<0||lastY<0)return;
+            float density=getResources().getDisplayMetrics().density;
+            float r=16*density,fade=Math.max(0,1-since/850f);
+            float x=Math.min(Math.max(lastX,r),getWidth()-r);
+            float y=Math.min(Math.max(lastY,r),getHeight()-r);
+            pen.setStyle(Paint.Style.STROKE);pen.setStrokeWidth(2.5f*density);
+            pen.setColor(Color.argb(Math.round(fade*210),86,177,255));
+            c.drawCircle(x,y,r,pen);
+            pen.setStyle(Paint.Style.FILL);
+            pen.setColor(Color.argb(Math.round(fade*140),255,255,255));
+            c.drawCircle(x,y,4*density,pen);
+        }
     }
     private static final class Overlay extends View {
         private final Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);
