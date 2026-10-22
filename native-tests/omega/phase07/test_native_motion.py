@@ -139,7 +139,7 @@ def run():
         assert reopened["fcurve_hash"] == original_hash, reopened
         assert reopened["contact"]["max_planted_drift"] < .035, reopened
         assert len(rig.animation_data.nla_tracks) == 1
-        assert tuple(bpy.data.objects[sentinel.name].location) == original_location
+        assert tuple(bpy.data.objects["OMEGA07_UnchangedSceneObject"].location) == original_location
 
         retimed = M.execute("omega.motion.create_actions", {
             "kind": "retime", "rig": rig.name, "clip": "WalkCycle", "retime_scale": 1.5}, context)
