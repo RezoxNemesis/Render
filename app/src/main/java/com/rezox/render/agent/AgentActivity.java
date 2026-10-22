@@ -158,6 +158,19 @@ public final class AgentActivity extends Activity {
         addAction(localBridge,"STOP VIDEOSTUDIO BRIDGE",StudioUi.DANGER,
             ()->disableDirectBridge());
         StudioUi.add(page,localBridge);
+        StudioUi.space(page,14);
+        LinearLayout cloudBackup=StudioUi.card(this);
+        StudioUi.add(cloudBackup,StudioUi.label(this,"OPTIONAL / GOOGLE DRIVE BACKUP"));
+        StudioUi.space(cloudBackup,7);
+        StudioUi.add(cloudBackup,StudioUi.text(this,
+            "Choose a folder in Google Drive (if its Android document provider supports folders), or another document provider. Blender still renders on this phone. Saved .blend, PNG and MP4 files can be copied to the chosen location without Gallery access.",
+            12,StudioUi.MUTED,false));
+        StudioUi.space(cloudBackup,10);
+        addAction(cloudBackup,"CHOOSE BACKUP FOLDER",StudioUi.SECONDARY,()->{
+            try{ProductionDriveStorage.chooseFolder(this);}
+            catch(Exception e){Toast.makeText(this,"Folder picker unavailable: "+e.getClass().getSimpleName(),Toast.LENGTH_LONG).show();}
+        });
+        StudioUi.add(page,cloudBackup);
         StudioUi.space(page,17);
 
         // Keep legacy cloud modes supported but do not confuse them with
@@ -499,6 +512,19 @@ public final class AgentActivity extends Activity {
         return "LOCAL SELF-CHECK ONLY — not a ChatGPT connection test.\n"+
             new AgentActions(this).execute(cmd,new AtomicBoolean(false)).toString(2);
     });}
+    @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){
+        super.onActivityResult(requestCode,resultCode,data);
+        if(requestCode==ProductionDriveStorage.REQUEST_PICK_FOLDER){
+            try{
+                boolean selected=ProductionDriveStorage.acceptFolderSelection(this,resultCode,data);
+                Toast.makeText(this,selected?
+                    "Backup folder linked; Render can copy verified files to this provider.":
+                    "No backup folder selected.",Toast.LENGTH_LONG).show();
+            }catch(Exception e){
+                Toast.makeText(this,"Backup folder permission failed: "+e.getClass().getSimpleName(),Toast.LENGTH_LONG).show();
+            }
+        }
+    }
     @Override public void onRequestPermissionsResult(int code,String[] permissions,int[] results){
         super.onRequestPermissionsResult(code,permissions,results);
         if(code==42&&results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED)startSession();
