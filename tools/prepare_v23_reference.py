@@ -22,6 +22,15 @@ def apply():
     ops='"reference.list","reference.metadata","reference.video_frame","reference.pick","ui.state","connection.diagnose","reference.bind","reference.landmarks","viewport.inspect","viewport.configure","viewport.focus","object.geometry","operator.describe","operator.execute",'
     patch(java,'"render.plan","render.step","render.batch","render.status","render.encode","drive.status","drive.backup"',
           ops+'"render.plan","render.step","render.batch","render.status","render.encode","drive.status","drive.backup"')
+    # Source-owned command receipt tells the in-editor hand the real edited
+    # object, never fabricates pointer events or prematurely reports success.
+    patch('app/src/main/java/com/rezox/render/agent/AgentActions.java',
+          'if (action.equals(ProductionBridge.ACTION)) return ProductionBridge.execute(context,args,cancelled);',
+          '''if (action.equals(ProductionBridge.ACTION)){
+            JSONObject nativeResult=ProductionBridge.execute(context,args,cancelled);
+            StudioLiveHandOverlay.recordConfirmedResult(args.optString("operation",""),nativeResult);
+            return nativeResult;
+        }''')
     patch(java,'if(operation.equals("reference.write"))return ProductionFiles.writeReference(context,p);',
           '''if(operation.equals("reference.write"))return ProductionFiles.writeReference(context,p);
         if(operation.equals("reference.list"))return StudioReferenceInbox.list(context,p);
