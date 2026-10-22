@@ -189,6 +189,21 @@ public final class StudioReferenceInbox {
         return new JSONObject().put("total",found.length).put("assets",assets)
             .put("next_offset",offset+limit<found.length?offset+limit:JSONObject.NULL);
     }
+    public static JSONObject details(Context context,JSONObject p)throws Exception{
+        ProductionBridge.fields(p,"asset");
+        String asset=p.getString("asset");
+        if(!asset.matches("[a-f0-9]{64}\\\\.(png|jpg|jpeg|webp|mp4)"))
+            throw new IllegalArgumentException("INVALID_IMPORTED_ASSET_NAME");
+        String hash=asset.substring(0,64);
+        File meta=ProductionFiles.file(context,"Assets",hash+".meta.json");
+        File original=ProductionFiles.file(context,"Assets",asset);
+        if(!meta.isFile()||!original.isFile()||meta.length()>8192)
+            throw new IllegalArgumentException("IMPORTED_REFERENCE_NOT_FOUND");
+        JSONObject result=new JSONObject(Files.readString(meta.toPath()));
+        if(!asset.equals(result.optString("asset"))||!hash.equals(ProductionFiles.sha(original)))
+            throw new IllegalArgumentException("IMPORTED_REFERENCE_HASH_MISMATCH");
+        return result;
+    }
     public static JSONObject sample(Context context,JSONObject p)throws Exception{
         ProductionBridge.fields(p,"asset,time_ms,width,height");
         String asset=p.getString("asset");
