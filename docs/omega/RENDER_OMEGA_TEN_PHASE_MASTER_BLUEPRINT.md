@@ -1,7 +1,7 @@
 # RENDER OMEGA — ONE MASTER ENGINEERING BLUEPRINT
-### Ten independent phases · Ten ChatGPT engineering agents · Frozen integration contract
+### Thirteen independent phases · Thirteen ChatGPT engineering agents · One frozen master contract
 
-**Contract:** RENDER-OMEGA-10P-20261022 / revision 1.0  
+**Contract:** RENDER-OMEGA-13P-20261022 / revision 2.0  
 **Established:** 22 October 2026  
 **Repository:** https://github.com/RezoxNemesis/Render  
 **Frozen source baseline:** e334d7b6bc5a60f4cc6b5ca0029fa973007cb7e0  
@@ -10,7 +10,7 @@
 **Canonical document:** docs/omega/RENDER_OMEGA_TEN_PHASE_MASTER_BLUEPRINT.md  
 **Primary target:** genuine Blender capabilities on native Android, controlled by human touch or ChatGPT through verified native actions, without silent reduction of final output fidelity.
 
-> THIS IS THE ONE AUTHORITATIVE ENGINEERING CONTRACT. All ten agents read this exact file and receive only their assigned phase number in the launch message. Do not fork another master blueprint, rename phases, quietly alter shared contracts, or claim success from a proposed design instead of working code.
+> THIS IS THE ONE AUTHORITATIVE ENGINEERING CONTRACT. All thirteen agents read this exact file and receive only their assigned phase number in the launch message. Do not fork another master blueprint, rename phases, quietly alter shared contracts, or claim success from a proposed design instead of working code.
 
 ---
 
@@ -45,6 +45,22 @@ This blueprint turns ten externally supplied Blender reference videos into repro
 | 1000071924 | Genuine bridge edge loops and topology modification | P4 | Manifold joined arch, edge/normal and undo proof |
 | 1000071925 | Strikes, jab/cross/hook, rig, NLA and dual views | P7 + P6 | Contact/guard/retime motion fixture |
 
+### 0.2a Six additional real-artist workflow references (supplied later)
+
+These six videos strengthen the autonomy requirement: Blender artists repeatedly select specific modes, use real brushes, make corrections, inspect from several cameras and choose when to save or render. The recordings demonstrate workflows, not a universal one-click generator.
+
+| MP4 | Observed/desired workflow | Primary phase owners | Evidence requirement |
+|---|---|---|---|
+| 1000072028 | Character hair geometry, modifier conversion and hair control | P05 + P11 + P12 | Editable groom and silhouette validation |
+| 1000072032 | Urban destruction, vehicle/debris staging, camera/VFX | P13 + P09 + P11 | Real collision/simulation cache or explicit unsupported status |
+| 1000072033 | Monumental 3D landscape, compositing, atmosphere, camera | P08 + P09 + P11 | Native object/terrain counts and validated output |
+| 1000072034 | Tree trunk and root sculpt-brush operations, leaves/branches | P11 + P08 + P12 | Brush stroke creates measurable native mesh changes |
+| 1000072035 | Terrain sculpt, influence painting, animated grass/trees | P08 + P11 + P13 | Evaluated scatter and time-varying native animation |
+| 1000072036 | Character pose controllers, Graph Editor and polished timing | P06 + P07 + P11 + P12 | Real actions, pose changes, evaluated quality checks |
+
+A phase must not simply copy a rendered frame from a reference and label it editable Blender output. Success means real native objects and repeatable edits, tested from a saved scene.
+
+
 ### 0.3 Hard prohibitions — nonnegotiable
 
 1. **No quality downgrade by stealth.** Preserve source mesh topology, requested output dimensions, output frame rate and fps base, Cycles/Eevee engine choice, render sample settings, materials, texture source and color management. Interactive proxy/LOD is acceptable **only when explicitly flagged as preview-only** and original scene data remains intact. Unsupported final settings return a typed error, not guessed replacement.
@@ -64,15 +80,15 @@ This blueprint turns ten externally supplied Blender reference videos into repro
 
 ### 1.1 Ten agents and assignment
 
-Each ChatGPT instance is assigned **exactly one integer N from 1 through 10** in the user's phase launch message. There is no negotiation, re-planning, or dependency on previous chat state. It follows this blueprint's phase N, owns only those paths, and publishes one PR against the shared integration branch.
+Each ChatGPT instance is assigned **exactly one integer N from 1 through 13** in the user's phase launch message. There is no negotiation, re-planning, or dependency on previous chat state. It follows this blueprint's phase N, owns only those paths, and publishes one PR against the shared integration branch.
 
 **Thirty-minute target:** 0–4 min inspect baseline, 4–20 min code a bounded usable vertical slice, 20–25 min run focused tests and fixtures, 25–28 min commit/push + PR, 28–30 min produce an evidence report. These are scheduling targets, not physical guarantees. Full photoreal character automation, production fluid solving, comprehensive Blender parity and five-minute phone thermal runs may take more than one sprint. The agent must implement the highest-value independent slice and report residual tasks as outstanding, not mark the full capability complete.
 
 ### 1.2 Frozen topology
 
-All ten branch heads MUST start at the **same single commit containing this completed master blueprint** (not the changing main branch, another agent's head or an unsynchronized PR). The integrator creates/announces that seed SHA after publishing this document. Every phase PR has:
+All thirteen branch heads MUST start at the **same single commit containing this completed master blueprint** (not the changing main branch, another agent's head or an unsynchronized PR). The integrator creates/announces that seed SHA after publishing this document. Every phase PR has:
 
-- **Head:** feature/omega-PNN-<slug>-20261022, where NN is 01..10 (exact ready branches named in §2).
+- **Head:** feature/omega-PNN-<slug>-20261022, where NN is 01..13 (exact ready branches named in §2).
 - **Base:** integration/render-omega-ten-phases-20261022.
 - **Allowed changes:** the phase ownership paths in §2 only; one unique phase report path.
 - **No direct push to integration or main.** A PR may be rebased only by its owner and only onto the frozen seed until integration review.
@@ -150,16 +166,19 @@ G6: Owner approves installing a **verified** original-package in-place APK. No r
 | **08** | Free assets, instanced worlds, camera/terrain/scatter | full-app/scripts/render_assets.py; full-app/scripts/omega/phase08_world.py; tools/omega/test_phase08_*.py; native-tests/omega/phase08/** | Geometry ops, VFX shader code, shared registry |
 | **09** | PBR/lookdev/compositing, simulation cache interchange | full-app/scripts/omega/phase09_vfx.py; tools/omega/test_phase09_*.py; native-tests/omega/phase09/** | Render core, world generator, bridge |
 | **10** | Exact typed registry, Android/native packaging and release gates | all explicitly listed **shared entry points** in §1.5; full-app/scripts/omega/__init__.py; full-app/scripts/omega_registry.py; app/src/main/java/com/rezox/render/omega/integration/**; tools/omega/test_phase10_*.py; docs/omega/phase10-interface-test-data/** | No rewriting P1–9 implementation modules |
+| **11** | Observable artist-like tool executor, viewport, sculpt brushes and native UI workflow | full-app/scripts/omega/phase11_artist.py; app/src/main/java/com/rezox/render/omega/artist/**; app/src/test/java/com/rezox/render/omega/artist/**; tools/omega/test_phase11_*.py; native-tests/omega/phase11/** | Existing mobile controls, Phase 1, shared bridge or startup, other phase files |
+| **12** | Vision/geometry inspection, iterative self-critique and actionable repairs | full-app/scripts/omega/phase12_quality.py; app/src/main/java/com/rezox/render/omega/quality/**; app/src/test/java/com/rezox/render/omega/quality/**; tools/omega/test_phase12_*.py; native-tests/omega/phase12/** | Character, rig, animation and artist executor implementation files |
+| **13** | Native physics/destruction/cache interchange and deterministic simulation | full-app/scripts/omega/phase13_simulation.py; app/src/main/java/com/rezox/render/omega/simulation/**; app/src/test/java/com/rezox/render/omega/simulation/**; tools/omega/test_phase13_*.py; native-tests/omega/phase13/** | Render core, VFX implementation, P8 world generator and shared registry |
 
-All phases can additionally create/update ONLY their own evidence file at **reports/omega/PHASE_NN_RESULT.json**. That is a result report, not a competing blueprint. Do not commit downloaded binary source videos, private project .blend files, secrets, signing keystores, ADB dumps with owner data or large cache artifacts to GitHub.
+All thirteen phases can additionally create/update ONLY their own evidence file at **reports/omega/PHASE_NN_RESULT.json**. That is a result report, not a competing blueprint. Do not commit downloaded binary source videos, private project .blend files, secrets, signing keystores, ADB dumps with owner data or large cache artifacts to GitHub.
 
-**Special note:** P4–P9 code modules MUST run in headless real bpy tests independently before the shared registry is wired by P10. They cannot introduce ad hoc startup monkeypatches to “make features visible” before integration. P1/P2/P3 can own carefully scoped existing Java/Python files as specified. Ownership violations are an automatic G1 failure, irrespective of how good the feature seems.
+**Special note:** P4–P9 and P11–P13 code modules MUST run in headless real bpy tests independently before the shared registry is wired by P10. They cannot introduce ad hoc startup monkeypatches to “make features visible” before integration. P1/P2/P3 can own carefully scoped existing Java/Python files as specified. Ownership violations are an automatic G1 failure, irrespective of how good the feature seems.
 
 ---
 
 ## 3. Frozen cross-agent operation contract
 
-The following interface is authoritative. Agents MUST implement to it rather than invent different payload envelopes. It allows ten agents to develop independently while P10 wires the native dispatcher.
+The following interface is authoritative. Agents MUST implement to it rather than invent different payload envelopes. It allows thirteen agents to develop independently while P10 wires the native dispatcher.
 
 ### 3.1 Transport envelope and object identity
 
@@ -179,6 +198,9 @@ Each phase exposes **static operation names**:
 - P08: omega.world.build_scene, omega.world.audit
 - P09: omega.vfx.create_grade, omega.vfx.cache_inspect
 - P10: omega.integration.capabilities, omega.integration.audit
+- P11: omega.artist.inspect_ui, omega.artist.execute_tool
+- P12: omega.quality.inspect, omega.quality.revise_plan
+- P13: omega.simulation.bake, omega.simulation.inspect_cache
 
 **New operations are optional if the phase cannot implement them safely in its sprint.** Never advertise an unimplemented one. The exact names above are reserved: other phases may not reuse them. P10 builds a static allowlist containing only operations that actually passed their tests.
 
@@ -226,6 +248,16 @@ A success receipt MUST be truthful. It is not enough for an operator to return F
 - **Benchmark scene:** a stylized human, 2-column bridge arch, canine gait, boxing strikes, train field, ruin temple, and transparent/opaque lookdev panel must all be reproducible with deterministic synthetic test inputs.
 - **Animation:** preserve action curves/retime metadata, root motion and useful contact tests; a screenshot of an action is not a playback test.
 - **Renderer:** the checkerboard Render Result is an unverified buffer until a real populated PNG/EXR has been checked. F12 aborting at 0% requires native event+Android process-exit evidence, not a guess that GPU crashed.
+
+### 3.4a Autonomous artist working principle
+
+**Control requirement:** A user can issue a high-level production goal, and the installed Render agent should translate it into authentic edit operations—select a real object, set Blender mode, invoke allowlisted geometry/sculpt/pose/graph/nodes actions, inspect native data or captured viewport, make corrections, save and render using real receipts. P11 owns the observable tool executor, P12 owns evaluation/revision proposals and P03 owns multi-step orchestration. P10 connects them; no phase accesses arbitrary raw bpy Python from the network.
+
+**Human-observable, not forged:** In-editor indicator/hand shows real active steps and where confirmed UI interactions occurred; an API operation with no physical touch must not display an invented click position. The dashboard must distinguish QUEUED, EXECUTING, OBSERVED RESULT, NEEDS CORRECTION, PAUSED, FAILED and DONE. It may run a native deterministic bpy operation without simulating a finger gesture, but it must explain which real operation and objects were involved.
+
+**Autonomous quality loop:** owner prompt -> asset/scene plan -> command execution -> scene/viewport inspection -> metric-based or image-based critique -> bounded correction -> independent confirmation -> snapshot -> next stage. A visually attractive screenshot without editable geometry cannot pass; a well-formed rig with visibly deformed limbs cannot pass character quality review merely because bone names exist.
+
+**Permission boundary:** The owner's broad intent authorizes work on the selected Render project, not unrestricted access to all Android apps, contacts, secrets or private gallery. Initial app installation, Android document-tree grant or account authorization may require a real owner gesture. Afterwards, permitted app-native operations should minimize manual intervention.
 
 ### 3.4 Android + packaging boundary
 
