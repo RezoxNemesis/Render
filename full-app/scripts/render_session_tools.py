@@ -234,12 +234,17 @@ def stabilize_viewport():
                 continue
             space = area.spaces.active
             # Clip depth ratio, not render sample count, governs near-surface precision.
-            if space.clip_start < 0.01:
-                space.clip_start = 0.01
-                changes.append("near_clip")
-            if space.clip_end > 10000:
-                space.clip_end = 10000
-                changes.append("far_clip")
+            # Most wire shimmer is depth-precision limited: keep the actual
+            # near/far span <= 100,000 without touching camera render clipping.
+            # Explicit UI action, reversible via native Blender viewport fields.
+            far = min(float(space.clip_end), 2000.0)
+            near = max(float(space.clip_start), 0.02, far / 100000.0)
+            if abs(space.clip_start-near)>1e-6:
+                space.clip_start = near
+                changes.append("near_clip_precision")
+            if abs(space.clip_end-far)>1e-6:
+                space.clip_end = far
+                changes.append("far_clip_precision")
             if space.shading.show_xray:
                 space.shading.show_xray = False
                 changes.append("xray_off")
@@ -247,6 +252,20 @@ def stabilize_viewport():
                 space.overlay.show_wireframes = False
                 changes.append("wire_overlay_off")
             area.tag_redraw()
+    # Prefer real GPU viewport multisampling only when the Blender build
+    # explicitly reports the enum. Do not claim this repairs coplanar meshes.
+    try:
+        system = bpy.context.preferences.system
+        if hasattr(system, "viewport_aa"):
+            enums = system.bl_rna.properties["viewport_aa"].enum_items
+            supported = {entry.identifier for entry in enums}
+            requested = next((value for value in ("32", "16", "8", "FXAA")
+                              if value in supported), None)
+            if requested and system.viewport_aa != requested:
+                system.viewport_aa = requested
+                changes.append("viewport_anti_alias_" + requested)
+    except (AttributeError, TypeError, ValueError, KeyError):
+        pass
     return {"viewport_settings_changed": changes,
             "possible_identical_overlapping_objects": collisions,
             "mesh_geometry_modified": False,
