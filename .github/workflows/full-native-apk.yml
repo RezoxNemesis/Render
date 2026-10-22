@@ -140,46 +140,8 @@ jobs:
           compression-level: 0
           retention-days: 7
           if-no-files-found: error
-      - name: Detect protected permanent owner release signing
-        env:
-          SIGNING_B64: ${{ secrets.RENDER_ANDROID_SIGNING_KEYSTORE_B64 }}
-          STORE_PASS: ${{ secrets.RENDER_ANDROID_SIGNING_STORE_PASSWORD }}
-          SIGN_ALIAS: ${{ secrets.RENDER_ANDROID_SIGNING_KEY_ALIAS }}
-          KEY_PASS: ${{ secrets.RENDER_ANDROID_SIGNING_KEY_PASSWORD }}
-        run: |
-          set -euo pipefail
-          if [ -z "$SIGNING_B64" ]; then
-            echo 'Permanent owner signing secrets absent; DEVELOPMENT artifacts only, not an in-place update claim.' >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          test -n "$STORE_PASS" && test -n "$SIGN_ALIAS" && test -n "$KEY_PASS"
-          umask 077
-          printf '%s' "$SIGNING_B64" | base64 --decode > "$RUNNER_TEMP/render-owner-release.p12"
-          keytool -list -v -storetype PKCS12 -keystore "$RUNNER_TEMP/render-owner-release.p12" -storepass "$STORE_PASS" -alias "$SIGN_ALIAS" > "$RUNNER_TEMP/render-owner-cert.txt"
-          grep -Fq '03:01:F0:84:CB:37:45:7B:E8:23:53:A8:A0:7E:88:14:35:17:5B:FD:5B:F0:CF:EA:FA:2C:3D:D4:B2:5F:CF:57' "$RUNNER_TEMP/render-owner-cert.txt"
-          echo "RENDER_ANDROID_SIGNING_STORE_FILE=$RUNNER_TEMP/render-owner-release.p12" >> "$GITHUB_ENV"
-          echo 'RENDER_OWNER_SIGNER_READY=1' >> "$GITHUB_ENV"
-      - name: Build protected owner-signed release when configured
-        if: env.RENDER_OWNER_SIGNER_READY == '1'
-        env:
-          RENDER_ANDROID_SIGNING_STORE_PASSWORD: ${{ secrets.RENDER_ANDROID_SIGNING_STORE_PASSWORD }}
-          RENDER_ANDROID_SIGNING_KEY_PASSWORD: ${{ secrets.RENDER_ANDROID_SIGNING_KEY_PASSWORD }}
-          RENDER_ANDROID_SIGNING_KEY_ALIAS: ${{ secrets.RENDER_ANDROID_SIGNING_KEY_ALIAS }}
-        run: |
-          gradle -p full-app --no-daemon :app:assembleRelease
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs full-app/app/build/outputs/apk/release/app-release.apk > "$RUNNER_TEMP/render-owner-release-proof.txt"
-          grep -Fqi '0301f084cb37457be82353a8a07e881435175bfd5bf0cfeafa2c3dd4b25fcf57' "$RUNNER_TEMP/render-owner-release-proof.txt"
-      - uses: actions/upload-artifact@v4
-        if: env.RENDER_OWNER_SIGNER_READY == '1'
-        with:
-          name: Render-0.20.0-PERMANENT-OWNER-RELEASE
-          path: full-app/app/build/outputs/apk/release/app-release.apk
-          compression-level: 0
-          retention-days: 7
-          if-no-files-found: error
-      - name: Remove temporary owner signing key
-        if: always()
-        run: rm -f "$RUNNER_TEMP/render-owner-release.p12"
+      - name: Record release boundary
+        run: echo 'These are DEVELOPMENT artifacts. Permanent owner signing remains exclusively in the existing manually approved main-branch release workflow. Do not uninstall the original Render app to install a differently signed APK.' >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -190,6 +152,5 @@ jobs:
             ${{ runner.temp }}/render-preview-signature.txt
             ${{ runner.temp }}/render-preview-badging.txt
             ${{ runner.temp }}/render-production-sha256.txt
-            ${{ runner.temp }}/render-owner-release-proof.txt
             app/build/test-results/testDebugUnitTest/
           retention-days: 14
