@@ -179,7 +179,7 @@ def render_progress():
             "total": total, "next_frame": manifest.get("next_frame"),
             "state": manifest.get("state"), "fraction": min(1.0, done / total)}
 
-def _render_spec(scene):
+def _render_spec(scene, output_kind='ANIMATION'):
     render = scene.render
     percentage = int(render.resolution_percentage)
     width = int(render.resolution_x) * percentage // 100
@@ -191,12 +191,16 @@ def _render_spec(scene):
         raise ValueError("RENDER_ENGINE_NOT_SUPPORTED")
     samples = (int(scene.cycles.samples) if engine == "CYCLES" else
                int(getattr(getattr(scene, "eevee", None), "taa_render_samples", 64)))
-    return {"width": width, "height": height, "start": int(scene.frame_start),
-            "end": int(scene.frame_end), "fps": int(render.fps),
+    if output_kind not in ("STILL", "ANIMATION"):
+        raise ValueError("INVALID_RENDER_OUTPUT_KIND")
+    first = int(scene.frame_current) if output_kind == "STILL" else int(scene.frame_start)
+    last = first if output_kind == "STILL" else int(scene.frame_end)
+    return {"width": width, "height": height, "start": first,
+            "end": last, "fps": int(render.fps), "output_kind": output_kind,
             "samples": max(1, min(samples, 4096)), "engine": engine,
             "bitrate": 16000000}
 
-def queue_manual_render(resume=False):
+def queue_manual_render(resume=False, still=False):
     """Render menu only creates a frozen job; Android's thermal-aware worker runs it."""
     request_file = _root() / "manual_render_request.json"
     if request_file.exists():
@@ -208,7 +212,7 @@ def queue_manual_render(resume=False):
         ident = manifest["job_id"]
     else:
         import render_production
-        spec = _render_spec(bpy.context.scene)
+        spec = _render_spec(bpy.context.scene, 'STILL' if still else 'ANIMATION')
         result = render_production.execute(
             {"operation": "render.plan", "payload": spec}, SPOOL, "local-editor-menu")
         ident = result["job_id"]
@@ -281,6 +285,8 @@ def dispatch(action, args):
         return restore_session(force=False)
     if action == "blender.render.plan_current":
         return queue_manual_render()
+    if action == "blender.render.plan_still":
+        return queue_manual_render(still=True)
     if action == "blender.render.resume_last":
         return queue_manual_render(resume=True)
     if action == "blender.ui.stabilize_viewport":
@@ -400,6 +406,8 @@ def install():
             pass
     import render_assets
     render_assets.install()
+    import render_v25_recovery
+    render_v25_recovery.install()
     bpy.types.TOPBAR_MT_file.append(_file_menu)
     try:
         bpy.types.STATUSBAR_HT_header.append(_statusbar)
