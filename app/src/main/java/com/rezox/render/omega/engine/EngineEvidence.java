@@ -76,8 +76,11 @@ public final class EngineEvidence {
                 .put("available_bytes",am==null?JSONObject.NULL:memory.availMem)
                 .put("low_memory",am!=null&&memory.lowMemory);
             PowerManager power=context.getSystemService(PowerManager.class);
-            Object thermal=(power!=null&&Build.VERSION.SDK_INT>=29)
-                ?power.getCurrentThermalStatus():JSONObject.NULL;
+            Object thermal=JSONObject.NULL;
+            if(power!=null&&Build.VERSION.SDK_INT>=29){
+                try{thermal=power.getCurrentThermalStatus();}
+                catch(RuntimeException unsupported){/* Keep other evidence available. */}
+            }
             return output.put("schema","RENDER-OMEGA-P01-1")
                 .put("android_api",Build.VERSION.SDK_INT)
                 .put("device_model",Build.MODEL==null?"unknown":Build.MODEL)
