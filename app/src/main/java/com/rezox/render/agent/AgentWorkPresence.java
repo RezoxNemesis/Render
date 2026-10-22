@@ -41,6 +41,7 @@ public final class AgentWorkPresence {
             if(isWorking())return "Working in Blender • "+action+" • "+stage+
                     (progress>=0?" ("+progress+"%)":"");
             if(needsRecovery())return "Native command interrupted • inspect history before retrying";
+            if("paused".equals(state))return "Render safely paused • resume from last verified frame";
             if("succeeded".equals(state))return "Last native command completed • "+action;
             if("failed".equals(state)||"cancelled".equals(state))
                 return "Last native command "+state+" • "+action;
@@ -92,7 +93,8 @@ public final class AgentWorkPresence {
     public static void finish(Context ctx,String state){
         synchronized(LOCK){
             if(!"succeeded".equals(state)&&!"failed".equals(state)&&
-               !"cancelled".equals(state)&&!"recovery_required".equals(state))
+               !"cancelled".equals(state)&&!"paused".equals(state)&&
+               !"recovery_required".equals(state))
                 state="recovery_required";
             SharedPreferences p=prefs(ctx);
             p.edit().putString("state",state)

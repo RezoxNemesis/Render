@@ -13,6 +13,13 @@ public class AgentWorkPresenceTest {
         assertTrue(state.description().contains("render_video"));
         assertTrue(state.description().contains("4%"));
     }
+    @Test public void pausedRenderIsNotMisreportedAsCrashed(){
+        AgentWorkPresence.Snapshot safe=new AgentWorkPresence.Snapshot(
+                "paused","render.manual_animation","Thermal cooldown","owner-local",100,200,75);
+        assertFalse(safe.isWorking());
+        assertFalse(safe.needsRecovery());
+        assertTrue(safe.description().contains("paused"));
+    }
     @Test public void unconfirmedOrInterruptedNeverShowsSuccess(){
         AgentWorkPresence.Snapshot lost=new AgentWorkPresence.Snapshot(
                 "recovery_required","blender.project.save_copy","", "",100,200,-1);

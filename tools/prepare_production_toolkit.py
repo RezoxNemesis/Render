@@ -11,6 +11,22 @@ def replace(path,before,after):
     target.write_text(text.replace(before,after,1))
 
 def prepare():
+    # Build adapters run twice in CI. The v0.22 extension intentionally adds
+    # on top of the v0.21 source patch; a second run must verify the complete
+    # extension rather than trying to reapply the older intermediate pattern.
+    stage=(ROOT/'tools/assemble_full_native.py').read_text()
+    if 'StudioLiveHandOverlay.attach(this);' in stage:
+        required=(
+            ('tools/assemble_full_native.py','render_studio_contract.py'),
+            ('app/src/main/java/com/rezox/render/agent/ProductionBridge.java','StudioReferenceInbox.list(context,p)'),
+            ('full-app/scripts/render_production.py','render_studio_ops.py'),
+            ('full-app/app/build.gradle','versionCode 27'),
+            ('app/build.gradle.kts','versionCode = 27'),
+        )
+        if not all(marker in (ROOT/path).read_text() for path,marker in required):
+            raise RuntimeError('INCOMPLETE_V022_BUILD_ADAPTER_STATE')
+        print('Render 0.22 reference studio adapter already verified; no second mutation')
+        return
     prefix='app/src/main/java/com/rezox/render/agent/'
     replace(prefix+'AgentPolicy.java','registry.put("engine.status", Collections.emptySet());','registry.put("engine.status", Collections.emptySet());\n        registry.put("production.execute", fields("operation", "payload", "target_id"));')
     replace(prefix+'AgentActions.java','if(field.equals("assembly")){','if(field.equals("operation")){\n                    prop.put("type","string");\n                }else if(field.equals("payload")){\n                    prop.put("type","object");\n                }else if(field.equals("target_id")){\n                    prop.put("type","string").put("pattern","^[a-fA-F0-9-]{36}$");\n                }else if(field.equals("assembly")){')
@@ -48,10 +64,36 @@ def prepare():
     replace('app/src/test/java/com/rezox/render/agent/AgentPolicyTest.java','assertEquals(25,AgentPolicy.ACTIONS.size());','assertEquals(26,AgentPolicy.ACTIONS.size());\n        assertTrue(AgentPolicy.ACTIONS.containsKey("production.execute"));')
     for name in ('full-app/app/build.gradle','app/build.gradle.kts'):
         path=ROOT/name;s=path.read_text()
-        s=re.sub(r'versionCode\s*(?:=\s*)?\d+',lambda match:'versionCode = 23' if name.endswith('.kts') else 'versionCode 23',s,count=1)
-        s=re.sub(r'versionName\s*(?:=\s*)?[\"\'][^\"\']+[\"\']',lambda match:'versionName = "0.20.0-native-production-toolkit"' if name.endswith('.kts') else "versionName '0.20.0-native-production-toolkit'",s,count=1)
+        s=re.sub(r'versionCode\s*(?:=\s*)?\d+',lambda match:'versionCode = 24' if name.endswith('.kts') else 'versionCode 24',s,count=1)
+        s=re.sub(r'versionName\s*(?:=\s*)?[\"\'][^\"\']+[\"\']',lambda match:'versionName = "0.21.0-native-thermal-batch-drive"' if name.endswith('.kts') else "versionName '0.21.0-native-thermal-batch-drive'",s,count=1)
         path.write_text(s)
     from harden_production_runtime import apply
     apply(ROOT)
-    print('Prepared native production toolkit v0.20.0; original project data and endpoints unchanged')
+    from prepare_v23_reference import apply as install_reference_studio
+    install_reference_studio()
+    # v0.24 is an in-place successor; never silently downgrade an already
+    # installed v0.22, rotate its signer, or change the Android package name.
+    for name in ('app/build.gradle.kts','full-app/app/build.gradle'):
+        target=ROOT/name
+        source=target.read_text()
+        before='versionCode = 25' if name.endswith('.kts') else 'versionCode 25'
+        after='versionCode = 26' if name.endswith('.kts') else 'versionCode 26'
+        if source.count(before)!=1:
+            raise RuntimeError('V024_VERSION_ADAPTER_DRIFT: '+name)
+        source=source.replace(before,after,1)
+        source=source.replace('0.22.0-native-reference-precision',
+            '0.24.0-native-continuity-assets')
+        target.write_text(source)
+    # Strict monotonic Android version, original package and same signing identity.
+    for name in ('app/build.gradle.kts','full-app/app/build.gradle'):
+        target=ROOT/name
+        source=target.read_text()
+        before='versionCode = 26' if name.endswith('.kts') else 'versionCode 26'
+        after='versionCode = 27' if name.endswith('.kts') else 'versionCode 27'
+        if source.count(before)!=1:
+            raise RuntimeError('V025_VERSION_ADAPTER_DRIFT: '+name)
+        source=source.replace(before,after,1).replace(
+            '0.24.0-native-continuity-assets','0.25.0-native-verified-recovery')
+        target.write_text(source)
+    print('Render Studio 0.25 protected full-quality renders and verified recoveries staged; installed package/signing remain unchanged')
 if __name__=='__main__':prepare()

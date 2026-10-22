@@ -1,0 +1,28 @@
+name: Render reliability upgrade verification
+on:
+  push:
+    branches: [feature/024-resumable-render-continuity-assets-20261022, feature/025-no-downgrade-render-recovery-20261022]
+    paths: ['app/**', 'full-app/**', 'tools/**', '.github/workflows/render-reliability-upgrade.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: render-reliability-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  source-and-contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Capture exact public repository source for reproducible local review
+        run: git archive --format=zip --output="$RUNNER_TEMP/Render-source.zip" HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Render-reliability-source
+          path: ${{ runner.temp }}/Render-source.zip
+          retention-days: 7
+      - name: Compile Python sources
+        run: python3 -m compileall -q full-app/scripts tools
+      - name: Run existing pure Python regression suite
+        run: python3 -m unittest discover -s tools -p 'test_*contract.py' -v

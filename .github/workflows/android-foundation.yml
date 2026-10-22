@@ -30,6 +30,8 @@ jobs:
           cmake -S native-tests -B "$RUNNER_TEMP/render-tests" -DCMAKE_BUILD_TYPE=Release
           cmake --build "$RUNNER_TEMP/render-tests" --parallel 2
           ctest --test-dir "$RUNNER_TEMP/render-tests" --output-on-failure
+      - name: Stage current production API before Android bridge contract tests
+        run: python3 tools/prepare_production_toolkit.py
       - name: Build and unit test Android foundation
         run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
       - uses: actions/upload-artifact@v4

@@ -1,0 +1,115 @@
+name: Render 0.22 isolated Native Preview APK
+on:
+  push:
+    branches: [feature/023-real-reference-ui-viewport-20261022]
+    paths:
+      - "app/**"
+      - "full-app/**"
+      - "tools/**"
+      - ".github/workflows/v022-preview-qa.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: render-022-preview-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  native-preview:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stage exact reviewed production and reference runtime
+        run: python3 tools/prepare_production_toolkit.py
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Install Android native toolchain
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -path "*/bin/sdkmanager" -type f | sort -V | tail -1)"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" --install "platforms;android-35" "build-tools;35.0.0" "cmake;3.22.1" "ndk;27.2.12479018"
+      - name: Compile and test original native Binder and JVM logic
+        run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
+      - name: Download and verify unmodified native Blender binary
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 --connect-timeout 15 "https://github.com/simfeo/blender/releases/download/android-alpha-4/blender-full.apk" -o "$RUNNER_TEMP/blender-full.apk"
+          echo "3fe775a1e14470ebfcd3c25ae32b57003433f04552f896880631ae98b1f18aea  $RUNNER_TEMP/blender-full.apk" | sha256sum --check --status
+          test "$(stat -c%s "$RUNNER_TEMP/blender-full.apk")" = "286561495"
+      - name: Fetch pinned Android native Blender launcher
+        run: |
+          mkdir "$RUNNER_TEMP/full-blender-src"
+          git -C "$RUNNER_TEMP/full-blender-src" init -q
+          git -C "$RUNNER_TEMP/full-blender-src" remote add origin https://github.com/simfeo/blender.git
+          git -C "$RUNNER_TEMP/full-blender-src" sparse-checkout init --cone
+          git -C "$RUNNER_TEMP/full-blender-src" sparse-checkout set build_files/android/apk/app/src/main
+          git -C "$RUNNER_TEMP/full-blender-src" -c protocol.version=2 fetch --depth=1 --filter=blob:none origin d93bd33cba768e19ee4387a31c0ea137ee2f0047
+          git -C "$RUNNER_TEMP/full-blender-src" checkout --detach -q FETCH_HEAD
+          test "$(git -C "$RUNNER_TEMP/full-blender-src" rev-parse HEAD)" = "d93bd33cba768e19ee4387a31c0ea137ee2f0047"
+      - name: Stage actual Blender and native production classes
+        run: |
+          python3 tools/assemble_full_native.py \
+            --engine-apk "$RUNNER_TEMP/blender-full.apk" \
+            --bridge-apk app/build/outputs/apk/debug/app-debug.apk \
+            --upstream-source "$RUNNER_TEMP/full-blender-src" \
+            --output full-app/stage
+      - name: Build distinct-package preview, no access to owner signer
+        run: gradle -p full-app --no-daemon -PrenderSideBySide=true :app:assembleDebug
+      - name: Assert signed APK is an ISOLATED preview and contains full runtime
+        run: |
+          set -euo pipefail
+          APK=full-app/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          unzip -tqq "$APK"
+          unzip -Z -1 "$APK" | grep -Fx 'lib/arm64-v8a/libblender.so'
+          unzip -Z -1 "$APK" | grep -Fx 'lib/arm64-v8a/librender_bridge.so'
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" > "$RUNNER_TEMP/preview-signature.txt"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" > "$RUNNER_TEMP/preview-badging.txt"
+          grep -Fq "name='com.rezox.render.preview'" "$RUNNER_TEMP/preview-badging.txt"
+          grep -Fq "versionCode='25'" "$RUNNER_TEMP/preview-badging.txt"
+          python3 - <<'PY'
+          import io,zipfile
+          with zipfile.ZipFile('full-app/app/build/outputs/apk/debug/app-debug.apk') as a:
+              runtime=io.BytesIO(a.read('assets/blender_runtime.zip'))
+              with zipfile.ZipFile(runtime) as z:
+                  for name in ('render_production.py','render_production_contract.py',
+                               'render_production_detail.py','render_studio_ops.py',
+                               'render_studio_contract.py'):
+                      assert 'scripts/startup/'+name in z.namelist()
+          print('PASS: Native preview contains the pinned full Blender engine and new studio tools')
+          PY
+          # This preview has a separate package and independently generated DEBUG
+          # signer. Never offer it as an in-place update for the original app.
+          if grep -Fqi 'f3d63fb20be25ca0be8aa6a161d5cf13cd98ba2fa300c7a604cce35131b9eb30' "$RUNNER_TEMP/preview-signature.txt"; then
+            echo "Unexpected reuse of protected original signer" >&2
+            exit 1
+          fi
+          cp "$APK" "$RUNNER_TEMP/Render-0.22.0-reference-editor-preview.apk"
+          sha256sum "$RUNNER_TEMP/Render-0.22.0-reference-editor-preview.apk" > "$RUNNER_TEMP/preview-sha256.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Render-0.22.0-Reference-Editor-ISOLATED-PREVIEW
+          path: ${{ runner.temp }}/Render-0.22.0-reference-editor-preview.apk
+          compression-level: 0
+          retention-days: 7
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Render-0.22.0-Preview-Build-Proof
+          path: |
+            ${{ runner.temp }}/preview-signature.txt
+            ${{ runner.temp }}/preview-badging.txt
+            ${{ runner.temp }}/preview-sha256.txt
+            app/build/test-results/testDebugUnitTest/
+          retention-days: 14
+      - name: Mark installation boundary
+        run: |
+          echo "This preview uses com.rezox.render.preview and a different debug signing certificate. It does not overwrite or migrate the original Render/VideoStudio projects. For an original in-place update, use ONLY the approved exact-installed-signer release workflow." >> "$GITHUB_STEP_SUMMARY"

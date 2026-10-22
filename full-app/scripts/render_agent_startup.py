@@ -14,6 +14,16 @@ import re
 import time
 
 import bpy
+# Real native Blender has bpy.types.Operator; host-only protocol tests intentionally
+# supply a minimal bpy double and never instantiate editor UI classes.
+if getattr(getattr(bpy, "types", None), "Operator", None) is not None:
+    import sys as _render_sys
+    _native_startup_dir = str(Path(__file__).resolve().parent)
+    if _native_startup_dir not in _render_sys.path:
+        _render_sys.path.insert(0, _native_startup_dir)
+    import render_session_tools as _render_session
+else:
+    _render_session = None
 
 ROOT = os.environ.get("RENDER_AGENT_SPOOL", "")
 MOBILE_MODE = os.environ.get("RENDER_MOBILE_UI_MODE", "")
@@ -354,6 +364,12 @@ def _dispatch(command):
     args = command.get("args")
     if not isinstance(args, dict):
         raise ValueError("INVALID_ARGUMENTS")
+    if action in ("blender.project.save_session", "blender.project.restore_session",
+                  "blender.render.plan_current", "blender.render.plan_still", "blender.render.resume_last",
+                  "blender.ui.stabilize_viewport"):
+        if _render_session is None:
+            raise RuntimeError("NATIVE_EDITOR_UI_UNAVAILABLE")
+        return _render_session.dispatch(action, args)
     # Local touch-overlay UI operations; NOT remotely registered agent actions.
     if action == "blender.ui.adjust_scale":
         if set(args) != {"delta"} or not _number(args.get("delta"), -.25, .25):
@@ -678,8 +694,25 @@ def _poll():
         claimed.unlink(missing_ok=True)
     return 0.5
 
+def _install_render_ui_when_ready():
+    if _render_session is None or getattr(bpy.app, "background", False):
+        return None
+    try:
+        _render_session.install()
+        return None
+    except (AttributeError, RuntimeError, ValueError, TypeError) as error:
+        count = getattr(_install_render_ui_when_ready, "attempts", 0) + 1
+        _install_render_ui_when_ready.attempts = count
+        print("Render native menus not ready:", type(error).__name__)
+        return 2.0 if count < 5 else None
+
 if ROOT:
+    # The command executor must remain available even if optional UI addon
+    # registration fails on a particular Blender startup ordering.
     bpy.app.timers.register(_poll, first_interval=0.5, persistent=True)
+    if _render_session is not None:
+        bpy.app.timers.register(_install_render_ui_when_ready,
+                                first_interval=3.0, persistent=False)
 
 if MOBILE_MODE in ("portrait", "landscape") and not getattr(bpy.app,"background",False):
     bpy.app.timers.register(_initial_mobile_setup, first_interval=2.0, persistent=False)
