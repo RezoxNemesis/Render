@@ -265,3 +265,86 @@ The source uses a pinned full Android Blender port, app-private startup Python r
 
 The build adapter tools/prepare_production_toolkit.py may mutate staged working-tree copies. Run on a dedicated disposable checkout; do not accidentally commit its generated rewrites into other phase branches. P10 checks adapter idempotency and ensures packaged modules are actually imported in the Android APK. A local headless Blender run is not an Android GPU certification.
 
+
+
+---
+
+# PART II — THIRTEEN PARALLEL PHASE HANDOFFS
+
+Each of the 13 sections is an actual engineering workstream, not a feature wish list. Every ChatGPT instance reads this entire contract, receives its phase number N from the user, and implements ONLY phase N. No agent relies on another agent's unmerged code. Self-contained synthetic Blender fixtures and the neutral interface in §3 are the only allowed substitutes while collaborating in parallel.
+
+**Required phase-agent opening procedure:** Verify repository and exact phase branch HEAD against the frozen seed. Read the source and existing tests. Run a focused baseline test and record existing failures. Create a bounded real vertical slice in phase-owned files. Commit source, deterministic tests and the PHASE_NN_RESULT.json report. Open a draft PR from its phase branch to integration/render-omega-ten-phases-20261022. Report Complete only when the phase-slice gates pass, otherwise Partial or Blocked.
+
+## PHASE 01 — NATIVE BLENDER ENGINE / ANDROID VIEWPORT RELIABILITY
+
+**Assigned agent:** 1. **Branch:** feature/omega-P01-native-engine-20261022. **Owned files:** see P01 in §2.
+
+**Mission:** Keep the full native Blender engine accessible and stable on an Android phone; no simplified editor, preview model presented as final, or changes to requested final output resolution.
+
+**Implementation requirements:**
+- Measure native bootstrap stages, runtime asset readiness, Vulkan support (where discoverable), Activity changes, and actual first displayed frame evidence. Do not claim successful GPU drawing based on an Activity onCreate event.
+- Improve native portrait/landscape viewport accessibility: safe cutout insets, consistent orbit/pan/zoom and modifier-key behavior, movable/collapsible buttons, no overlay covering core Blender controls.
+- Add reversible viewport diagnostics: near/far clip ratio, explicit AA selection, X-ray/wireframe, transparency sorting candidates, z-fighting/coincident geometry and nonuniform transform warnings. Never silently apply scale to a rigged wheel mesh or change final renderer settings.
+- Validate preserved user projects across configuration changes, foreground/background and runtime re-extraction. Save no credentials in logs; run long file checks off the UI thread.
+- Publish truthful native diagnostic operation omega.engine.diagnose and viewport profile operation omega.engine.viewport_profile, without modifying the shared production registry.
+
+**30-minute verified slice:** a bounded native engine diagnostic and one reversible viewport or Activity continuity correction, demonstrated by Android tests and real-device evidence if available.
+
+**Pass evidence:** screenshot/telemetry of settings before/after; UI scaling/rotation stays consistent; native scene untouched; no final render quality change; test for preserving Production/Projects files across Activity transitions. Remaining device-driver jitter is reported as unresolved unless reproduced and actually fixed.
+
+**Failure traps:** holding a stale native Window reference, assuming first frame was drawn, changing preview clipping and unexpectedly affecting final render, native library loading before packaged asset verification.
+
+## PHASE 02 — CRASH-SAFE FULL-QUALITY RENDERING / ENCODING / RECOVERY
+
+**Assigned agent:** 2. **Branch:** feature/omega-P02-render-recovery-20261022. **Owned files:** see P02 in §2.
+
+**Mission:** Render full-quality Blender PNG frames and H.264 video reliably, make every frame resumable, diagnose the recorded 0%-renderer interruption and preserve current and previous .blend project states.
+
+**Implementation requirements:**
+- Maintain a durable state machine: SNAPSHOT → FRAME_PENDING → RENDERING → FILE_VERIFIED → FRAME_COMMITTED → FRAMES_COMPLETE → ENCODING → VIDEO_VERIFIED, with explicit FAILED/PAUSED reasons. A Blender FINISHED flag alone is not proof of valid file bytes.
+- Correct absolute start/end frame handling (e.g., 101–105); save frame number, source revision, width/height, samples/engine, checksum, checkpoint fingerprint and time evidence. Resume first missing/corrupt frame, never duplicate validated ones.
+- Preserve engine, native requested samples, materials, color management, dimensions, fps and fps_base; fail explicitly when unsupported. No silent downgrade or Eevee backend substitution.
+- Do not delete verified PNG masters on failed video encoding. Protected one-frame PNG does not require one-frame MP4. Handle missing camera, driver errors, partial files, unsupported codec and thermal/memory pauses with readable status.
+- Restore projects from independent SHA-bound snapshots; an absent Blender quit.blend after a crash is not proof of destroyed data. Never overwrite dirty current project without rollback checkpoint.
+- Read Android historical exit reasons and Blender native render lifecycle receipts, clearly marking cause unknown when the logs cannot prove a GPU problem.
+
+**30-minute verified slice:** fix one reproducible render/resume defect with real bpy and a power-loss/corrupt-file simulation.
+
+**Pass evidence:** 101–105 interruption after 103 renders only 104/105 on resume; invalid PNG cannot be committed; full-size still PNG tested; codec claims require an actual Android encoder test; project save/open equality proven; no reduced final quality. A checkerboard Render Result is not a valid output artifact.
+
+**Failure traps:** active frame compared with frame_count rather than absolute end, fsync omitted before renaming, infinite retry on GPU crash, codec frame metadata different from requested timing.
+
+## PHASE 03 — AUTONOMOUS JOB PLANNING / LIVE WORK HAND / DURABLE JOURNAL
+
+**Assigned agent:** 3. **Branch:** feature/omega-P03-autonomy-planner-20261022. **Owned files:** see P03 in §2.
+
+**Mission:** Accept an artist-level goal and coordinate real native operations from planning through delivery, with no fabricated activity or unsafe remote code interpreter.
+
+**Implementation requirements:**
+- Declarative DAG of stage IDs: PLAN → CREATE/IMPORT → MODEL → VALIDATE → (RIG/MOTION/WORLD/VFX) → SNAPSHOT → RENDER → EXPORT. Define dependencies, bounded retries, idempotency keys, typed arguments and project-revision preconditions.
+- Durable local journal for accepted, claimed, executing, paused, completed, failed and interrupted native calls; after process death, inspect native receipt before replaying any potentially destructive step.
+- Honest live hand: indicate Blender native command, real object, current stage, frame count and genuine touch coordinates ONLY for observed interactions; API-based bpy actions must not pretend to move a finger. Support notification permission denial without interrupting a render.
+- Pause, stop new commands, resume, rollback and recovery. Keep Android owner permissions scoped to selected Render project; no global file-system or unrelated app control.
+- Provide plan validation and journal inspection operations omega.agent.plan_validate and omega.agent.journal_status; P10 will register them after tests.
+
+**30-minute verified slice:** persist a three-stage synthetic native job, force restart, prevent duplicate object creation and display honest state transitions.
+
+**Pass evidence:** idempotency test, journal-replay test, truthful hand while running, stop/new-command test, recovery of stale busy state; do not mark queued or mocked work as a completed native operation.
+
+**Failure traps:** native frame lasts longer than heartbeat timeout, duplicate retry after a lost response, wrong project UUID, leaking commands/media in Android notifications, arbitrary Python requested via generic action.
+
+## PHASE 04 — ACTUAL MESH TOPOLOGY / RETOPOLOGICAL EDITS
+
+**Assigned agent:** 4. **Branch:** feature/omega-P04-topology-20261022. **Owned files:** see P04 in §2.
+
+**Mission:** Expose real Blender/BMesh vertex-edge-face operations, including accurate edge-loop bridging and topology audit; not a pile of rectangular meshes shaped to resemble an arch.
+
+**Implementation requirements:**
+- Typed selection, closed/open edge loop validation, bridge edge loops, merge/weld, correct face winding and normals, subdivision/bevel, edge transforms and smooth shading. Use actual bmesh or native Blender operator with correct context and a bounded vertex budget.
+- Validate topology before mutation and report before/after vertex/edge/polygon counts, manifoldness, degenerate faces and nonzero area.
+- Support rollback via undo transaction or verified snapshot. Error leaves the original untouched. Avoid realizing millions of geometry nodes instances simply to count them.
+- Expose omega.geometry.bridge_loops and omega.geometry.inspect with pure validation and native bpy audit.
+
+**30-minute verified slice:** construct the two-column connected arch from 1000071924 using true bridge operation; persist, reopen and verify manifold topology.
+
+**Pass evidence:** actual Blender mesh data and geometric connectivity; real operation recorded, winding/manifold and undo tests. No claimed 3D model from an image alone.
