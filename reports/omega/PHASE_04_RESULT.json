@@ -1,0 +1,39 @@
+{
+  "phase": 4,
+  "title": "Actual mesh topology / retopological edits",
+  "status": "Partial",
+  "branch": "feature/omega-P04-topology-20261022",
+  "frozen_starting_commit": "ed7ef34fa85d9e361bc9c92d554d8ec937755cc2",
+  "pr_url": null,
+  "scope": "Phase 4 owned files only",
+  "implementation": [
+    "Native bmesh.ops.bridge_loops on explicit bounded ordered edge rings; copy-on-write mesh transaction",
+    "Topology fingerprint, manifold/boundary/winding/degeneracy audit, conservative memory admission",
+    "Idempotent native job receipts and saved native-mesh checkpoints with typed restoration",
+    "Genuine two-column arched solid synthetic fixture with save/reopen and rollback assertions"
+  ],
+  "pure_python": {
+    "status": "PASS",
+    "tests": 5,
+    "command": "python -m unittest discover -s tools/omega -p 'test_phase04_*.py' -v"
+  },
+  "compileall": {
+    "status": "PASS",
+    "command": "python -m compileall -q full-app/scripts/omega tools/omega native-tests/omega"
+  },
+  "native_bpy": {
+    "status": "NOT_RUN",
+    "reason": "Execution container lacks bpy/bmesh/Blender; native-tests/omega/phase04/real_blender_fixture.py is included, not asserted passed",
+    "command": "blender -b --factory-startup --python-exit-code 1 --python native-tests/omega/phase04/real_blender_fixture.py"
+  },
+  "android": {
+    "status": "NOT_RUN",
+    "reason": "No attached ARM64 Android device and Phase 4 does not own Java build/registry"
+  },
+  "known_limitations": [
+    "Blender-native BMesh fixture not yet executed; do not classify topology/winding/save-reopen acceptance as verified",
+    "Bevel, welding, subdivision, and arbitrary edge transformations remain separate follow-on capabilities",
+    "Phase 10 must register the allowlisted operation and package this module in the native Android Blender runtime",
+    "No APK built/installed, no owner project accessed or modified"
+  ]
+}
