@@ -294,6 +294,15 @@ public final class AgentActivity extends Activity {
         ui.post(refresh);
         if(StudioReferenceInbox.isExplicitOwnerMediaIntent(getIntent()))receiveReferenceIntent(getIntent());
     }
+    private void confirmSharedReference(Intent inbound){
+        if(inbound==null || !StudioReferenceInbox.isExplicitOwnerMediaIntent(inbound))return;
+        new AlertDialog.Builder(this)
+            .setTitle("Import these images/videos into Render?")
+            .setMessage("Only the files explicitly selected or shared with Render are copied into its private reference inbox. No Gallery browsing occurs.")
+            .setNegativeButton("Cancel",null)
+            .setPositiveButton("Import",(dialog,which)->receiveReferenceIntent(inbound))
+            .show();
+    }
     private void receiveReferenceIntent(Intent inbound){
         if(inbound==null||!StudioReferenceInbox.isExplicitOwnerMediaIntent(inbound))return;
         // Permission-limited source URIs are used only for this owner-selected copy.
