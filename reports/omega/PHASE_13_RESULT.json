@@ -1,0 +1,89 @@
+{
+  "contract": "RENDER-OMEGA-13P-20261022",
+  "phase": 13,
+  "title": "Native physics/destruction/dynamic vegetation/fluid-cache interchange",
+  "status": "Partial",
+  "seed_sha": "ed7ef34fa85d9e361bc9c92d554d8ec937755cc2",
+  "head_branch": "feature/omega-P13-physics-simulation-20261022",
+  "head_sha": "6c574a8befa383b28ad8d689b2cf7dbd2a6f3561",
+  "head_sha_scope": "Verified implementation commit; adding this evidence file creates a later report-only branch tip (self-referential Git SHA cannot be embedded). See PR for final HEAD.",
+  "pr_url": "https://github.com/RezoxNemesis/Render/pull/18",
+  "owned_paths_changed": [
+    "full-app/scripts/omega/phase13_simulation.py",
+    "tools/omega/test_phase13_contract.py",
+    "native-tests/omega/phase13/real_blender_fixture.py",
+    "native-tests/omega/phase13/README.md",
+    "reports/omega/PHASE_13_RESULT.json"
+  ],
+  "implementation": {
+    "operations": [
+      "omega.simulation.bake",
+      "omega.simulation.inspect_cache"
+    ],
+    "native_api": "Blender bpy.ops.rigidbody.object_add and object.rigid_body with scene.frame_set / depsgraph evaluation",
+    "supported_slice": "Typed existing-mesh rigid-body configuration, native frame sampling, SHA-256 stage/manifest, pre-mutation copy rollback, native copy-of-project snapshot, idempotent replay and per-frame bounded cancellation",
+    "physics_cache_modes": {
+      "NATIVE_POINT_CACHE": "Request only; succeeds only if Blender ptcache.bake reports is_baked, otherwise typed unsupported (not verified on available engine)",
+      "SAMPLED_NATIVE_PHYSICS": "Native evaluated transforms sampled into SHA-256 verified app-owned JSON; explicitly NOT a baked point cache"
+    },
+    "max_evaluated_frames": 120,
+    "max_source_mesh_vertices": 250000,
+    "full_blender_ui_bridge_wired": false,
+    "bundled_into_android_apk": false
+  },
+  "pure_tests": {
+    "state": "PASSED",
+    "command": "python -m unittest discover -s tools/omega -p 'test_phase13_*.py' -v",
+    "passed": 11,
+    "failed": 0,
+    "errors": 0,
+    "python_compilation": "PASSED: python -m compileall -q full-app/scripts/omega tools/omega native-tests/omega/phase13",
+    "environment": "Local Python 3.13.5; pure contracts/cache only, no simulated native bpy success"
+  },
+  "real_bpy_tests": {
+    "state": "NOT_RUN",
+    "commands": [
+      "blender -b -noaudio --python-exit-code 1 --python native-tests/omega/phase13/real_blender_fixture.py"
+    ],
+    "results": [],
+    "reason": "The local execution container has neither Blender binary nor bpy module; no native device/certified headless Blender runner available to this phase."
+  },
+  "android_tests": {
+    "state": "NOT_RUN",
+    "reason": "No authorized ARM64 Render native test executor attached; phase ownership forbids changing shared packaging/CI, and source has not been packaged into installed com.rezox.render."
+  },
+  "native_receipts": [],
+  "artifacts": [
+    {
+      "kind": "committed_native_fixture_source",
+      "path": "native-tests/omega/phase13/real_blender_fixture.py",
+      "sha256": null,
+      "executed": false
+    },
+    {
+      "kind": "committed_host_tests",
+      "path": "tools/omega/test_phase13_contract.py",
+      "executed": true
+    },
+    {
+      "kind": "native_simulation_module",
+      "path": "full-app/scripts/omega/phase13_simulation.py",
+      "executed_in_blender": false
+    }
+  ],
+  "code_commit_sha": "6c574a8befa383b28ad8d689b2cf7dbd2a6f3561",
+  "quality_reduced": false,
+  "scope_integrity": "Verified four original Phase 13 files only against frozen seed via GitHub compare; this report is separately owned.",
+  "residual_blockers": [
+    "Mandatory native bpy rigid-body 36-frame fixture has not run; cannot certify physical movement, collision or saved .blend scene.",
+    "Android ARM64 native Blender, thermal/device and integration bridge checks not executed.",
+    "Native ptcache baking behavior for installed engine is unverified; SAMPLED_NATIVE_PHYSICS is not a point-cache bake.",
+    "Cloth, wind-driven vegetation and fluid/particle cache interchange are not implemented in the bounded slice.",
+    "Phase 10 owns registry/packager activation and must not advertise P13 capabilities before real-bpy test success."
+  ],
+  "unverified_claims": [
+    "Runtime compatibility of collision_collections and ptcache.bake on the installed Blender Android port",
+    "36-frame physical contact and deterministic replay on an actual Blender runtime",
+    "Save/reopen preservation of native rigid-body simulation evaluation on device"
+  ]
+}

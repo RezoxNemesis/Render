@@ -1,0 +1,133 @@
+name: OMEGA Combined Native Capability Matrix
+on:
+  push:
+    branches: [integration/omega-combined-candidate-20261022]
+  pull_request:
+    branches: [feature/native-production-toolkit-20261022, integration/render-omega-ten-phases-20261022]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Verify source and stage adapter
+        run: |
+          python3 -m compileall -q tools/omega full-app/scripts/omega full-app/scripts/omega_registry.py
+          python3 tools/prepare_production_toolkit.py
+          python3 tools/prepare_production_toolkit.py
+      - name: Run every host contract independently and report failures
+        shell: bash
+        env:
+          PYTHONPATH: 'tools:full-app/scripts:.'
+        run: |
+          set +e
+          failed=0
+          for f in tools/omega/test_phase*.py; do
+            case "$f" in
+              *native_blender.py|*native.py|*real_bpy.py|*bpy.py) continue ;;
+            esac
+            echo "::group::$f"
+            python3 "$f"
+            result=$?
+            echo "::endgroup::"
+            if (( result != 0 )); then
+              echo "::error::$f failed with $result"
+              failed=1
+            fi
+          done
+          exit "$failed"
+      - name: Assert all unverified modules fail closed
+        env:
+          PYTHONPATH: 'full-app/scripts'
+        run: |
+          python3 - <<'PY'
+          import omega_registry as registry
+          c=registry.capabilities()
+          print([(p['phase'], p['status']) for p in c['phases']])
+          assert c['quality_reduced'] is False
+          assert set(c['enabled_operations']) == set(registry.OPERATION_NAMES)
+          print('PASS: imported modules remain disabled pending genuine Blender verification')
+          PY
+  native-bpy-matrix:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install actual Blender for bpy fixture verification
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends blender
+          /usr/bin/blender --version | head -2
+      - name: Run every native Omega fixture and report failures
+        shell: bash
+        env:
+          LIBGL_ALWAYS_SOFTWARE: '1'
+          PYTHONPATH: 'full-app/scripts'
+        run: |
+          set +e
+          failed=0
+          for f in \
+            tools/omega/test_phase01_native_blender.py \
+            tools/omega/test_phase02_real_bpy.py \
+            tools/omega/test_phase03_native.py \
+            native-tests/omega/phase04/real_blender_fixture.py \
+            native-tests/omega/phase05/test_native_character.py \
+            native-tests/omega/phase06/test_native_rig.py \
+            native-tests/omega/phase07/test_native_motion.py \
+            native-tests/omega/phase08/test_phase08_bpy.py \
+            native-tests/omega/phase09/test_native_grade.py \
+            tools/omega/test_phase10_bpy.py \
+            native-tests/omega/phase11/test_phase11_bpy.py \
+            native-tests/omega/phase12/test_phase12_native_bpy.py \
+            native-tests/omega/phase13/real_blender_fixture.py; do
+            echo "::group::$f"
+            if [[ "$f" == "native-tests/omega/phase06/test_native_rig.py" ]]; then
+              mkdir -p "$RUNNER_TEMP/omega-P06-rig"
+              timeout 180 /usr/bin/blender -b -noaudio --python-exit-code 1 --python "$f" -- --output "$RUNNER_TEMP/omega-P06-rig"
+            else
+              timeout 180 /usr/bin/blender -b -noaudio --python-exit-code 1 --python "$f"
+            fi
+            result=$?
+            echo "::endgroup::"
+            if (( result != 0 )); then
+              echo "::error::$f failed (exit $result); native capability is unverified"
+              failed=1
+            fi
+          done
+          exit "$failed"
+  android-combined:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Install Android SDK if needed
+        shell: bash
+        run: |
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -path '*/bin/sdkmanager' -type f | sort -V | tail -1)"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" --install "platforms;android-35" "build-tools;35.0.0" "cmake;3.22.1" "ndk;27.2.12479018"
+      - name: Stage and compile combined JNI/Android
+        run: |
+          python3 tools/prepare_production_toolkit.py
+          gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: OMEGA-combined-android-test-results
+          path: app/build/test-results/testDebugUnitTest
+          retention-days: 7
+          if-no-files-found: ignore

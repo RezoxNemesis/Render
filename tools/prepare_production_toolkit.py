@@ -20,8 +20,8 @@ def prepare():
             ('tools/assemble_full_native.py','render_studio_contract.py'),
             ('app/src/main/java/com/rezox/render/agent/ProductionBridge.java','StudioReferenceInbox.list(context,p)'),
             ('full-app/scripts/render_production.py','render_studio_ops.py'),
-            ('full-app/app/build.gradle','versionCode 27'),
-            ('app/build.gradle.kts','versionCode = 27'),
+            ('full-app/app/build.gradle','versionCode 28'),
+            ('app/build.gradle.kts','versionCode = 28'),
         )
         if not all(marker in (ROOT/path).read_text() for path,marker in required):
             raise RuntimeError('INCOMPLETE_V022_BUILD_ADAPTER_STATE')
@@ -95,5 +95,17 @@ def prepare():
         source=source.replace(before,after,1).replace(
             '0.24.0-native-continuity-assets','0.25.0-native-verified-recovery')
         target.write_text(source)
-    print('Render Studio 0.25 protected full-quality renders and verified recoveries staged; installed package/signing remain unchanged')
+    # OMEGA combined development candidate must be newer than 0.25, and
+    # preserve the SAME com.rezox.render package and original signer.
+    for name in ('app/build.gradle.kts','full-app/app/build.gradle'):
+        target=ROOT/name
+        source=target.read_text()
+        older='versionCode = 27' if name.endswith('.kts') else 'versionCode 27'
+        newer='versionCode = 28' if name.endswith('.kts') else 'versionCode 28'
+        if source.count(older)!=1:
+            raise RuntimeError('OMEGA_INPLACE_VERSION_ADAPTER_DRIFT: '+name)
+        source=source.replace(older,newer,1)
+        source=source.replace('0.25.0-native-verified-recovery','0.26.0-omega-test-candidate')
+        target.write_text(source)
+    print('RENDER OMEGA 0.26 candidate staged (versionCode 28); original application ID and signing identity unchanged')
 if __name__=='__main__':prepare()

@@ -34,6 +34,15 @@ public final class ProductionVideoEncoder {
         try(FileOutputStream out=new FileOutputStream(tmp)){out.write(data.toString().getBytes(StandardCharsets.UTF_8));out.getFD().sync();}
         Files.move(tmp.toPath(),file.toPath(),StandardCopyOption.REPLACE_EXISTING,StandardCopyOption.ATOMIC_MOVE);
     }
+    /** MP4 sample timestamps use Blender fps/fps_base, not rounded fps.
+     * MediaCodec KEY_FRAME_RATE is only a rate-control hint; muxed PTS
+     * determines actual display timing, which still needs a device test. */
+    public static long framePresentationTimeUs(int zeroBasedFrame, int fps, double fpsBase){
+        if(zeroBasedFrame<0||fps<1||fps>120||!Double.isFinite(fpsBase)||
+           fpsBase<=0.0||fpsBase>100.0)
+            throw new IllegalArgumentException("INVALID_FPS_TIMING");
+        return Math.round(zeroBasedFrame*(1_000_000.0*fpsBase/fps));
+    }
     static int clamp(int value){return Math.max(0,Math.min(255,value));}
     static int[] yuv(int argb){int r=(argb>>16)&255,g=(argb>>8)&255,b=argb&255;
         return new int[]{clamp(((66*r+129*g+25*b+128)>>8)+16),clamp(((-38*r-74*g+112*b+128)>>8)+128),clamp(((112*r-94*g-18*b+128)>>8)+128)};
@@ -61,13 +70,22 @@ public final class ProductionVideoEncoder {
         int width=(int)ProductionBridge.integer(spec,"width",16,8192,-1),height=(int)ProductionBridge.integer(spec,"height",16,8192,-1);
         int fps=(int)ProductionBridge.integer(spec,"fps",1,120,-1),start=(int)ProductionBridge.integer(spec,"start",1,100000,-1),end=(int)ProductionBridge.integer(spec,"end",start,100000,-1);
         int count=end-start+1,bitrate=(int)ProductionBridge.integer(spec,"bitrate",100000,200000000,16000000);
+        double fpsBase=spec.optDouble("fps_base",1.0);
+        if(!Double.isFinite(fpsBase)||fpsBase<=0||fpsBase>100)
+            throw new IllegalArgumentException("INVALID_FPS_BASE");
+        double requestedFps=fps/fpsBase;
+        if(requestedFps<1||requestedFps>120)
+            throw new IllegalArgumentException("REQUESTED_FPS_UNSUPPORTED_BY_MEDIACODEC");
         if((width&1)!=0||(height&1)!=0||frames.length()!=count)throw new IllegalArgumentException("RENDER_FRAMES_INCOMPLETE");
         File output=ProductionFiles.file(context,jobId,"Production_"+jobId+".mp4");
         JSONObject prior=manifest.optJSONObject("video");
         if("encoded".equals(manifest.optString("state"))&&prior!=null&&output.isFile()&&ProductionFiles.sha(output).equals(prior.optString("sha256")))return prior;
         if(output.exists())throw new IllegalStateException("VIDEO_OUTPUT_CONFLICT");
         MediaFormat format=MediaFormat.createVideoFormat("video/avc",width,height);
-        format.setInteger(MediaFormat.KEY_BIT_RATE,bitrate);format.setInteger(MediaFormat.KEY_FRAME_RATE,fps);format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL,1);
+        format.setInteger(MediaFormat.KEY_BIT_RATE,bitrate);
+        // Integer codec rate is a configuration hint. Fractional cadence is
+        // carried precisely in the PTS assigned to each actual PNG frame.
+        format.setInteger(MediaFormat.KEY_FRAME_RATE,(int)Math.round(requestedFps));format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL,1);
         format.setInteger(MediaFormat.KEY_COLOR_FORMAT,MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible);
         String codecName=new MediaCodecList(MediaCodecList.REGULAR_CODECS).findEncoderForFormat(format);
         if(codecName==null)throw new IllegalStateException("REQUESTED_H264_FORMAT_UNAVAILABLE");
@@ -91,7 +109,7 @@ public final class ProductionVideoEncoder {
                 if(!inputEnded){
                     int index=codec.dequeueInputBuffer(10000);
                     if(index>=0){
-                        long pts=inputFrame*1_000_000L/fps;
+                        long pts=framePresentationTimeUs(inputFrame,fps,fpsBase);
                         if(inputFrame==count){codec.queueInputBuffer(index,0,0,pts,MediaCodec.BUFFER_FLAG_END_OF_STREAM);inputEnded=true;}
                         else{
                             JSONObject receipt=frames.getJSONObject(Integer.toString(start+inputFrame));File frame=ProductionFiles.file(context,jobId,receipt.getString("filename"));
@@ -131,6 +149,8 @@ public final class ProductionVideoEncoder {
             if(partial.length()<512)throw new IllegalStateException("VIDEO_OUTPUT_INCOMPLETE");
             Files.move(partial.toPath(),output.toPath(),StandardCopyOption.ATOMIC_MOVE);
             JSONObject result=ProductionFiles.receipt(output,jobId).put("mime_type","video/mp4").put("frames",count).put("fps",fps).put("width",width).put("height",height).put("bitrate",bitrate)
+                .put("fps_base",fpsBase).put("requested_effective_fps",requestedFps)
+                .put("device_fractional_fps_verified",false)
                 .put("encoder",codecName).put("executed_by","Android MediaCodec from native Blender PNG masters").put("png_masters_retained",true).put("resolution_reduced",false);
             manifest.put("video",result).put("state","encoded");write(manifestFile,manifest);success=true;return result;
         }finally{

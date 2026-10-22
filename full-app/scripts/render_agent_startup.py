@@ -370,6 +370,22 @@ def _dispatch(command):
         if _render_session is None:
             raise RuntimeError("NATIVE_EDITOR_UI_UNAVAILABLE")
         return _render_session.dispatch(action, args)
+    if action == "omega.dispatch":
+        # The Android binder authenticated the Render target and supplied a
+        # measured memory budget. Only static operation IDs are dispatchable.
+        if set(args) != {"operation", "payload", "available_memory_bytes"}:
+            raise ValueError("INVALID_ARGUMENTS")
+        import omega_registry
+        context = {
+            "scene": bpy.context.scene,
+            "production_root": str(Path(ROOT).resolve().parent) if ROOT else "",
+            "job_id": command.get("id"),
+            "available_memory_bytes": args["available_memory_bytes"],
+            "dry_run": False,
+            "cancellation_requested": False,
+            "capability_revision": omega_registry.CAPABILITY_REVISION,
+        }
+        return omega_registry.dispatch(args["operation"], args["payload"], context)
     # Local touch-overlay UI operations; NOT remotely registered agent actions.
     if action == "blender.ui.adjust_scale":
         if set(args) != {"delta"} or not _number(args.get("delta"), -.25, .25):
