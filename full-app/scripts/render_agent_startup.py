@@ -365,7 +365,7 @@ def _dispatch(command):
     if not isinstance(args, dict):
         raise ValueError("INVALID_ARGUMENTS")
     if action in ("blender.project.save_session", "blender.project.restore_session",
-                  "blender.render.plan_current", "blender.render.resume_last",
+                  "blender.render.plan_current", "blender.render.plan_still", "blender.render.resume_last",
                   "blender.ui.stabilize_viewport"):
         if _render_session is None:
             raise RuntimeError("NATIVE_EDITOR_UI_UNAVAILABLE")
