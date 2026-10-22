@@ -197,8 +197,11 @@ public final class RenderLongForegroundService extends Service {
             if("encoded".equals(current.optString("state"))||
                 (current.optInt("next_frame")>current.optInt("end_frame")&&
                  RenderManualJobs.stillImage(RenderManualJobs.readManifest(this,jobId)))){
-                state(this,jobId,"COMPLETED",false);
-                stopSelf();return START_NOT_STICKY;
+                // A finished frame job may still need >10 GB of streaming
+                // export. Do not re-render or pretend it is already in Downloads.
+                state(this,jobId,"EXPORTING_TO_DOWNLOADS",true);
+                monitor.execute(this::exportCompleted);
+                return START_STICKY;
             }
         }catch(Exception problem){
             state(this,jobId,"CHECKPOINT_UNAVAILABLE",false);
@@ -251,6 +254,29 @@ public final class RenderLongForegroundService extends Service {
         }
     }
 
+    private void exportCompleted(){
+        if(destroyed||ownerPause)return;
+        state(this,jobId,"EXPORTING_TO_DOWNLOADS",true);
+        update("Copying verified movie parts to Download/RenderStudio");
+        try{
+            JSONObject delivered=RenderManualJobs.export(this,jobId);
+            if(delivered.optBoolean("segmented") &&
+                !delivered.optBoolean("all_parts_downloads_verified"))
+                throw new IllegalStateException("SEGMENT_EXPORT_UNCONFIRMED");
+            if(!delivered.optBoolean("segmented") &&
+                !delivered.optBoolean("readback_sha256_verified"))
+                throw new IllegalStateException("DOWNLOADS_READBACK_UNCONFIRMED");
+            state(this,jobId,"COMPLETED_EXPORTED",false);
+            update("All video outputs verified in Downloads");
+        }catch(Exception problem){
+            // Existing PNG and MP4 masters remain app-private, and already
+            // exported parts have independent SHA-bound MediaStore receipts.
+            state(this,jobId,"OUTPUT_READY_EXPORT_RETRYABLE",false);
+            update("Output safe; Downloads export pending: "+
+                problem.getClass().getSimpleName());
+        }finally{stopSelf();}
+    }
+
     private void update(String message){
         if(destroyed)return;
         try{
@@ -274,10 +300,12 @@ public final class RenderLongForegroundService extends Service {
         // Normal completion or a recoverable pause is now represented in
         // durable manifests. Never hallucinate that 24/24 frames were encoded.
         if(++idlePolls<2)return;
-        String ending=state.equals("encoded")||state.equals("frames_complete")?
-            "COMPLETED":state.equals("paused_error")?"PAUSED_ERROR":"PAUSED";
+        if(state.equals("encoded")||state.equals("frames_complete")){
+            exportCompleted();return;
+        }
+        String ending=state.equals("paused_error")?"PAUSED_ERROR":"PAUSED";
         state(this,jobId,ending,false);
-        update(ending.equals("COMPLETED")?"Verified output ready":ending);
+        update(ending);
         stopSelf();
     }
     @Override public void onTaskRemoved(Intent rootIntent){
