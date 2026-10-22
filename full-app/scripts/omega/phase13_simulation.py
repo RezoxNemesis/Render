@@ -383,7 +383,7 @@ def _save_copy(bpy, directory, base="native_physics"):
     if staging.is_symlink() or final.is_symlink():
         raise ValueError("CACHE_OUTSIDE_SCOPE")
     result = bpy.ops.wm.save_as_mainfile(filepath=str(staging), copy=True,
-                                         check_existing=False, compress=True)
+                                         check_existing=False, compress=False)
     if "FINISHED" not in result or bpy.data.filepath != original or not staging.is_file():
         raise ValueError("NATIVE_SAVE_UNCONFIRMED")
     if staging.stat().st_size < 256 or staging.open("rb").read(7) != b"BLENDER":

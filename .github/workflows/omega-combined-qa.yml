@@ -87,7 +87,12 @@ jobs:
             native-tests/omega/phase12/test_phase12_native_bpy.py \
             native-tests/omega/phase13/real_blender_fixture.py; do
             echo "::group::$f"
-            timeout 180 /usr/bin/blender -b -noaudio --python-exit-code 1 --python "$f"
+            if [[ "$f" == "native-tests/omega/phase06/test_native_rig.py" ]]; then
+              mkdir -p "$RUNNER_TEMP/omega-P06-rig"
+              timeout 180 /usr/bin/blender -b -noaudio --python-exit-code 1 --python "$f" -- --output "$RUNNER_TEMP/omega-P06-rig"
+            else
+              timeout 180 /usr/bin/blender -b -noaudio --python-exit-code 1 --python "$f"
+            fi
             result=$?
             echo "::endgroup::"
             if (( result != 0 )); then

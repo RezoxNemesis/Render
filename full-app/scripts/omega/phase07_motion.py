@@ -503,6 +503,6 @@ def audit(operation, payload, context):
     if revision != action["omega_motion_source_revision"]:
         raise ValueError("CHECKPOINT_CONFLICT")
     data = _inspect(scene, rig, track, strip)
-    return _receipt(operation, scene, revision, action=action.name,
+    return _receipt(operation, scene, revision,
                     **data, fps=int(scene.render.fps), fps_base=float(scene.render.fps_base),
                     genuine_blender_data=True)

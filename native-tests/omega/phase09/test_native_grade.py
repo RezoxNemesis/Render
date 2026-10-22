@@ -26,6 +26,13 @@ if not hasattr(scene, "cycles"):
     raise RuntimeError("UNSUPPORTED_NATIVE_FEATURE: Cycles CPU renderer not installed")
 scene.cycles.device = "CPU"
 scene.cycles.samples = 4
+# The Ubuntu CI Blender build omits OpenImageDenoiser. Disable denoising only
+# for this synthetic fixture; never change the production render defaults.
+if hasattr(scene.cycles, "use_denoising"):
+    scene.cycles.use_denoising = False
+for layer in scene.view_layers:
+    if hasattr(layer, "cycles") and hasattr(layer.cycles, "use_denoising"):
+        layer.cycles.use_denoising = False
 scene.render.resolution_x = 64
 scene.render.resolution_y = 64
 scene.render.resolution_percentage = 100

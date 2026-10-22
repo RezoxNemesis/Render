@@ -148,7 +148,7 @@ def _native(context):
     # root, require an existing saved .blend inside that owned root, not a path
     # supplied by the remote payload. Headless Blender fixtures also obey this.
     root = context.get("production_root")
-    if root is None or type(root) not in (str, Path):
+    if root is None or not isinstance(root, (str, os.PathLike)):
         _fail("MISSING_REFERENCE")
     try:
         base = Path(root).resolve(strict=True)

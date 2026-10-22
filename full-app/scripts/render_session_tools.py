@@ -47,11 +47,19 @@ def _sha(path):
             digest.update(block)
     return digest.hexdigest()
 
+def _compressed_blend_header(path):
+    # Blender can open Zstd or legacy gzip compressed .blend files. Actual
+    # contents remain protected by independent SHA-256 receipt validation.
+    with path.open("rb") as data:
+        header = data.read(4)
+    return header.startswith(b"\x1f\x8b") or header == b"\x28\xb5\x2f\xfd"
+
+
 def _blend_file(path):
     if not path.is_file() or path.is_symlink() or path.stat().st_size < 256:
         return False
     with path.open("rb") as stream:
-        return stream.read(7) == b"BLENDER"
+        return stream.read(7) == b"BLENDER" or _compressed_blend_header(path)
 
 def _session_dir():
     folder = _root() / "Projects"

@@ -178,7 +178,7 @@ def _plan_render(scene,p,root):
     ident=uuid.uuid4().hex;folder=_job(root,ident);folder.mkdir(mode=0o700)
     checkpoint=folder/'snapshot.blend'
     # Snapshot all referenced native Blender data; source project path is unchanged.
-    if 'FINISHED' not in bpy.ops.wm.save_as_mainfile(filepath=str(checkpoint),copy=True,compress=True,check_existing=False):raise RuntimeError('CHECKPOINT_FAILED')
+    if 'FINISHED' not in bpy.ops.wm.save_as_mainfile(filepath=str(checkpoint),copy=True,compress=False,check_existing=False):raise RuntimeError('CHECKPOINT_FAILED')
     _phase2().sync_file(checkpoint)
     _phase2().sync_directory(folder)
     receipt=C.file_receipt(checkpoint)
