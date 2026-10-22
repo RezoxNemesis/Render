@@ -50,7 +50,7 @@ public class ProductionSegmentPlanTest {
         assertEquals(163,spans.get(0).end);
     }
     @Test public void deterministicFractionsCannotSkipOrDuplicateFrames()throws Exception{
-        JSONObject job=spec(1200,4300,30,24000000).put("fps_base",1.001);
+        JSONObject job=spec(1200,14000,30,24000000).put("fps_base",1.001);
         List<ProductionSegmentPlan.Span> spans=ProductionSegmentPlan.plan(job);
         assertTrue(spans.size()>1);
         int expected=1200;
@@ -58,7 +58,7 @@ public class ProductionSegmentPlanTest {
             assertEquals(expected,span.start);
             expected=span.end+1;
         }
-        assertEquals(4301,expected);
+        assertEquals(14001,expected);
         assertEquals(1.001,job.getDouble("fps_base"),0.000001);
     }
     @Test public void segmentProofPersistsAndHashMismatchIsRejected()throws Exception{
