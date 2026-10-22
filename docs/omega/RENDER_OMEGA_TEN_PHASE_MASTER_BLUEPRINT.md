@@ -541,3 +541,215 @@ After P10 integrates tested capabilities, Render must be able to process the fol
 > Create a detailed adult humanoid and a quadruped, refine their anatomy and hair, build an atmospheric ruined courtyard with vegetation and a waterway, rig the characters, choreograph a natural walk and a three-strike combat sequence, move the camera dramatically, create RAW and FINAL lighting/compositing passes, render every frame with the user's requested settings, recover safely from interruption, save the editable .blend and export verified image/video to owner-approved storage.
 
 This is the **final integrated acceptance scene**, NOT a promise that every feature can be engineered and visually validated in a single 30-minute sprint. If an individual feature remains absent, the integrated planner must produce an explicit missing capability report and a recoverable partial project, not a substituted screenshot or fake success.
+
+
+---
+
+# PART III — BOOTSTRAP, PARALLELISM, EVIDENCE, INTEGRATION AND RELEASE
+
+## 4. Immutable 13-branch assignment registry
+
+Every phase branch is created from the identical **phase seed**: the one commit at the tip of integration/render-omega-ten-phases-20261022 immediately after this master document is finalized. The seed SHA is observable from the actual branch heads (and may be copied into the handoff); putting the mutable Git commit SHA inside its own content would create a circular hash, so the canonical registry names the *ref* and the GitHub branches provide the exact seed SHA.
+
+| Assigned number | Phase name | Exact HEAD branch | Exact target base |
+|---|---|---|---|
+| 1 | Native engine + mobile viewport | feature/omega-P01-native-engine-20261022 | integration/render-omega-ten-phases-20261022 |
+| 2 | Render/recovery/encoding | feature/omega-P02-render-recovery-20261022 | integration/render-omega-ten-phases-20261022 |
+| 3 | Autonomous plan/journal/hand | feature/omega-P03-autonomy-planner-20261022 | integration/render-omega-ten-phases-20261022 |
+| 4 | True mesh topology | feature/omega-P04-topology-20261022 | integration/render-omega-ten-phases-20261022 |
+| 5 | Human sculpt and hair | feature/omega-P05-human-character-20261022 | integration/render-omega-ten-phases-20261022 |
+| 6 | Skinned humanoid/quadruped rig | feature/omega-P06-rigging-20261022 | integration/render-omega-ten-phases-20261022 |
+| 7 | NLA/motion/choreography | feature/omega-P07-motion-20261022 | integration/render-omega-ten-phases-20261022 |
+| 8 | Assets/world assembly | feature/omega-P08-assets-world-20261022 | integration/render-omega-ten-phases-20261022 |
+| 9 | Native lookdev/compositor/VFX | feature/omega-P09-lookdev-vfx-20261022 | integration/render-omega-ten-phases-20261022 |
+| 10 | Integration/registration/CI | feature/omega-P10-integration-20261022 | integration/render-omega-ten-phases-20261022 |
+| 11 | Authentic artist tool executor | feature/omega-P11-artist-controller-20261022 | integration/render-omega-ten-phases-20261022 |
+| 12 | Visual quality and revision | feature/omega-P12-visual-quality-20261022 | integration/render-omega-ten-phases-20261022 |
+| 13 | Physics/destruction/simulation | feature/omega-P13-physics-simulation-20261022 | integration/render-omega-ten-phases-20261022 |
+
+**Never call old version feature/024 or feature/025 a phase branch.** They are inherited implementation lineage, not new 13-agent workstreams. The current installed app version is not inferred from source: check device package version and signer before release.
+
+## 5. Strict conflict/ownership controls
+
+### 5.1 Git rules
+
+- One branch, one assigned phase, one responsible agent. Work on the existing pre-created branch; never use a second worktree pointed at someone else's branch. Phase agent MUST NOT directly push to main or integration.
+- No force-push over another agent's head; no merging another phase branch into yours; no cherry-picking their unmerged code.
+- Exact match ownership from §2 (and unique report path) is compulsory. Read-anywhere does **not** grant write permission. If you discover a bug in an unowned shared file, create a minimal note in your PHASE_NN_RESULT.json and include an exact proposed patch in PR description; let P10/integrator own the actual shared edit.
+- Do not edit the canonical master doc from a phase branch. The only acceptable update is a separately approved integrator-issued revision, with all branches re-aligned deliberately to its new seed.
+- Each phase commits tests, documented operation schemas and actual code together. PR uses distinct title “OMEGA Phase NN — <scope>” and targets exactly the integration branch.
+- Integrator verifies Git changed-files before merge. A one-line unrelated correction is still a violation; reviewer should request reversal rather than letting overlap creep in.
+
+### 5.2 Parallel-start rule and Phase 10 first-hour behavior
+
+P10 can start concurrently even though P04–P09/P11–P13 code has not yet landed. Its initial deliverable is a **missing-module-safe registry and packager**, not a claim of full 13-phase integration. Registry entries are activated only for modules that exist, validate, execute and passed contract tests. Integration PR initially remains draft; P10/integrator updates it as separately reviewed modules arrive.
+
+Phase 1–9 and 11–13 need no live dependency on phase 10 for their first slice. Each validates pure payloads and runs independently in real Blender fixtures. Their operation's canonical name and function signature are frozen in §3. P10 may supply minimal sample context objects for test adapters without mutating their code.
+
+### 5.3 Interface mismatches
+
+If two phases disagree on a semantic field, do not have one agent silently change another:
+1. Record mismatch: operation name, field, old/new expected type, evidence and failed test.
+2. Propose a neutral adapter in P10's owned integration namespace.
+3. Prefer additive versioned fields and capability negotiation to breaking changes.
+4. Preserve old API until every consumer moved and tests pass.
+5. Integrator reviews and merges with explicit migration test.
+
+## 6. Hard timebox and status protocol
+
+The user's target is approximately **30 minutes per agent**, with all 13 working concurrently if separate ChatGPT tasks can be started. This is a strict *planning timebox*, not a promise that a truly film-quality humanoid/renderer/physics stack fits into thirty minutes or that work continues invisibly after a chat has ended.
+
+| Target elapsed time | Required result |
+|---|---|
+| 0–4 minutes | Read canonical doc/ownership and current source. Baseline test/branch identity verified |
+| 4–8 minutes | Define narrow implementation and exact native outcome, write failing regression |
+| 8–20 minutes | Implement a working bounded vertical slice in owned paths |
+| 20–25 minutes | Native bpy/Android/host tests; check artifact and pre/postcondition |
+| 25–28 minutes | Commit, PR against integration, produce machine-readable phase report |
+| 28–30 minutes | Report accurate status, achievements and unverified blockers |
+
+**No false deadline completion:** If a phase requires more than one 30-minute increment, report Partial and keep its PR draft, with concrete next steps. Do not fill remaining gaps with untested code or generic documentation and label Complete.
+
+### 6.1 Machine-readable report contract
+
+A phase MUST write a syntactically valid JSON document at reports/omega/PHASE_NN_RESULT.json. Required minimum fields (the example is schema guidance; replace all invented values with actual evidence):
+
+    {
+      "contract": "RENDER-OMEGA-13P-20261022",
+      "phase": 11,
+      "title": "True autonomous artist tool controller",
+      "status": "Partial",
+      "seed_sha": "40 hexadecimal characters from Git",
+      "head_branch": "feature/omega-P11-artist-controller-20261022",
+      "head_sha": "actual Git commit SHA",
+      "pr_url": null,
+      "owned_paths_changed": [],
+      "real_bpy_tests": {"state": "NOT_RUN", "commands": [], "results": []},
+      "android_tests": {"state": "NOT_RUN", "reason": "no device attached"},
+      "native_receipts": [],
+      "artifacts": [],
+      "quality_reduced": false,
+      "residual_blockers": [],
+      "unverified_claims": []
+    }
+
+**Status semantics:** Complete = assigned 30-minute phase slice truly implemented and its required focused gates pass, with PR and receipts. Partial = some real verified functionality, but mandatory slice or proof missing. Blocked = no verified slice due to a concrete access/tool/hardware/dependency restriction. Use the single exact word Complete as the last word of the phase report only when Complete. Otherwise last word is Partial or Blocked.
+
+### 6.2 Human-visible progress requirements
+
+All agents should present a brief meaningful progress statement at initiation, after initial source inspection, after first working code and after test results. Progress is not a substitute for a commit or proof. A ChatGPT chat is NOT a durable 30-minute background executor unless a task infrastructure is explicitly running; do not promise unseen work after returning a response.
+
+---
+
+## 7. Cross-phase neutral contracts for real artist autonomy
+
+### 7.1 Native artist action payload — P11 producer, P10 dispatcher
+
+Every supported artist step must specify an existing owned native Blender project, target type/object name/scene revision, operator family, normalized typed parameters and expected postcondition. Example *semantic shape*, not a generic remote scripting endpoint:
+
+    {
+      "operation": "omega.artist.execute_tool",
+      "payload": {
+        "tool": "mesh.sculpt_stroke",
+        "target": "CharacterBody",
+        "expected_mode": "SCULPT",
+        "expected_scene_revision": "<sha>",
+        "parameters": {
+          "brush": "DRAW",
+          "radius": 0.07,
+          "strength": 0.32,
+          "samples": [[0.1,0.2,0.3],[0.2,0.2,0.3]]
+        },
+        "postcondition": "evaluated_mesh_changed"
+      }
+    }
+
+**Example does not guarantee the specific Blender build supports this brush.** P11 must inspect actual native enum and context. Reject unsupported brush/mode/operators. Never interpret generic strings as arbitrary bpy.ops identifiers. Real event injection must remain within Render's own foregrounded Blender view and authorized Android UI.
+
+### 7.2 Self-critique / revision payload — P12 to P03/P11
+
+A grounded quality finding uses observations, provenance and a bounded action proposal, not subjective magic ratings:
+
+    {
+      "source_revision": "<sha>",
+      "target_object": "CharacterBody",
+      "measurement": "shoulder_width_over_head_width",
+      "observed": 3.6,
+      "reference_target": {"min": 1.8, "max": 2.5},
+      "evidence": {"kind": "measured_mesh", "view": "front"},
+      "repair": {"tool": "mesh.adjust_region", "parameters": {"region": "shoulders"}},
+      "max_iterations": 2,
+      "visual_quality_verified": false
+    }
+
+Values here are **illustrative**, not universally correct human anatomy thresholds. Phase P12 must declare fixture-specific tolerances, scene scale, reference context and uncertainty; do not hard-code those illustrative values as universal aesthetics or apply corrections without valid tool parameters.
+
+### 7.3 Revision + recovery transaction
+
+Before any potentially destructive multi-operation execution: verify project revision → save app-owned checkpoint → validate all arguments/preconditions → run action on actual Blender main context → read back Blender state → audit agreed postcondition → commit updated revision/receipt → continue. On interruption: inspect journal and native scene to determine whether effect was committed; never unconditionally repeat a sculpt stroke or duplicate an asset.
+
+If an operation requires a GUI but the editor is backgrounded, return AWAITING_DEVICE_FOREGROUND and queue safely. A cloud command being accepted is not native completion. User permissions and an accessible Render app remain meaningful even when the owner asks for autonomy.
+
+### 7.4 Storage, security and app independence
+
+- Native project data, snapshots, render masters and trace receipts stay app-owned unless the user explicitly grants a folder or export location. Support SAF and Google Drive as owner-selected storage, not computation.
+- No Gallery scans. Accept only explicit media share/picker grants. Preserve original user reference images and their content hashes without repackaging private files in GitHub PRs.
+- Do not expose owner token/credentials, keystore, arbitrary paths or read/write entire phone just because the user delegates project work. Design broad **Blender capability coverage** within authenticated, typed, auditable app operations.
+- All code respects Blender/copyleft source availability and independent licensed-asset provenance. If upstream Blender project disappears, an already installed offline engine may continue; *future rebuilding* still requires preserved source/toolchain/dependencies and licenses.
+
+---
+
+## 8. Integration acceptance matrix
+
+Each test must identify **real engine, real native data, real output, Android/device evidence or synthetic-only evidence**. No test is permitted to collapse those categories.
+
+| ID | Target feature | Mandatory fixture / validation | Expected proof |
+|---|---|---|---|
+| INT-01 | Real Blender boot and input | Android portrait ↔ landscape ↔ background ↔ resume | Same project ID/scene, usable controls, no reset |
+| INT-02 | True edge-loop geometry | Two pillars → bridge edge loops → save/reopen/undo | Connected manifold native mesh and normals |
+| INT-03 | Character anatomical quality | 0.24 distorted silhouette vs repaired character | 3-view geometry, proportions, actual editable mesh; no “finished” primitive |
+| INT-04 | Native skinned rig | Humanoid and 4-legged dog fixture | Vertex weights, deformer changes and IK/FK evidence |
+| INT-05 | Action choreography | Walk loop, punch combinations and NLA retime | Bone curves and evaluated contact metrics |
+| INT-06 | World staging | Train field + ruined temple + lights/sky/scatter | Native instanced assets and camera render |
+| INT-07 | Materials/VFX | Same scene WIP/RAW/FINAL | Native node graph/passes and verified pixel difference |
+| INT-08 | Simulation | Rigid debris collision + imported fluid-cache series | Native evaluated physics or explicitly declared imported simulation |
+| INT-09 | Full-quality still render | Requested engine + dimensions + samples | Exact valid image file, content checksum, no alias engine |
+| INT-10 | Interrupted animation | Frames 101–105, kill at 103, resume | No duplicate valid frames; final encoded output |
+| INT-11 | Lossless project recovery | Dirty scene, corrupt latest, valid previous snapshot | Verified rollback copy and saved scene restored |
+| INT-12 | Artist control | Real Blender sculpt stroke, modifier, selection | Measured change, native target and truthful command hand |
+| INT-13 | Self-correction | Deliberately bad character/object | Evidence-based defect, bounded repair and re-audit |
+| INT-14 | Agent security | Invalid tools, paths, UUID, oversized request | Rejected without project mutation |
+| INT-15 | Native APK integrity | Original signed Android package and bundled Omega modules | apksigner/aapt, runtime ZIP, required native libraries |
+| INT-16 | On-phone endurance | Five-minute complex scene test plus thermal | Measured pause/recovery, exact output request, actual Android logs |
+
+For INT-03 and INT-13, visual resemblance is not guaranteed by a numeric geometry score. Record both mechanical/geometry tests and human-readable visual evidence; keep the final artistic quality gate open until the owner evaluates actual output if necessary.
+
+## 9. Staged merge and verified release procedure
+
+**Wave A — isolated checks:** Each phase PR contains only its owned implementation, fixtures and reports. Verify source paths. Merge in the order dictated by test readiness, **not** merely ascending phase number. Independent native math modules can merge without P10 registry activation.
+
+**Wave B — registry integration:** P10's adapter/registry PR merges after core contracts stabilize, then integrates successfully tested phase modules by operation ID. Fail disabled/missing capabilities gracefully, never crash engine startup because one phase module is absent.
+
+**Wave C — combined Blender/Android verification:** Run real Blender bpy fixtures for true mesh/sculpt/rig/action/world/physics; run Android unit/JNI tests; build actual pinned Blender APK and verify embedded modules. Exercise the existing VideoStudio MCP → Render authenticated Binder path with an actual native command and inspect returned scene data.
+
+**Wave D — original-package on-phone tests:** Confirm existing installed package/version/signature, snapshot its app-owned project files with owner consent, install only an APK bearing the exact same accepted signer and higher versionCode. Test phone Vulkan, slow renderer, thermal stress, background/return continuity, rendering and saved asset/PNG/MP4 bytes. Do NOT uninstall or clear data. Don't claim a permanent signing certificate has been installed unless its protected storage and exact cert match are verified.
+
+**Wave E — owner acceptance/release:** Only after tests and owner instruction, approve a release candidate. Failing tests yield a draft PR and an explicit blocked matrix; a successful GitHub desktop build alone does not authorize installation.
+
+## 10. Direct launch instruction for every ChatGPT agent
+
+The owner can paste the following template into thirteen ChatGPT conversations and change only the integer N. All agents read the same one master document. The phase number in the user's instruction is authoritative even if the chat has no previous history.
+
+> Implement RENDER OMEGA Phase N autonomously. Repository: RezoxNemesis/Render. Read the single canonical master blueprint at https://github.com/RezoxNemesis/Render/blob/integration/render-omega-ten-phases-20261022/docs/omega/RENDER_OMEGA_TEN_PHASE_MASTER_BLUEPRINT.md completely. Your assigned number is N; execute ONLY Phase N. Use its pre-created branch from the frozen phase seed and follow its exact path ownership, typed operation contracts and acceptance tests. Work toward the 30-minute engineering timebox without sacrificing correctness. Implement real code and native Blender tests, commit, open/update your draft PR targeting integration/render-omega-ten-phases-20261022, and write reports/omega/PHASE_NN_RESULT.json. Do not modify other phases, shared registry, signing, master blueprint or main. Never fake tool actions or visual/render quality. End with Complete ONLY if the specified phase-slice deliverable is actually implemented and verified, otherwise Partial or Blocked with precise evidence and remaining work.
+
+The 30-minute clock starts when the individual agent receives this instruction; there is no global background orchestrator implied. If the owner has only ten chats available, phases 11–13 can be assigned to additional chats later with the same seed, but concurrency does not change the 13 independent code ownership boundaries.
+
+## 11. Final definition of success — no shortcuts
+
+Render OMEGA is an autonomous **artist-operated 3D studio**, not merely an Android port that opens the Blender toolbar. It succeeds when a user can describe a scene and ChatGPT can perform real native steps—create, sculpt, mesh-edit, rig, animate, light, composite, simulate where supported, render, correct, save and export—with verifiable receipts and minimal repeated owner input.
+
+Feature support is measured **against the actual installed engine**, not desktop branding. If the owner requests an unavailable native simulation, plugin, memory quantity or Vulkan feature, the app must preserve the project, explain the exact unsupported requirement and offer an explicit consented alternative. It may not substitute a fake video, silently lower requested quality or claim an unseen feature was implemented.
+
+**The blueprint is complete when this authoritative document and all thirteen identical-base branches exist.** Phase implementation completion is a separate, test-gated milestone; thirteen branches created is not proof that Blender film-quality goals are already met.
+
+**END OF THE ONE RENDER OMEGA 13-PHASE MASTER ENGINEERING BLUEPRINT.**
