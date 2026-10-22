@@ -236,6 +236,10 @@ def execute(args, spool, command_id):
         C.fields(p,('job_id',),('job_id',));return _status(json.loads((_job(root,p['job_id'])/'manifest.json').read_text()))
     if operation=='render.step':return _step(root,p)
     _editable(scene)
+    if operation=='asset.create':
+        C.fields(p, ('preset','name'), ('preset',))
+        import render_assets
+        return render_assets.create_asset(scene,p['preset'],p.get('name'))
     if operation=='project.create':
         C.fields(p,('name',),('name',));name=C.safe_name(p['name'])
         if name in bpy.data.scenes:raise ValueError('SCENE_NAME_EXISTS')
