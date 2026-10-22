@@ -12,7 +12,7 @@ public final class OverlayBounds {
     public static int scrollHeight(int availableHeight,int desired,int minimum){
         if(availableHeight<=0||minimum<=0||desired<=0)
             throw new IllegalArgumentException("INVALID_SCROLL_BOUND");
-        return Math.min(Math.max(minimum,desired),Math.max(minimum,availableHeight));
+        return Math.min(Math.max(minimum,desired),availableHeight);
     }
     public static boolean isTap(float startX,float startY,float endX,float endY,float slop){
         if(!Float.isFinite(startX)||!Float.isFinite(startY)||
