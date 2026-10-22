@@ -154,7 +154,8 @@ public final class BlenderMobileControls {
             ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT));
         menuScroll.setVisibility(View.GONE);
         int menuHeight=OverlayBounds.scrollHeight(
-            screenHeight-px(activity,230),px(activity,360),px(activity,115));
+            Math.max(px(activity,70),screenHeight-px(activity,230)),
+            px(activity,360),px(activity,115));
         buttons.addView(menuScroll,new LinearLayout.LayoutParams(px(activity,207),menuHeight));
         // A real drag on this owner-visible handle moves ONLY the overlay; it
         // never injects a fake Blender touch or changes the underlying scene.
