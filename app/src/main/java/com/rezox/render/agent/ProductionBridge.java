@@ -24,7 +24,7 @@ public final class ProductionBridge {
         "world.configure","instances.plan","instances.create","reference.attach",
         "render.plan","render.step","render.batch","render.status","render.encode","drive.status","drive.backup",
         "render.storage.status","render.job.start","render.job.status","render.job.pause",
-        "render.job.export","project.checkpoint_export"};
+        "render.job.export","render.job.export_segment","project.checkpoint_export"};
     private static final Set<String> OPERATIONS=new HashSet<>(Arrays.asList(OPS));
     private ProductionBridge(){}
     public static void fields(JSONObject p,String allowed)throws Exception {
@@ -104,6 +104,11 @@ public final class ProductionBridge {
         if(operation.equals("render.job.export")){
             fields(p,"job_id");
             return RenderManualJobs.export(context,p.getString("job_id"));
+        }
+        if(operation.equals("render.job.export_segment")){
+            fields(p,"job_id,index");
+            return RenderManualJobs.exportSegment(context,p.getString("job_id"),
+                (int)integer(p,"index",0,100000,-1));
         }
         if(operation.equals("project.checkpoint_export")){
             fields(p,"name");
