@@ -43,6 +43,10 @@ jobs:
           blender -b -noaudio --python-exit-code 1 --python tools/test_real_production.py
           blender -b -noaudio --python-exit-code 1 --python tools/test_real_studio_v23.py
   build-native-full:
+    # GitHub Actions caches are scoped to the PR base ref. The existing
+    # development signing key is available only to this reviewed PR context;
+    # plain feature-branch push runs must not rotate/generate another signer.
+    if: github.event_name == 'pull_request'
     needs: [stage-tests, blender-bpy-integration]
     runs-on: ubuntu-24.04
     timeout-minutes: 50
@@ -144,7 +148,7 @@ jobs:
           retention-days: 7
           if-no-files-found: error
       - name: Record release boundary
-        run: echo 'The original Render 0.21.0 APK is signed with the EXACT SAME DEVELOPMENT CERTIFICATE as installed 0.20.0 (verified). Android must confirm in-place version 24. Never uninstall or clear original app data. Permanent release key remains protected.' >> "$GITHUB_STEP_SUMMARY"
+        run: echo 'Render 0.22 original APK is signed with the EXACT INSTALLED 0.21 certificate, has versionCode 25 and must be installed as an Android in-place update only if signature verification passes. Never uninstall or clear original app data. Permanent release key remains protected.' >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
