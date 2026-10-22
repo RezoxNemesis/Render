@@ -253,8 +253,10 @@ public final class RenderManualJobs {
         if(video.optBoolean("segmented")){
             JSONArray parts=video.getJSONArray("segments");
             JSONArray exported=new JSONArray();
-            for(int i=0;i<parts.length();i++)
+            for(int i=0;i<parts.length();i++){
+                if(STOP.get())throw new IllegalStateException("EXPORT_PAUSED_AT_SEGMENT_BOUNDARY");
                 exported.put(exportSegment(context,job,i));
+            }
             JSONObject index=ProductionFiles.export(context,new JSONObject()
                 .put("category",job).put("filename",video.getString("filename"))
                 .put("expected_sha256",video.getString("sha256")));
