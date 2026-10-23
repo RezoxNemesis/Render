@@ -380,13 +380,19 @@ def stage(engine, bridge, source, destination, expected_size=ENGINE_BYTES,
     merged.write(destination / "AndroidManifest.xml", encoding="utf-8", xml_declaration=True)
     notices = assets / "licenses"
     notices.mkdir(exist_ok=True)
+    if verify_source:
+        from patch_pinned_timeline_dispatch import apply_pinned_fix
+        apply_pinned_fix(libraries / "libblender.so", notices)
     (notices / "Render-Full-Native-Sources.txt").write_text(
         "Full Blender native engine source: https://github.com/simfeo/blender\n"
         "Pinned source revision: " + UPSTREAM_COMMIT + "\n"
         "APK release: https://github.com/simfeo/blender/releases/tag/android-alpha-4\n"
         "Engine APK SHA-256: " + ENGINE_SHA256 + "\n"
         "Blender source is GPL-2.0-or-later; consult matching source and bundled licenses.\n"
-        "Render Android agent code and build adapters are in https://github.com/RezoxNemesis/Render\n",
+        "Render Android agent code and build adapters are in https://github.com/RezoxNemesis/Render\n"
+        "Verified production staging applies the timeline-core dispatch fix; see "
+        "Render-Native-Engine-Patches.json and blender-timeline-core.patch for exact hashes "
+        "and corresponding source. Other engine features are retained.\n",
         encoding="utf-8")
     print("STAGED_FULL_NATIVE_BLENDER", len(list(libraries.glob("*.so"))),
           "libraries", (assets / "blender_runtime.zip").stat().st_size, "runtime bytes")

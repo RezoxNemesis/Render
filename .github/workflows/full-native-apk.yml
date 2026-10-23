@@ -22,7 +22,7 @@ jobs:
           python-version: "3.13"
       - run: python tools/prepare_production_toolkit.py
       - name: Verify production and previous native contracts
-        run: PYTHONPATH=tools python -m unittest tools/test_assemble_full_native.py tools/test_blender_bpy_bridge.py tools/test_lively_scene_contract.py tools/test_lively_scene_mock.py tools/test_native_autonomy_security.py tools/test_blender_batch_assembly.py tools/test_production_contract.py tools/test_thermal_drive_inplace_contract.py tools/test_studio_v22_contract.py tools/test_v23_reference_contract.py tools/test_render_v24_contract.py tools/test_render_v25_contract.py tools/test_long_foreground_contract.py -v
+        run: PYTHONPATH=tools python -m unittest tools/test_assemble_full_native.py tools/test_pinned_timeline_dispatch.py tools/test_blender_bpy_bridge.py tools/test_lively_scene_contract.py tools/test_lively_scene_mock.py tools/test_native_autonomy_security.py tools/test_blender_batch_assembly.py tools/test_production_contract.py tools/test_thermal_drive_inplace_contract.py tools/test_studio_v22_contract.py tools/test_v23_reference_contract.py tools/test_render_v24_contract.py tools/test_render_v25_contract.py tools/test_long_foreground_contract.py -v
       - name: Verify adapter is repeatable
         run: python tools/prepare_production_toolkit.py
   blender-bpy-integration:
@@ -136,36 +136,36 @@ jobs:
                       assert 'scripts/startup/omega/'+name in z.namelist(), name
           print('PASS: production runtime packaged with native Blender')
           PY
-          cp "$APK" "$RUNNER_TEMP/Render-0.28.2-original-INPLACE-candidate.apk"
-          sha256sum "$RUNNER_TEMP/Render-0.28.2-original-INPLACE-candidate.apk" > "$RUNNER_TEMP/render-production-sha256.txt"
+          cp "$APK" "$RUNNER_TEMP/Render-0.28.3-original-INPLACE-candidate.apk"
+          sha256sum "$RUNNER_TEMP/Render-0.28.3-original-INPLACE-candidate.apk" > "$RUNNER_TEMP/render-production-sha256.txt"
       - name: Build isolated preview without altering installed Render
         run: |
           gradle -p full-app --no-daemon -PrenderSideBySide=true :app:assembleDebug
-          cp full-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/Render-0.28.2-production-preview-development.apk"
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$RUNNER_TEMP/Render-0.28.2-production-preview-development.apk" > "$RUNNER_TEMP/render-preview-signature.txt"
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$RUNNER_TEMP/Render-0.28.2-production-preview-development.apk" > "$RUNNER_TEMP/render-preview-badging.txt"
+          cp full-app/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/Render-0.28.3-production-preview-development.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$RUNNER_TEMP/Render-0.28.3-production-preview-development.apk" > "$RUNNER_TEMP/render-preview-signature.txt"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$RUNNER_TEMP/Render-0.28.3-production-preview-development.apk" > "$RUNNER_TEMP/render-preview-badging.txt"
           grep -Fq "name='com.rezox.render.preview'" "$RUNNER_TEMP/render-preview-badging.txt"
-          sha256sum "$RUNNER_TEMP/Render-0.28.2-production-preview-development.apk" >> "$RUNNER_TEMP/render-production-sha256.txt"
+          sha256sum "$RUNNER_TEMP/Render-0.28.3-production-preview-development.apk" >> "$RUNNER_TEMP/render-production-sha256.txt"
       - uses: actions/upload-artifact@v4
         with:
-          name: Render-0.28.2-ORIGINAL-SAME-SIGNER-INPLACE-CANDIDATE
-          path: ${{ runner.temp }}/Render-0.28.2-original-INPLACE-candidate.apk
+          name: Render-0.28.3-ORIGINAL-SAME-SIGNER-INPLACE-CANDIDATE
+          path: ${{ runner.temp }}/Render-0.28.3-original-INPLACE-candidate.apk
           compression-level: 0
           retention-days: 7
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
-          name: Render-0.28.2-preview-development-OPTIONAL
-          path: ${{ runner.temp }}/Render-0.28.2-production-preview-development.apk
+          name: Render-0.28.3-preview-development-OPTIONAL
+          path: ${{ runner.temp }}/Render-0.28.3-production-preview-development.apk
           compression-level: 0
           retention-days: 7
           if-no-files-found: error
       - name: Record release boundary
-        run: echo 'Render 0.28.2 original-package APK uses the pinned historical development signer with versionCode 32; any actual install still requires matching the device-installed signature, sufficient free disk and owner approval. Never uninstall or clear original app data. Permanent release key remains protected.' >> "$GITHUB_STEP_SUMMARY"
+        run: echo 'Render 0.28.3 original-package APK uses the pinned historical development signer with versionCode 33; any actual install still requires matching the device-installed signature, sufficient free disk and owner approval. Never uninstall or clear original app data. Permanent release key remains protected.' >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: Render-0.28.2-build-and-signature-proof
+          name: Render-0.28.3-build-and-signature-proof
           path: |
             ${{ runner.temp }}/render-production-signature.txt
             ${{ runner.temp }}/render-production-badging.txt
