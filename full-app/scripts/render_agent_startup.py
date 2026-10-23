@@ -664,6 +664,16 @@ def _write_result(path, report):
         except Exception:
             pass
 
+def _native_ui_event(method, value):
+    if _render_session is None:
+        return
+    try:
+        import render_native_hud
+        getattr(render_native_hud, method)(value)
+    except Exception:
+        pass  # Optional viewport feedback never changes command execution.
+
+
 def _poll():
     global _LAST_HEARTBEAT
     if not ROOT:
@@ -695,6 +705,7 @@ def _poll():
                 raise ValueError("INVALID_COMMAND_ID")
             if type(command.get("deadline")) not in (int, float) or command["deadline"] < time.time():
                 raise ValueError("COMMAND_EXPIRED")
+            _native_ui_event("command_started", command)
             result = _dispatch(command)
             report = {"id": name, "state": "succeeded", "result": result}
         except Exception as error:
@@ -706,7 +717,9 @@ def _poll():
             _write_result(target, report)
         except Exception:
             # Leave claimed file for crash/recovery inspection. No blind replay.
+            _native_ui_event("command_finished", {"id": name, "state": "recovery_required"})
             continue
+        _native_ui_event("command_finished", report)
         claimed.unlink(missing_ok=True)
     return 0.5
 

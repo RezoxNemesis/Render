@@ -20,8 +20,8 @@ def prepare():
             ('tools/assemble_full_native.py','render_studio_contract.py'),
             ('app/src/main/java/com/rezox/render/agent/ProductionBridge.java','StudioReferenceInbox.list(context,p)'),
             ('full-app/scripts/render_production.py','render_studio_ops.py'),
-            ('full-app/app/build.gradle','versionCode 29'),
-            ('app/build.gradle.kts','versionCode = 29'),
+            ('full-app/app/build.gradle','versionCode 30'),
+            ('app/build.gradle.kts','versionCode = 30'),
         )
         if not all(marker in (ROOT/path).read_text() for path,marker in required):
             raise RuntimeError('INCOMPLETE_V022_BUILD_ADAPTER_STATE')
@@ -120,5 +120,17 @@ def prepare():
         source=source.replace(old,new,1).replace(
             '0.26.0-omega-test-candidate','0.27.0-resumable-long-render')
         target.write_text(source)
-    print('RENDER 0.27 development candidate staged (versionCode 29); original package and signer unchanged')
+    # 0.28 fixes thermal scheduling and visible native pause state. Preparing
+    # a build does not install it or prove the device's signing identity.
+    for name in ('app/build.gradle.kts','full-app/app/build.gradle'):
+        target=ROOT/name
+        source=target.read_text()
+        old='versionCode = 29' if name.endswith('.kts') else 'versionCode 29'
+        new='versionCode = 30' if name.endswith('.kts') else 'versionCode 30'
+        if source.count(old)!=1:
+            raise RuntimeError('V028_MONOTONIC_VERSION_ADAPTER_DRIFT: '+name)
+        source=source.replace(old,new,1).replace(
+            '0.27.0-resumable-long-render','0.28.0-native-control-reliability')
+        target.write_text(source)
+    print('RENDER 0.28 development candidate staged (versionCode 30); original package and signer unchanged')
 if __name__=='__main__':prepare()

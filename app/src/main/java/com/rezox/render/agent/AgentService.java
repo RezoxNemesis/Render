@@ -168,7 +168,7 @@ public final class AgentService extends Service {
                 secrets.enabled(false);
                 secrets.status("Result journal failed. Recovery required; automatic replay disabled.");
             }
-            AgentWorkPresence.finish(this,receiptStored?state:"recovery_required");
+            AgentWorkPresence.finish(this,receiptStored?state:"recovery_required",result);
             active=null;PROCESS_BUSY.set(false);
         }
     }

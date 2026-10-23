@@ -89,6 +89,7 @@ public class BlenderActivity extends NativeActivity {
         self.assertTrue(runtime.exists())
         with zipfile.ZipFile(runtime) as z:
             self.assertIn("scripts/startup/render_agent_startup.py", z.namelist())
+            self.assertIn("scripts/startup/render_native_hud.py", z.namelist())
         java = self.output / "java/org/blender/blender/BlenderActivity.java"
         self.assertTrue(java.exists())
         self.assertIn("RENDER_AGENT_SPOOL",java.read_text())

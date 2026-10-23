@@ -5,6 +5,7 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.RectF;
 import android.os.Handler;
 import android.os.Looper;
@@ -52,8 +53,8 @@ public final class StudioLiveHandOverlay {
         Overlay hand=new Overlay(activity);
         hand.setClickable(false);hand.setFocusable(false);
         hand.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        int width=(int)(230*activity.getResources().getDisplayMetrics().density);
-        int height=(int)(75*activity.getResources().getDisplayMetrics().density);
+        int width=(int)(250*activity.getResources().getDisplayMetrics().density);
+        int height=(int)(92*activity.getResources().getDisplayMetrics().density);
         FrameLayout.LayoutParams params=new FrameLayout.LayoutParams(width,height,Gravity.TOP|Gravity.END);
         params.topMargin=(int)(15*activity.getResources().getDisplayMetrics().density);
         params.rightMargin=(int)(12*activity.getResources().getDisplayMetrics().density);
@@ -85,6 +86,7 @@ public final class StudioLiveHandOverlay {
                 ((ViewGroup)previous.getParent()).removeView(previous);
         }
         overlay=null;owner=new WeakReference<>(null);
+        lastX=-1;lastY=-1;lastTouch=0L;
     }
     public static void onRealTouch(MotionEvent event){
         // Real owner touch only, already delivered to Blender's NativeActivity.
@@ -112,8 +114,11 @@ public final class StudioLiveHandOverlay {
             .put("native_stage",state.stage)
             .put("progress",state.progress)
             .put("working",state.isWorking())
+            .put("paused",state.isPaused())
+            .put("recovery_required",state.needsRecovery())
             .put("shown_in_native_editor",active!=null&&overlay!=null&&overlay.getParent()!=null)
-            .put("hand_tracking_mode",recent?"actual_owner_touch":state.isWorking()?"native_bpy_status":confirmed?"confirmed_native_result":"idle")
+            .put("hand_tracking_mode",recent?"actual_owner_touch":state.isWorking()?"native_bpy_status":
+                state.hasPersistentNotice()?"native_pause_or_recovery":confirmed?"confirmed_native_result":"idle")
             .put("confirmed_native_object",confirmed?lastConfirmedObject:JSONObject.NULL)
             .put("confirmed_native_operation",confirmed?lastConfirmedOperation:JSONObject.NULL)
             .put("last_touch_is_real_user_event",recent)
@@ -129,6 +134,7 @@ public final class StudioLiveHandOverlay {
      */
     private static final class TouchMarker extends View {
         private final Paint pen=new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Path arrow=new Path();
         private final Handler handler=new Handler(Looper.getMainLooper());
         private boolean running;
         private final Runnable tick=new Runnable(){@Override public void run(){
@@ -144,14 +150,25 @@ public final class StudioLiveHandOverlay {
             if(lastTouch<=0||since<0||since>850||lastX<0||lastY<0)return;
             float density=getResources().getDisplayMetrics().density;
             float r=16*density,fade=Math.max(0,1-since/850f);
-            float x=Math.min(Math.max(lastX,r),getWidth()-r);
-            float y=Math.min(Math.max(lastY,r),getHeight()-r);
+            float x=lastX,y=lastY;
             pen.setStyle(Paint.Style.STROKE);pen.setStrokeWidth(2.5f*density);
             pen.setColor(Color.argb(Math.round(fade*210),86,177,255));
             c.drawCircle(x,y,r,pen);
             pen.setStyle(Paint.Style.FILL);
             pen.setColor(Color.argb(Math.round(fade*140),255,255,255));
             c.drawCircle(x,y,4*density,pen);
+            // A small cursor anchored to the actual event location. It never
+            // moves to an invented target for a native API command.
+            arrow.reset();arrow.moveTo(x,y);
+            arrow.lineTo(x+8*density,y+23*density);
+            arrow.lineTo(x+12*density,y+15*density);
+            arrow.lineTo(x+21*density,y+12*density);
+            arrow.close();
+            pen.setColor(Color.argb(Math.round(fade*235),245,250,255));
+            c.drawPath(arrow,pen);
+            pen.setStyle(Paint.Style.STROKE);pen.setStrokeWidth(1.5f*density);
+            pen.setColor(Color.argb(Math.round(fade*235),35,75,110));
+            c.drawPath(arrow,pen);
         }
     }
     private static final class Overlay extends View {
@@ -173,26 +190,38 @@ public final class StudioLiveHandOverlay {
             boolean touched=lastTouch>0&&elapsed>=0&&elapsed<2500;
             boolean confirmed=lastNativeResultAt>0&&
                     android.os.SystemClock.elapsedRealtime()-lastNativeResultAt<2200;
-            if(!state.isWorking()&&!touched&&!confirmed)return;
+            if(!state.isWorking()&&!state.hasPersistentNotice()&&!touched&&!confirmed)return;
             float scale=getResources().getDisplayMetrics().density;
             paint.setColor(0xD9293037);paint.setStyle(Paint.Style.FILL);
             canvas.drawRoundRect(new RectF(0,0,getWidth(),getHeight()),14*scale,14*scale,paint);
             paint.setColor(Color.WHITE);paint.setTextSize(24*scale);
             canvas.drawText(touched?"☝":"✋",12*scale,36*scale,paint);
             paint.setTextSize(11*scale);
-            String label=touched?"Real finger gesture":state.isWorking()?state.action:
+            String label=touched?"Real finger gesture":state.isPaused()?"Render paused":
+                    state.needsRecovery()?"Inspect interrupted command":state.isWorking()?state.displayAction():
                     (lastConfirmedObject.isEmpty()?lastConfirmedOperation:"Edited "+lastConfirmedObject);
             if(label.length()>28)label=label.substring(0,25)+"...";
             canvas.drawText(label,53*scale,27*scale,paint);
             paint.setColor(0xffa7d0ff);paint.setTextSize(10*scale);
-            canvas.drawText(touched?"Owner touch, passed through":
-                    (confirmed&&!state.isWorking()?"Confirmed native receipt":"Native bpy API • no fake taps"),
+            String detail=state.isWorking()||state.hasPersistentNotice()?state.displayStage():
+                    confirmed?"Confirmed native receipt":"Native Blender command";
+            if(detail.length()>29)detail=detail.substring(0,26)+"...";
+            canvas.drawText(touched?"Owner touch, passed through":detail,
                     53*scale,45*scale,paint);
-            if(state.isWorking()&&state.progress>=0){
+            if((state.isWorking()||state.isPaused())&&state.progress>=0){
+                paint.setColor(0xff45505c);
+                canvas.drawRect(53*scale,57*scale,213*scale,60*scale,paint);
                 paint.setColor(0xff79b3ff);
                 canvas.drawRect(53*scale,57*scale,
                     (53+(160*state.progress/100f))*scale,60*scale,paint);
             }
+            paint.setColor(Color.WHITE);paint.setTextSize(10*scale);
+            String footer=state.needsRecovery()?"Inspect receipt before retrying":
+                state.isWorking()||state.isPaused()?
+                    state.progress>=0?state.progress+"% • native reported progress":
+                        state.isPaused()?"Waiting for safe resume":"Waiting for native progress":
+                touched?"Touch reaches Blender":"Native action confirmed";
+            canvas.drawText(footer,53*scale,78*scale,paint);
         }
     }
 }

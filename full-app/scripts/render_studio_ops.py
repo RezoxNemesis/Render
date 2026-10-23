@@ -147,7 +147,13 @@ def _compare(scene,p):
 def _view_inspect(scene):
     areas=[_info(area,space) for area,space in _areas()]
     polygons=sum(len(ob.data.polygons) for ob in scene.objects if ob.type=='MESH')
+    try:
+        import render_native_hud
+        native_ui=render_native_hud.snapshot()
+    except Exception:
+        native_ui={'installed_in_blender_viewport':False}
     return {'viewports':areas,'total_mesh_polygons':polygons,
+            'native_artist_ui':native_ui,
             'active_object':bpy.context.view_layer.objects.active.name if bpy.context.view_layer.objects.active else None,
             'render_quality_modified':False,'driver_jitter_measured':False,
             'viewport_clip_precision_is_not_texture_fidelity':True}

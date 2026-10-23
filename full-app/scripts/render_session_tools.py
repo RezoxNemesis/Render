@@ -436,6 +436,12 @@ def _file_menu(self, context):
 
 def _statusbar(self, context):
     try:
+        import render_native_hud
+        if render_native_hud.draw_statusbar(self.layout):
+            return
+    except Exception:
+        pass
+    try:
         p = render_progress()
         if not p:
             return
@@ -471,6 +477,11 @@ def install():
     render_assets.install()
     import render_v25_recovery
     render_v25_recovery.install()
+    try:
+        import render_native_hud
+        render_native_hud.install(render_progress)
+    except Exception as error:
+        print("Render Blender viewport HUD unavailable:", type(error).__name__)
     bpy.types.TOPBAR_MT_file.append(_file_menu)
     try:
         bpy.types.STATUSBAR_HT_header.append(_statusbar)

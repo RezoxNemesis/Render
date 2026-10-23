@@ -93,6 +93,28 @@ class BlenderBridgeTests(unittest.TestCase):
         self.assertEqual("NATIVE_BLENDER_ACTION_UNAVAILABLE", report["error"])
         self.assertEqual(1, len(self.objects))
 
+    def test_blender_hud_completion_follows_durable_native_result(self):
+        events=[]
+        self.module._native_ui_event=lambda method,value:events.append((method,value))
+        report=self.job("blender.object.add_cube",{"name":"HudCube"})
+        self.assertEqual("succeeded",report["state"])
+        self.assertEqual(["command_started","command_finished"],[method for method,value in events])
+        result_path=Path(self.tmp.name)/"results"/(self.request_id+".json")
+        self.assertTrue(result_path.is_file())
+        self.assertEqual(report,events[-1][1])
+
+    def test_unwritten_native_result_cannot_confirm_blender_arrow(self):
+        events=[]
+        self.module._native_ui_event=lambda method,value:events.append((method,value))
+        def no_write(*args):raise OSError("test unavailable disk")
+        self.module._write_result=no_write
+        pending=Path(self.tmp.name)/"pending";pending.mkdir()
+        (pending/(self.request_id+".json")).write_text(json.dumps(dict(
+            id=self.request_id,action="blender.object.add_cube",args={"name":"Unconfirmed"},deadline=time.time()+60)))
+        self.module._poll()
+        self.assertEqual("recovery_required",events[-1][1]["state"])
+        self.assertTrue((Path(self.tmp.name)/"working"/(self.request_id+".json")).is_file())
+
     def test_expired_mutation_never_executes(self):
         report = self.job("blender.object.add_cube", {"name":"TooLate"}, time.time()-5)
         self.assertEqual("failed", report["state"])

@@ -19,6 +19,17 @@ public final class ProductionBatch {
     private static final AtomicBoolean BUSY=new AtomicBoolean(false);
     private ProductionBatch(){}
 
+    /** Injectable device boundary for deterministic scheduling tests. Test
+     * receipts never establish that Blender ran on an Android device. */
+    interface Runtime {
+        long now();
+        JSONObject sample() throws Exception;
+        void sleep(long millis) throws InterruptedException;
+        boolean frameSpaceAvailable() throws Exception;
+        AutoCloseable wake();
+        JSONObject render(JSONObject args) throws Exception;
+    }
+
     static JSONObject jobStatus(Context context,String jobId)throws Exception{
         File file=ProductionFiles.file(context,jobId,"manifest.json");
         if(!file.isFile() || file.length()>16*1024*1024)throw new IllegalArgumentException("RENDER_MANIFEST_UNAVAILABLE");
@@ -54,6 +65,21 @@ public final class ProductionBatch {
     }
 
     public static JSONObject advance(Context context,JSONObject p,AtomicBoolean cancelled)throws Exception{
+        return advance(context,p,cancelled,new Runtime(){
+            public long now(){return SystemClock.elapsedRealtime();}
+            public JSONObject sample()throws Exception{return ProductionThermalTelemetry.sample(context);}
+            public void sleep(long millis)throws InterruptedException{Thread.sleep(millis);}
+            public boolean frameSpaceAvailable()throws Exception{
+                return RenderStorageBudget.frameSpaceAvailable(context,p.getString("job_id"));
+            }
+            public AutoCloseable wake(){return NativeWakeGuard.acquire(context,"blender.scene.render_video");}
+            public JSONObject render(JSONObject args)throws Exception{
+                return new BlenderSpool(context).execute("blender.production.execute",args,cancelled);
+            }
+        });
+    }
+
+    static JSONObject advance(Context context,JSONObject p,AtomicBoolean cancelled,Runtime runtime)throws Exception{
         ProductionBridge.fields(p,"job_id,max_frames,max_wall_ms,cooldown_max_ms,expected_fingerprint");
         String jobId=p.getString("job_id");
         JSONObject current=jobStatus(context,jobId);
@@ -66,58 +92,72 @@ public final class ProductionBatch {
         if(Looper.myLooper()==Looper.getMainLooper())
             throw new IllegalStateException("PRODUCTION_BATCH_REQUIRES_WORKER_THREAD");
         if(!BUSY.compareAndSet(false,true))
-            return report(context,jobId,"PAUSED_ALREADY_RENDERING",0,0,ProductionThermalTelemetry.sample(context));
-        final long started=SystemClock.elapsedRealtime();
+            return report(context,jobId,"PAUSED_ALREADY_RENDERING",0,0,runtime.sample());
+        final long started=runtime.now();
         int produced=0;
         String reason="TIME_BUDGET_REACHED";
-        try(NativeWakeGuard wake=NativeWakeGuard.acquire(context,"blender.scene.render_video")){
-            while(produced<maxFrames && SystemClock.elapsedRealtime()-started<maxWall){
-                if(cancelled.get())return report(context,jobId,"PAUSED_USER_STOP",produced,SystemClock.elapsedRealtime()-started,ProductionThermalTelemetry.sample(context));
+        try{
+            while(produced<maxFrames && runtime.now()-started<maxWall){
+                if(cancelled.get())return report(context,jobId,"PAUSED_USER_STOP",produced,runtime.now()-started,runtime.sample());
                 current=jobStatus(context,jobId);
                 if(framesComplete(current)){
                     reason="FRAMES_COMPLETE";break;
                 }
-                JSONObject reading=ProductionThermalTelemetry.sample(context);
+                JSONObject reading=runtime.sample();
                 ProductionThermalPolicy.Decision decision=ProductionThermalPolicy.evaluate(
                     reading.getInt("thermal_status"),reading.getBoolean("low_memory"),
                     reading.getLong("available_memory_bytes"),cancelled.get());
                 if(!decision.renderAllowed){
                     if(!decision.reason.equals("PAUSED_THERMAL_PRESSURE")||cooldown==0){
-                        return report(context,jobId,decision.reason,produced,SystemClock.elapsedRealtime()-started,reading);
+                        return report(context,jobId,cancelled.get()?"PAUSED_USER_STOP":decision.reason,produced,runtime.now()-started,reading);
                     }
-                    long pauseStarted=SystemClock.elapsedRealtime();
+                    long pauseStarted=runtime.now();
                     // Cooldown is bounded. Never reinterpret Android severe=3 as safe
                     // just because the outer case feels cool.
                     int consecutiveCool=0;
-                    while(SystemClock.elapsedRealtime()-pauseStarted<cooldown &&
-                          SystemClock.elapsedRealtime()-started<maxWall &&
+                    AgentWorkPresence.stage(context,"PAUSED_THERMAL_PRESSURE - waiting for Android sensor",-1);
+                    while(runtime.now()-pauseStarted<cooldown &&
+                          runtime.now()-started<maxWall &&
                           !cancelled.get()){
-                        Thread.sleep(5000);
-                        reading=ProductionThermalTelemetry.sample(context);
+                        runtime.sleep(Math.max(1,Math.min(5000,Math.min(cooldown-(runtime.now()-pauseStarted),
+                            maxWall-(runtime.now()-started)))));
+                        reading=runtime.sample();
                         decision=ProductionThermalPolicy.evaluate(reading.getInt("thermal_status"),
                             reading.getBoolean("low_memory"),reading.getLong("available_memory_bytes"),cancelled.get());
-                        if(decision.renderAllowed){
+                        // An unavailable sensor is not a confirmed cool sample
+                        // after Android has already reported severe pressure.
+                        if(decision.renderAllowed&&!decision.statusUnavailable){
                             consecutiveCool++;
                             if(consecutiveCool>=2)break;
-                        }else if(!decision.reason.equals("PAUSED_THERMAL_PRESSURE"))
-                            return report(context,jobId,decision.reason,produced,SystemClock.elapsedRealtime()-started,reading);
+                        }else if(!decision.renderAllowed&&!decision.reason.equals("PAUSED_THERMAL_PRESSURE"))
+                            return report(context,jobId,cancelled.get()?"PAUSED_USER_STOP":decision.reason,produced,runtime.now()-started,reading);
                         else consecutiveCool=0;
                     }
+                    if(cancelled.get())return report(context,jobId,"PAUSED_USER_STOP",produced,runtime.now()-started,reading);
                     if(!decision.renderAllowed||consecutiveCool<2)
-                        return report(context,jobId,"PAUSED_THERMAL_PRESSURE",produced,SystemClock.elapsedRealtime()-started,reading);
+                        return report(context,jobId,"PAUSED_THERMAL_PRESSURE",produced,runtime.now()-started,reading);
                 }
-                if(SystemClock.elapsedRealtime()-started >= maxWall){
+                if(runtime.now()-started >= maxWall){
                     reason="TIME_BUDGET_REACHED";break;
                 }
                 // Disk pressure is distinct from memory/thermal pressure.
                 // Stop BEFORE launching an expensive native frame rather than
                 // writing a partial PNG and losing the last known good master.
-                if(!RenderStorageBudget.frameSpaceAvailable(context,jobId))
+                if(!runtime.frameSpaceAvailable())
                     return report(context,jobId,"PAUSED_STORAGE_PRESSURE",produced,
-                        SystemClock.elapsedRealtime()-started,reading);
+                        runtime.now()-started,reading);
+                if(cancelled.get())return report(context,jobId,"PAUSED_USER_STOP",produced,runtime.now()-started,reading);
                 JSONObject nativeArgs=new JSONObject().put("operation","render.step")
                     .put("payload",new JSONObject().put("job_id",jobId));
-                JSONObject result=new BlenderSpool(context).execute("blender.production.execute",nativeArgs,cancelled);
+                int completed=current.getInt("completed_frames"),total=current.getInt("total_frames");
+                AgentWorkPresence.stage(context,"Rendering frame "+current.getInt("next_frame")+
+                    " - "+completed+"/"+total+" verified",total>0?(int)(completed*100L/total):-1);
+                JSONObject result;
+                // Keep the CPU awake only while a native frame is outstanding.
+                // Cooling, memory/storage pauses and inter-frame pacing hold no lock.
+                try(AutoCloseable wake=runtime.wake()){
+                    result=runtime.render(nativeArgs);
+                }
                 if(!jobId.equals(result.optString("job_id")))
                     throw new IllegalStateException("NATIVE_RENDER_JOB_RECEIPT_MISMATCH");
                 if(result.optInt("completed_frames")<=current.getInt("completed_frames"))
@@ -129,13 +169,13 @@ public final class ProductionBatch {
                 if(reading.optInt("thermal_status")==2){
                     // Tiny pacing at Android MODERATE prevents avoidable ramp-up
                     // without changing any pixel-quality setting.
-                    Thread.sleep(ProductionThermalPolicy.evaluate(2,false,
+                    runtime.sleep(ProductionThermalPolicy.evaluate(2,false,
                         reading.getLong("available_memory_bytes"),false).cooldownMillis);
                 }
             }
             if(produced==maxFrames && !reason.equals("FRAMES_COMPLETE"))
                 reason="BATCH_LIMIT_REACHED";
-            return report(context,jobId,reason,produced,SystemClock.elapsedRealtime()-started,ProductionThermalTelemetry.sample(context));
+            return report(context,jobId,reason,produced,runtime.now()-started,runtime.sample());
         }finally{
             BUSY.set(false);
         }

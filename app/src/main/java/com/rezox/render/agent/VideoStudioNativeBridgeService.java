@@ -186,7 +186,7 @@ public final class VideoStudioNativeBridgeService extends Service {
                 }
             }
             if(liveWork) {
-                try {AgentWorkPresence.finish(this,state);}
+                try {AgentWorkPresence.finish(this,state,outcome.optJSONObject("native_result"));}
                 catch(Exception ignored) { /* Native journal is the source of truth. */ }
             }
             send(caller,id,outcome);

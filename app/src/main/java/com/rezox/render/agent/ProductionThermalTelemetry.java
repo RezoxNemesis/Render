@@ -32,7 +32,7 @@ public final class ProductionThermalTelemetry {
         try{sticky=context.registerReceiver(null,new IntentFilter(Intent.ACTION_BATTERY_CHANGED));}catch(RuntimeException ignored){}
         double batteryC=Double.NaN;
         if(sticky!=null){
-            int deciC=sticky.getIntExtra(BatteryManager.EXTRA_TEMPERATURE,-1);
+            int deciC=sticky.getIntExtra(BatteryManager.EXTRA_TEMPERATURE,Integer.MIN_VALUE);
             if(deciC>=-200 && deciC<=1100)batteryC=deciC/10.0;
         }
         JSONObject data=new JSONObject().put("source","Android PowerManager")

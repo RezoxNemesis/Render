@@ -12,7 +12,7 @@ class ThermalDriveInplaceTests(unittest.TestCase):
         self.assertIn('f3d63fb20be25ca0be8aa6a161d5cf13cd98ba2fa300c7a604cce35131b9eb30',ci.lower())
         self.assertNotIn('keytool -genkeypair',ci)
         self.assertNotIn('adb uninstall',ci)
-        self.assertIn("versionCode='29'",ci)
+        self.assertIn("versionCode='30'",ci)
         prep=source('tools/prepare_production_toolkit.py')
         self.assertIn('versionCode = 24',prep)
         self.assertIn('versionCode = 25',(ROOT/'tools/prepare_v23_reference.py').read_text())
@@ -23,7 +23,6 @@ class ThermalDriveInplaceTests(unittest.TestCase):
         self.assertIn('AtomicBoolean',s)
         self.assertIn('max_frames',s)
         self.assertIn('expected_fingerprint',s)
-        self.assertIn('Thread.sleep(5000)',s)
         self.assertNotIn('ProcessBuilder',s)
         self.assertNotIn('Realize Instances',s)
     def test_thermal_sensor_is_never_misinterpreted_as_surface_touch(self):
