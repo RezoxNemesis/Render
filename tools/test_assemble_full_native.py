@@ -26,6 +26,10 @@ public class BlenderActivity extends NativeActivity {
     super.onCreate(state);
     setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
     enterImmersive();
+    requestAllFilesAccess();
+  }
+  private void chooseLogPath() {
+      nativeSetLogPath(logPath);
   }
   private void enterImmersive() {
     View d = getWindow().getDecorView();
@@ -98,6 +102,8 @@ public class BlenderActivity extends NativeActivity {
         self.assertIn("RENDER_MOBILE_UI_MODE",java.read_text())
         self.assertIn("BlenderMobileControls.confirmHome(this)",java.read_text())
         self.assertIn("BlenderMobileControls.applySafeInsets(this)",java.read_text())
+        self.assertNotIn("    requestAllFilesAccess();",java.read_text())
+        self.assertIn('.putString("native_log_path", logPath)',java.read_text())
         self.assertTrue((self.output / "assets/licenses/Render-Full-Native-Sources.txt").exists())
         root = ET.parse(self.output / "AndroidManifest.xml").getroot()
         assert root.find("queries") is not None

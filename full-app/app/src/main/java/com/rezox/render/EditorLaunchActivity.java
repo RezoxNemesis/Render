@@ -17,6 +17,8 @@ import android.widget.TextView;
 import com.rezox.render.ui.StudioUi;
 import com.rezox.render.omega.engine.EngineEvidence;
 import com.rezox.render.omega.engine.EngineRuntimeSeal;
+import com.rezox.render.omega.engine.EngineStartupLog;
+import com.rezox.render.omega.engine.EngineStartupRecovery;
 import com.rezox.render.agent.RenderRecoveryStatus;
 import org.json.JSONObject;
 import java.io.File;
@@ -104,8 +106,18 @@ public final class EditorLaunchActivity extends Activity {
         StudioUi.add(page,StudioUi.text(this,
             "If the Blender window still stays black after preparation, open Diagnostics. Startup logs can identify missing GPU features, driver errors or native crashes. A successful APK build alone cannot prove device GPU compatibility.",
             12,StudioUi.MUTED,false));
-        // Automatic first launch; the button remains available after failure/return.
-        status.postDelayed(this::prepare,250);
+        // Native process death restores this task too. Its old Intent must not
+        // become an automatic crash/relaunch loop. A still-live preflight worker
+        // may resume across Activity recreation; a dead process has no such gate.
+        try{
+            // Consume an explicit request even while another Activity's worker
+            // is alive, so its restored Intent cannot authorize an extra retry.
+            boolean requested=EngineStartupRecovery.allowAutomaticStart(
+                this,getIntent().getStringExtra(EngineStartupRecovery.EXTRA_REQUEST));
+            boolean allowed=GLOBAL_PREFLIGHT.get()||requested;
+            if(allowed)status.postDelayed(this::prepare,250);
+            else report("Previous Blender startup was interrupted. Automatic retry paused; open diagnostics or use PREPARE & LAUNCH BLENDER to retry once.");
+        }catch(Exception error){report("Startup recovery state unavailable. Open diagnostics before retrying.");}
     }
     private String collectDevice() {
         StringBuilder data=new StringBuilder();
@@ -150,9 +162,13 @@ public final class EditorLaunchActivity extends Activity {
             return;
         }
         EngineEvidence.record(this,EngineEvidence.Stage.PREFLIGHT_ACCEPTED);
+        getSharedPreferences(STATE_PREF,MODE_PRIVATE).edit()
+            .putLong("launch_started_wall_ms",System.currentTimeMillis())
+            .remove("native_log_path").apply();
         new Thread(()->{
             boolean handedToUi=false;
             try {
+                EngineStartupRecovery.markPending(this);
                 // SHA-checking a multi-gigabyte .blend must never block engine
                 // startup. Device can open Blender while diagnostics verify.
                 new Thread(()->{
@@ -315,6 +331,7 @@ public final class EditorLaunchActivity extends Activity {
         List<File> candidates=new ArrayList<>();
         candidates.add(new File(Environment.getExternalStoragePublicDirectory(
             Environment.DIRECTORY_DOWNLOADS),"blender-startup.log"));
+        candidates.add(new File(Environment.getExternalStorageDirectory(),"blender-startup.log"));
         if(getExternalFilesDir(null)!=null)
             candidates.add(new File(getExternalFilesDir(null),"blender-startup.log"));
         StringBuilder data=new StringBuilder("RENDER EDITOR DIAGNOSTICS\n");
@@ -323,17 +340,22 @@ public final class EditorLaunchActivity extends Activity {
         if(recoveryEvidence!=null)data.append("Project and native render evidence: ").append(recoveryEvidence.toString()).append("\n\n");
         data.append("Startup stage: ").append(getSharedPreferences(STATE_PREF,MODE_PRIVATE)
             .getString("stage","Unknown")).append("\n\n");
-        for(File file:candidates) {
-            if(!file.isFile())continue;
-            try(FileInputStream input=new FileInputStream(file)){
-                long skip=Math.max(0,file.length()-32000);
-                while(skip>0){long moved=input.skip(skip);if(moved<=0)break;skip-=moved;}
-                byte[] bytes=new byte[32000];
-                int n=input.read(bytes);
-                if(n>0)data.append("Log file: ").append(file.getAbsolutePath())
-                    .append("\n").append(new String(bytes,0,n,StandardCharsets.UTF_8));
+        String selected=getSharedPreferences(STATE_PREF,MODE_PRIVATE)
+            .getString("native_log_path",null);
+        long started=getSharedPreferences(STATE_PREF,MODE_PRIVATE)
+            .getLong("launch_started_wall_ms",0);
+        EngineStartupLog.Selection log=EngineStartupLog.select(
+            selected==null?null:new File(selected),candidates,started);
+        if(log.file!=null){
+            data.append(log.current?"Current launch log: ":
+                "Historical log from an earlier launch (not current startup evidence): ")
+                .append(log.file.getAbsolutePath()).append("\n");
+            try{
+                String tail=EngineStartupLog.readTail(log.file,32000);
+                data.append(tail.isEmpty()?"No native log output yet.\n":tail);
+                if(!log.current)data.append("\nNo fresh log for the current launch yet.");
                 return data.toString();
-            }catch(Exception e){data.append("Could not read: ").append(file.getName()).append("\n");}
+            }catch(Exception error){data.append("Selected startup log is unavailable.\n");}
         }
         data.append("No readable Blender startup log yet. Android logcat may be needed if the native process crashes before log initialization.");
         return data.toString();

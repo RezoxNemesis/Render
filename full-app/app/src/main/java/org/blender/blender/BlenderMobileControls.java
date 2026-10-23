@@ -215,6 +215,18 @@ public final class BlenderMobileControls {
         });
 
         add(activity,tools,"⌂  Render Home",()->confirmHome(activity));
+        add(activity,tools,"File browser access",()->{
+            if(Build.VERSION.SDK_INT<30||android.os.Environment.isExternalStorageManager()){
+                toast(activity,"File browser access is already available");return;
+            }
+            try{
+                activity.startActivity(new Intent(
+                    android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                    android.net.Uri.parse("package:"+activity.getPackageName())));
+            }catch(Exception error){
+                toast(activity,"Storage settings unavailable; use the Android file picker");
+            }
+        });
         add(activity,tools,"▣  Render Image (Protected)",()->send(activity,
               "blender.render.plan_still",new JSONObject()));
         add(activity,tools,"▶  Render Animation",()->send(activity,
@@ -328,11 +340,43 @@ public final class BlenderMobileControls {
                 });
             }
         });
+        // Startup has no defensible percentage. Show elapsed waiting time
+        // until bpy actually responds, independently of render-frame progress.
+        LinearLayout startupPanel=new LinearLayout(activity);
+        startupPanel.setOrientation(LinearLayout.VERTICAL);
+        startupPanel.setPadding(px(activity,8),px(activity,8),px(activity,8),px(activity,8));
+        startupPanel.setBackground(shape(PANEL,12,activity));
+        TextView startupStatus=new TextView(activity);
+        startupStatus.setTextColor(WHITE);startupStatus.setTextSize(12);
+        startupPanel.addView(startupStatus);
+        ProgressBar startupProgress=new ProgressBar(activity,null,
+                android.R.attr.progressBarStyleHorizontal);
+        startupProgress.setIndeterminate(true);
+        startupPanel.addView(startupProgress,new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,px(activity,7)));
+        LinearLayout.LayoutParams startupLayout=new LinearLayout.LayoutParams(
+                px(activity,190),ViewGroup.LayoutParams.WRAP_CONTENT);
+        startupLayout.topMargin=px(activity,5);buttons.addView(startupPanel,startupLayout);
+        final long startupElapsed=android.os.SystemClock.elapsedRealtime();
+        final File editorHeartbeat=new File(activity.getFilesDir(),SPOOL+"/ready");
+        final boolean[] editorResponded={false};
         final Handler refreshHandler=new Handler(Looper.getMainLooper());
         final int[] ownerVisibleChecks={0};
         final Runnable pulse=new Runnable(){
             @Override public void run(){
                 if(activity.isFinishing()||activity.isDestroyed())return;
+                long heartbeatAge=System.currentTimeMillis()-editorHeartbeat.lastModified();
+                if(!editorResponded[0]&&editorHeartbeat.isFile()&&heartbeatAge>=0&&heartbeatAge<15000){
+                    editorResponded[0]=true;
+                    com.rezox.render.omega.engine.EngineStartupRecovery.markReady(activity);
+                }
+                startupPanel.setVisibility(editorResponded[0]?View.GONE:View.VISIBLE);
+                if(!editorResponded[0]){
+                    long seconds=(android.os.SystemClock.elapsedRealtime()-startupElapsed)/1000;
+                    startupStatus.setText("Starting Blender · "+seconds+"s\n"+
+                        (seconds>=120?"Still waiting for the native editor response":
+                            "Initializing the native editor"));
+                }
                 RenderManualJobs.acceptMenuRequest(activity);
                 if(++ownerVisibleChecks[0]%15==0){
                     WORK.execute(()->{

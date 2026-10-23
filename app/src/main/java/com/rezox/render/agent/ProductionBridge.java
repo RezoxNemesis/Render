@@ -159,6 +159,8 @@ public final class ProductionBridge {
         }
         if(operation.equals("editor.open")){
             fields(p,"");Intent intent=new Intent().setClassName(context,"com.rezox.render.EditorLaunchActivity").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            intent.putExtra(com.rezox.render.omega.engine.EngineStartupRecovery.EXTRA_REQUEST,
+                com.rezox.render.omega.engine.EngineStartupRecovery.request(context));
             context.startActivity(intent);
             return new JSONObject().put("launch_requested",true).put("editor_ready",editorReady(context))
                 .put("completed_editor_start",false).put("note","Android may require the owner to foreground Render; verify native heartbeat before editing.");

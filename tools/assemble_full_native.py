@@ -230,6 +230,19 @@ def patch_native_activity(path):
     }
 """
     java = java.replace(original, patch)
+    # App-private projects, runtime and SAF imports do not require all-files
+    # access. Launching Settings after NativeActivity starts steals its window
+    # during Vulkan initialization. Keep broad file access an explicit action.
+    storage_request = "    requestAllFilesAccess();"
+    if java.count(storage_request) != 1:
+        raise ValueError("PINNED_BLENDER_STORAGE_REQUEST_HOOK_CHANGED")
+    java = java.replace(storage_request, "    // File browser access is requested explicitly from Render controls.", 1)
+    log_hook = "      nativeSetLogPath(logPath);"
+    if java.count(log_hook) != 1:
+        raise ValueError("PINNED_BLENDER_LOG_PATH_HOOK_CHANGED")
+    java = java.replace(log_hook, log_hook + '''
+      getSharedPreferences("render_editor_launch", MODE_PRIVATE).edit()
+          .putString("native_log_path", logPath).apply();''', 1)
     final_init = "    super.onCreate(state);"
     if final_init in java:
         java = java.replace(final_init, final_init + """
