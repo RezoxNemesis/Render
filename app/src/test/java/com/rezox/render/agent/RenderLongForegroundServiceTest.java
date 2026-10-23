@@ -55,7 +55,7 @@ public class RenderLongForegroundServiceTest {
         assertFalse(RenderLongForegroundService.resumeAllowed(
             true,false,false,"rendering","AWAITING_EDITOR_FOREGROUND"));
         assertFalse(RenderLongForegroundService.resumeAllowed(
-            true,false,true,"encoded","OUTPUT_READY_EXPORT_RETRYABLE"));
+            true,true,false,"encoded","OUTPUT_READY_EXPORT_RETRYABLE"));
         assertFalse(RenderLongForegroundService.resumeAllowed(
             false,false,false,"encoded","OUTPUT_READY_EXPORT_RETRYABLE"));
         assertFalse(RenderLongForegroundService.resumeAllowed(
