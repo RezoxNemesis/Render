@@ -1,5 +1,6 @@
 package com.rezox.render.agent;
 
+import com.rezox.render.omega.integration.OmegaOperations;
 import android.content.Context;
 import android.os.SystemClock;
 import org.json.JSONObject;
@@ -48,6 +49,15 @@ public final class BlenderSpool {
             throw new IllegalArgumentException("INVALID_FRAME");
     }
     private static void checkArguments(String action, JSONObject args) throws Exception {
+        if("omega.dispatch".equals(action)){
+            if(args.length()!=3 || !(args.opt("operation") instanceof String)
+                    || !OmegaOperations.isReserved(args.getString("operation"))
+                    || !(args.opt("payload") instanceof JSONObject)
+                    || !(args.opt("available_memory_bytes") instanceof Number)
+                    || args.getLong("available_memory_bytes")<0)
+                throw new IllegalArgumentException("INVALID_OMEGA_ENVELOPE");
+            return;
+        }
         if("blender.scene.summary".equals(action)){
             if(args.length()!=0)throw new IllegalArgumentException("UNEXPECTED_ARGUMENT");
             return;
@@ -243,7 +253,8 @@ public final class BlenderSpool {
             action.equals("blender.scene.populate_lively") ? 120000L :
             action.equals("blender.scene.batch_assembly") ? 120000L :
             action.equals("blender.scene.render_still") ? 480000L :
-            action.equals("blender.project.save_copy") ? 120000L : 20000L;
+            action.equals("blender.project.save_copy") ? 120000L :
+            action.equals("omega.dispatch") ? 120000L : 20000L;
         JSONObject envelope=new JSONObject().put("id",id).put("action",action)
             .put("args",args).put("deadline",System.currentTimeMillis()/1000+timeoutMillis/1000);
         byte[] contents=envelope.toString().getBytes(StandardCharsets.UTF_8);

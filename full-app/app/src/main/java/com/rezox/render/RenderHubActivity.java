@@ -33,7 +33,15 @@ public final class RenderHubActivity extends Activity {
             ui.postDelayed(this,1000);
         }
     };
-    @Override public void onResume(){super.onResume();ui.post(refresh);}
+    @Override public void onResume(){
+        super.onResume();
+        ui.post(refresh);
+        // The owner has reopened Render; resume their previously consented
+        // job from committed PNG/MP4 receipts. Disk/hash work never blocks UI.
+        new Thread(()->com.rezox.render.agent.RenderLongForegroundService
+            .resumeConsentedVisibleJob(getApplicationContext()),
+            "render-resume-verified-export").start();
+    }
     @Override public void onPause(){ui.removeCallbacks(refresh);super.onPause();}
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -52,7 +60,10 @@ public final class RenderHubActivity extends Activity {
         StudioUi.add(page,brand);
         StudioUi.space(page,30);
 
-        StudioUi.add(page,StudioUi.label(this,"CREATION SPACE  /  V 0.19"));
+        String installedVersion="unknown";
+        try{installedVersion=getPackageManager().getPackageInfo(getPackageName(),0).versionName;}
+        catch(android.content.pm.PackageManager.NameNotFoundException ignored){}
+        StudioUi.add(page,StudioUi.label(this,"CREATION SPACE  /  "+installedVersion));
         StudioUi.space(page,10);
         StudioUi.add(page,StudioUi.text(this,"Your 3D studio.\nNow in your pocket.",31,StudioUi.WHITE,true));
         StudioUi.space(page,9);
@@ -145,6 +156,8 @@ public final class RenderHubActivity extends Activity {
     }
     private void launchEditor(String mode) {
         org.blender.blender.BlenderMobileControls.setMode(this,mode);
-        startActivity(new Intent(this,EditorLaunchActivity.class));
+        startActivity(new Intent(this,EditorLaunchActivity.class).putExtra(
+            com.rezox.render.omega.engine.EngineStartupRecovery.EXTRA_REQUEST,
+            com.rezox.render.omega.engine.EngineStartupRecovery.request(this)));
     }
 }

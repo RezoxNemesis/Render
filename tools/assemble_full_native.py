@@ -75,6 +75,7 @@ def merge_manifest(source):
     existing = {p.get(ANDROID + "name") for p in root.findall("uses-permission")}
     for permission in ("android.permission.FOREGROUND_SERVICE",
                        "android.permission.FOREGROUND_SERVICE_SPECIAL_USE",
+                       "android.permission.FOREGROUND_SERVICE_MEDIA_PROCESSING",
                        "android.permission.POST_NOTIFICATIONS",
                        "android.permission.WAKE_LOCK"):
         if permission not in existing:
@@ -94,11 +95,23 @@ def merge_manifest(source):
     ET.SubElement(filter_, "category", {ANDROID + "name": "android.intent.category.LAUNCHER"})
     for klass in ("com.rezox.render.MainActivity", "com.rezox.render.agent.AgentActivity",
                   "com.rezox.render.EditorLaunchActivity"):
-        ET.SubElement(application, "activity", {
+        is_reference_inbox = klass.endswith("agent.AgentActivity")
+        node = ET.SubElement(application, "activity", {
             ANDROID + "name": klass,
-            ANDROID + "exported": "false",
+            ANDROID + "exported": "true" if is_reference_inbox else "false",
             ANDROID + "screenOrientation": "unspecified",
         })
+        # Only explicit user SEND/Open Document grants arrive here; no Gallery
+        # enumeration or broad READ_MEDIA permissions are requested.
+        if is_reference_inbox:
+            for action in ("android.intent.action.SEND",
+                           "android.intent.action.SEND_MULTIPLE"):
+                for mime in ("image/*", "video/*"):
+                    intent = ET.SubElement(node, "intent-filter")
+                    ET.SubElement(intent, "action", {ANDROID + "name": action})
+                    ET.SubElement(intent, "category", {
+                        ANDROID + "name": "android.intent.category.DEFAULT"})
+                    ET.SubElement(intent, "data", {ANDROID + "mimeType": mime})
     service = ET.SubElement(application, "service", {
         ANDROID + "name": "com.rezox.render.agent.AgentService",
         ANDROID + "exported": "false",
@@ -107,6 +120,15 @@ def merge_manifest(source):
     ET.SubElement(service, "property", {
         ANDROID + "name": "android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE",
         ANDROID + "value": "User-started and visible remote native project-command session with notification, Stop and Revoke",
+    })
+    long_render = ET.SubElement(application, "service", {
+        ANDROID + "name": "com.rezox.render.agent.RenderLongForegroundService",
+        ANDROID + "exported": "false",
+        ANDROID + "foregroundServiceType": "mediaProcessing|specialUse",
+    })
+    ET.SubElement(long_render, "property", {
+        ANDROID + "name": "android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE",
+        ANDROID + "value": "Explicit user-requested native Blender frame rendering with visible status, pause and crash-safe checkpoints",
     })
     ET.SubElement(application, "service", {
         ANDROID + "name": "com.rezox.render.agent.VideoStudioNativeBridgeService",
@@ -117,6 +139,20 @@ def merge_manifest(source):
         ANDROID + "exported": "false",
     })
     return ET.ElementTree(root)
+
+
+class _RuntimeScriptArchive(zipfile.ZipFile):
+    """Keep runtime seals stable when a checkout changes only file metadata."""
+
+    def write(self, filename, arcname=None, compress_type=None, compresslevel=None):
+        if arcname is None:
+            raise ValueError("RUNTIME_SCRIPT_ARCHIVE_NAME_REQUIRED")
+        entry = zipfile.ZipInfo(arcname, date_time=(2020, 1, 1, 0, 0, 0))
+        entry.create_system = 3
+        entry.external_attr = 0o100644 << 16
+        self.writestr(entry, Path(filename).read_bytes(),
+                      compress_type=self.compression if compress_type is None else compress_type,
+                      compresslevel=compresslevel)
 
 
 def attach_bpy_agent(runtime_zip, source_py, scene_py=None, batch_py=None):
@@ -131,7 +167,7 @@ def attach_bpy_agent(runtime_zip, source_py, scene_py=None, batch_py=None):
             raise ValueError("BLENDER_LIVELY_SCRIPT_COLLISION")
         if batch_py is not None and "scripts/startup/render_batch_assembly.py" in names:
             raise ValueError("BLENDER_BATCH_SCRIPT_COLLISION")
-    with zipfile.ZipFile(runtime_zip, "a") as packed:
+    with _RuntimeScriptArchive(runtime_zip, "a") as packed:
         packed.write(source_py, "scripts/startup/render_agent_startup.py",
                      compress_type=zipfile.ZIP_DEFLATED)
         if scene_py is not None:
@@ -140,6 +176,40 @@ def attach_bpy_agent(runtime_zip, source_py, scene_py=None, batch_py=None):
         if batch_py is not None:
             packed.write(batch_py, "scripts/startup/render_batch_assembly.py",
                          compress_type=zipfile.ZIP_DEFLATED)
+        # The runtime is immutable after stage; save/recovery helpers are
+        # packaged alongside the upstream bpy startup script, not an APK shell.
+        for extra in ("render_session_tools.py", "render_v25_recovery.py", "render_assets.py", "render_native_hud.py"):
+            source = Path(source_py).with_name(extra)
+            if not source.is_file():
+                raise ValueError("SESSION_RUNTIME_NOT_PACKAGED")
+            packed.write(source, "scripts/startup/" + extra,
+                         compress_type=zipfile.ZIP_DEFLATED)
+        # Keep the pinned full Blender runtime intact. Each independently
+        # reviewed Omega module is an optional Python package member, not a
+        # startup script or a replacement for libblender.so.
+        scripts = Path(source_py).parent
+        omega_dir = scripts / "omega"
+        omega_files = [
+            (scripts / "omega_registry.py", "scripts/startup/omega_registry.py"),
+            (omega_dir / "__init__.py", "scripts/startup/omega/__init__.py"),
+        ]
+        allowed = {
+            "phase01_engine.py", "phase02_render.py", "phase03_agent.py",
+            "phase04_geometry.py", "phase05_character.py", "phase06_rig.py",
+            "phase07_motion.py", "phase08_world.py", "phase09_vfx.py",
+            "phase11_artist.py", "phase12_quality.py", "phase13_simulation.py",
+        }
+        if omega_dir.is_dir():
+            for phase_file in sorted(omega_dir.glob("phase*.py")):
+                if phase_file.name not in allowed:
+                    raise ValueError("UNRECOGNIZED_OMEGA_MODULE")
+                omega_files.append((phase_file, "scripts/startup/omega/" + phase_file.name))
+        for source, archive_name in omega_files:
+            if not source.is_file():
+                raise ValueError("OMEGA_REGISTRY_RUNTIME_MISSING")
+            if archive_name in names:
+                raise ValueError("UPSTREAM_OMEGA_MODULE_COLLISION")
+            packed.write(source, archive_name, compress_type=zipfile.ZIP_DEFLATED)
 
 def patch_native_activity(path):
     java = path.read_text(encoding="utf-8")
@@ -174,6 +244,19 @@ def patch_native_activity(path):
     }
 """
     java = java.replace(original, patch)
+    # App-private projects, runtime and SAF imports do not require all-files
+    # access. Launching Settings after NativeActivity starts steals its window
+    # during Vulkan initialization. Keep broad file access an explicit action.
+    storage_request = "    requestAllFilesAccess();"
+    if java.count(storage_request) != 1:
+        raise ValueError("PINNED_BLENDER_STORAGE_REQUEST_HOOK_CHANGED")
+    java = java.replace(storage_request, "    // File browser access is requested explicitly from Render controls.", 1)
+    log_hook = "      nativeSetLogPath(logPath);"
+    if java.count(log_hook) != 1:
+        raise ValueError("PINNED_BLENDER_LOG_PATH_HOOK_CHANGED")
+    java = java.replace(log_hook, log_hook + '''
+      getSharedPreferences("render_editor_launch", MODE_PRIVATE).edit()
+          .putString("native_log_path", logPath).apply();''', 1)
     final_init = "    super.onCreate(state);"
     if final_init in java:
         java = java.replace(final_init, final_init + """

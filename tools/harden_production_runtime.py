@@ -38,9 +38,12 @@ def _step(root,p):''')
         detail_spec.loader.exec_module(detail_module)
         return detail_module.execute(operation,p,root,scene,C)
     if operation=='scene.inspect':''')
+    contract_file=root/'full-app/scripts/render_production_contract.py'
+    asset_prefix="    'asset.create', 'project.create', 'project.checkpoint', 'scene.inspect', 'mesh.create',"
+    original_prefix="    'project.create', 'project.checkpoint', 'scene.inspect', 'mesh.create',"
+    prefix=asset_prefix if asset_prefix in contract_file.read_text() else original_prefix
     patch('full-app/scripts/render_production_contract.py',
-          "    'project.create', 'project.checkpoint', 'scene.inspect', 'mesh.create',",
-          "    'project.create', 'project.checkpoint', 'scene.inspect', 'mesh.create',\n    "+detail+",")
+          prefix, prefix+"\n    "+detail+",")
     patch('app/src/main/java/com/rezox/render/agent/ProductionBridge.java',
           '"project.create","project.checkpoint",',
           '"project.create","project.checkpoint","project.list","project.restore","mesh.edit","curve.create","shape.create","shape.keys","rig.create","rig.bind","rig.keys",')

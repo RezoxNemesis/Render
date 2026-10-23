@@ -1,12 +1,14 @@
 """Synthetic unit tests for full-engine APK staging; no internet or engine files."""
 import hashlib
 import io
+import os
 from pathlib import Path
+import shutil
 import tempfile
 import unittest
 from xml.etree import ElementTree as ET
 import zipfile
-from assemble_full_native import stage, verify_apk
+from assemble_full_native import attach_bpy_agent, stage, verify_apk
 
 A = "{http://schemas.android.com/apk/res/android}"
 
@@ -26,6 +28,10 @@ public class BlenderActivity extends NativeActivity {
     super.onCreate(state);
     setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
     enterImmersive();
+    requestAllFilesAccess();
+  }
+  private void chooseLogPath() {
+      nativeSetLogPath(logPath);
   }
   private void enterImmersive() {
     View d = getWindow().getDecorView();
@@ -89,6 +95,7 @@ public class BlenderActivity extends NativeActivity {
         self.assertTrue(runtime.exists())
         with zipfile.ZipFile(runtime) as z:
             self.assertIn("scripts/startup/render_agent_startup.py", z.namelist())
+            self.assertIn("scripts/startup/render_native_hud.py", z.namelist())
         java = self.output / "java/org/blender/blender/BlenderActivity.java"
         self.assertTrue(java.exists())
         self.assertIn("RENDER_AGENT_SPOOL",java.read_text())
@@ -97,6 +104,8 @@ public class BlenderActivity extends NativeActivity {
         self.assertIn("RENDER_MOBILE_UI_MODE",java.read_text())
         self.assertIn("BlenderMobileControls.confirmHome(this)",java.read_text())
         self.assertIn("BlenderMobileControls.applySafeInsets(this)",java.read_text())
+        self.assertNotIn("    requestAllFilesAccess();",java.read_text())
+        self.assertIn('.putString("native_log_path", logPath)',java.read_text())
         self.assertTrue((self.output / "assets/licenses/Render-Full-Native-Sources.txt").exists())
         root = ET.parse(self.output / "AndroidManifest.xml").getroot()
         assert root.find("queries") is not None
@@ -130,6 +139,35 @@ public class BlenderActivity extends NativeActivity {
             verify_apk(self.engine,self.size,"0"*64)
         with self.assertRaisesRegex(ValueError,"SIZE_MISMATCH"):
             verify_apk(self.engine,self.size+1,self.digest)
+
+    def test_runtime_seal_ignores_checkout_metadata_but_tracks_script_changes(self):
+        scripts = self.base / "scripts"
+        shutil.copytree(Path(__file__).resolve().parents[1] / "full-app/scripts", scripts,
+                        ignore=shutil.ignore_patterns("__pycache__"))
+        with zipfile.ZipFile(self.engine) as engine:
+            original_runtime = engine.read("assets/blender_runtime.zip")
+
+        def package(name):
+            runtime = self.base / name
+            runtime.write_bytes(original_runtime)
+            attach_bpy_agent(runtime, scripts / "render_agent_startup.py",
+                             scripts / "render_lively_scene.py",
+                             scripts / "render_batch_assembly.py")
+            return runtime.read_bytes()
+
+        first = package("first.zip")
+        for source in scripts.rglob("*.py"):
+            os.utime(source, (1609459200, 1609459200))
+            source.chmod(0o600)
+        self.assertEqual(first, package("different-checkout.zip"))
+        with zipfile.ZipFile(io.BytesIO(first)) as runtime:
+            self.assertEqual(b"# ordinary upstream script",
+                             runtime.read("scripts/startup/bl_ui_test.py"))
+            self.assertEqual((scripts / "render_native_hud.py").read_bytes(),
+                             runtime.read("scripts/startup/render_native_hud.py"))
+        startup = scripts / "render_agent_startup.py"
+        startup.write_bytes(startup.read_bytes() + b"\n# changed runtime payload\n")
+        self.assertNotEqual(first, package("changed-script.zip"))
 
     def test_refuses_path_traversal(self):
         self.make_engine({"assets/../../escape": b"bad"})
