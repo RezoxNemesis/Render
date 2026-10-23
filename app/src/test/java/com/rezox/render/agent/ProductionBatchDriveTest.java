@@ -34,6 +34,35 @@ public class ProductionBatchDriveTest {
             assertEquals("BACKUP_DOCUMENT_FOLDER_NOT_GRANTED",expected.getMessage());
         }
     }
+    @Test public void onlyAppOwnedBlendProjectsMayBePublished()throws Exception{
+        Context c=RuntimeEnvironment.getApplication();
+        File nativeProjects=ProductionFiles.folder(c,"Projects");
+        File safe=new File(nativeProjects,"CurrentSession.blend");
+        Files.write(safe.toPath(),"BLENDER-test".getBytes(StandardCharsets.UTF_8));
+        try{
+            assertTrue(ProductionDriveStorage.isOwnedBlend(c,safe));
+            assertFalse(ProductionDriveStorage.isOwnedBlend(c,new File(nativeProjects,"Other.txt")));
+            assertFalse(ProductionDriveStorage.isOwnedBlend(c,new File("/etc/passwd")));
+            assertFalse(ProductionDriveStorage.isOwnedBlend(c,
+                new File(nativeProjects,"../../outside.blend")));
+        }finally{safe.delete();}
+    }
+
+    @Test public void directProjectExportRequiresPersistentOwnerFolder()throws Exception{
+        Context c=RuntimeEnvironment.getApplication();
+        File nativeProjects=ProductionFiles.folder(c,"Projects");
+        File safe=new File(nativeProjects,"owner_test.blend");
+        Files.write(safe.toPath(),"BLENDER-test".getBytes(StandardCharsets.UTF_8));
+        try{
+            try{
+                ProductionDriveStorage.exportOwnedBlend(c,safe);
+                fail("Must not export without owner-picked folder");
+            }catch(IllegalStateException expected){
+                assertEquals("BACKUP_DOCUMENT_FOLDER_NOT_GRANTED",expected.getMessage());
+            }
+        }finally{safe.delete();}
+    }
+
     @Test public void invalidDocumentTreeCannotPersist()throws Exception{
         Context c=RuntimeEnvironment.getApplication();
         assertFalse(ProductionDriveStorage.acceptFolderSelection(c,0,null));
