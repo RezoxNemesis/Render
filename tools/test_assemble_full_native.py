@@ -8,11 +8,17 @@ import tempfile
 import unittest
 from xml.etree import ElementTree as ET
 import zipfile
-from assemble_full_native import attach_bpy_agent, stage, verify_apk
+from assemble_full_native import attach_bpy_agent, stage, verify_apk, native_configuration_mask
 
 A = "{http://schemas.android.com/apk/res/android}"
 
 class NativePackagingTests(unittest.TestCase):
+    def test_asset_path_configuration_preserves_existing_flags_and_rejects_drift(self):
+        self.assertEqual(0x800017f0,native_configuration_mask(
+            'orientation|keyboardHidden|keyboard|screenSize|screenLayout|density|navigation|uiMode'))
+        self.assertEqual(0xc0000080,native_configuration_mask('0x40000000|orientation'))
+        with self.assertRaisesRegex(ValueError,'UNKNOWN_UPSTREAM_NATIVE_CONFIGURATION_FLAG'):
+            native_configuration_mask('unknownFutureConfiguration')
     def setUp(self):
         self.working = tempfile.TemporaryDirectory()
         self.base = Path(self.working.name)
@@ -124,6 +130,9 @@ public class BlenderActivity extends NativeActivity {
         self.assertIn("com.rezox.render.MainActivity", activities)
         self.assertIn("com.rezox.render.EditorLaunchActivity", activities)
         blender = activities["org.blender.blender.BlenderActivity"]
+        self.assertEqual('@integer/render_native_config_changes',blender.get(A+'configChanges'))
+        integer=ET.parse(self.output/'res/values/render_native_configuration.xml').getroot().find('integer')
+        self.assertTrue(int(integer.text,0)&0x80000000)
         self.assertEqual(1, len(blender.findall("intent-filter")))
         self.assertEqual("unspecified",blender.get(A+"screenOrientation"))
         launch = activities["com.rezox.render.RenderHubActivity"]

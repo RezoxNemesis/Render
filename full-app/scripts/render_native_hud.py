@@ -109,17 +109,18 @@ def model():
             "object": _event["object"] if recent and _event["state"] == "succeeded" else None}
 
 
-def draw_card(value, width, height, rectangle, text, hand):
+def draw_card(value, width, height, rectangle, text, hand, inset_left=0, inset_right=0):
     """Blender drawing layout, with injectable primitives for host logic tests."""
-    if value is None or width < 180 or height < 110:
+    available = width - inset_left - inset_right
+    if value is None or available < 180 or height < 110:
         return
-    x, y, w, h = 14, 18, min(360, width - 28), 90
+    x, y, w, h = inset_left + 14, 18, min(360, available - 28), 90
     rectangle(x, y, w, h, (0.055, 0.07, 0.095, 0.92))
     hand(x + 17, y + 49)
     title = "ChatGPT artist" if value["state"] != "paused" else "Render paused"
-    text(x + 39, y + 67, title + " - " + value["action"][:27], 12)
-    text(x + 15, y + 45, value["stage"][:48], 11)
-    text(x + 15, y + 12, value["progress_label"], 10)
+    text(x + 39, y + 67, (title + " - " + value["action"])[:max(1, int((w-54)/7))], 12)
+    text(x + 15, y + 45, value["stage"][:max(1, int((w-30)/6))], 11)
+    text(x + 15, y + 12, value["progress_label"][:max(1, int((w-30)/6))], 10)
     if value["fraction"] is not None:
         rectangle(x + 15, y + 30, w - 30, 4, (0.17, 0.21, 0.27, 1))
         rectangle(x + 15, y + 30, (w - 30) * value["fraction"], 4, (0.25, 0.6, 1, 1))
@@ -170,7 +171,12 @@ def _draw():
         previous = gpu.state.blend_get()
         try:
             gpu.state.blend_set("ALPHA")
-            draw_card(value,region.width,region.height,rectangle,text,hand)
+            area, space = bpy.context.area, bpy.context.space_data
+            # Blender's toolbar/sidebar overlay the WINDOW region on Android.
+            # Keep the actual hand and status card inside its unobscured area.
+            left = max((r.width for r in area.regions if r.type == "TOOLS"), default=0) if getattr(space,"show_region_toolbar",False) else 0
+            right = max((r.width for r in area.regions if r.type == "UI"), default=0) if getattr(space,"show_region_ui",False) else 0
+            draw_card(value,region.width,region.height,rectangle,text,hand,left,right)
             _last_draw_at=time.monotonic()
             _draw_error=None
             point = _project_object(value["object"])

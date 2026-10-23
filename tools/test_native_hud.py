@@ -72,6 +72,15 @@ class NativeHudTests(unittest.TestCase):
             model=self.hud.model();rects=[]
             self.hud.draw_card(model,640,360,lambda *p:rects.append(p),lambda *p:None,lambda *p:None)
             self.assertIsNone(model['fraction']);self.assertEqual(1,len(rects))
+    def test_portrait_card_avoids_blender_overlay_toolbar_and_sidebar(self):
+        self.hud.command_started(dict(action='operator.execute',args={}))
+        rects=[];hands=[];labels=[]
+        self.hud.draw_card(self.hud.model(),360,578,lambda *p:rects.append(p),
+            lambda *p:labels.append(p),lambda *p:hands.append(p),64,20)
+        x,y,width,height,_=rects[0]
+        self.assertGreaterEqual(x,64+14);self.assertLessEqual(x+width,360-20-14)
+        self.assertGreater(hands[0][0],64)
+        self.assertTrue(all(x<=p[0]<x+width for p in labels))
     def test_android_pause_reason_appears_inside_blender_model(self):
         self.worker(state='paused',stage='Waiting for Android to cool')
         self.hud._refresh();value=self.hud.model()

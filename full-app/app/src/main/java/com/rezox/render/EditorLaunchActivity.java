@@ -17,6 +17,7 @@ import android.widget.TextView;
 import com.rezox.render.ui.StudioUi;
 import com.rezox.render.omega.engine.EngineEvidence;
 import com.rezox.render.omega.engine.EngineRuntimeSeal;
+import com.rezox.render.omega.engine.EngineRuntimeCleanup;
 import com.rezox.render.omega.engine.EngineStartupLog;
 import com.rezox.render.omega.engine.EngineStartupRecovery;
 import com.rezox.render.agent.RenderRecoveryStatus;
@@ -237,6 +238,7 @@ public final class EditorLaunchActivity extends Activity {
         long stamp=getPackageManager().getPackageInfo(getPackageName(),0).lastUpdateTime;
         String versionStamp=Long.toString(stamp);
         if(EngineRuntimeSeal.hasSamePackageStamp(root,VERSION,versionStamp)){
+            cleanupPreviousRuntime(backup);
             EngineEvidence.record(this,EngineEvidence.Stage.RUNTIME_CACHE_REUSED);
             report("Existing Blender runtime seal found; no extraction needed.");
             return;
@@ -248,6 +250,7 @@ public final class EditorLaunchActivity extends Activity {
         EngineEvidence.record(this,EngineEvidence.Stage.RUNTIME_ZIP_HASHED);
         if(EngineRuntimeSeal.sameArchive(root,VERSION,assetDigest)){
             EngineRuntimeSeal.refreshPackageStamp(root,VERSION,versionStamp,assetDigest);
+            cleanupPreviousRuntime(backup);
             EngineEvidence.record(this,EngineEvidence.Stage.RUNTIME_CACHE_REUSED);
             report("Blender runtime unchanged across APK upgrade; saved workspace retained.");
             return;
@@ -310,22 +313,26 @@ public final class EditorLaunchActivity extends Activity {
         File oldConfig=new File(backup,"config");
         File newConfig=new File(root,"config");
         if(oldConfig.isDirectory()&&!newConfig.exists())oldConfig.renameTo(newConfig);
-        deleteOwnedTree(backup);
+        cleanupPreviousRuntime(backup);
         EngineEvidence.record(this,EngineEvidence.Stage.RUNTIME_ACTIVATED);
         report("Blender assets installed: "+entries+" files, "+(total/1024/1024)+" MiB.");
     }
     private static void deleteOwnedTree(File f)throws java.io.IOException {
-        if(!f.exists())return;
-        if(Files.isSymbolicLink(f.toPath())) {
-            if(!f.delete())throw new java.io.IOException("CANNOT_REMOVE_STAGE_LINK");
-            return;
+        EngineRuntimeCleanup.remove(f);
+    }
+    private void cleanupPreviousRuntime(File backup) {
+        try {
+            deleteOwnedTree(backup);
+            getSharedPreferences(STATE_PREF,MODE_PRIVATE).edit()
+                .putBoolean("runtime_cleanup_pending",false).apply();
+        } catch(java.io.IOException error) {
+            // A complete, sealed new runtime is already active. Cleanup of its
+            // obsolete backup must not turn a successful upgrade into a failed
+            // launch. Retry this replaceable tree on the next sealed reuse.
+            getSharedPreferences(STATE_PREF,MODE_PRIVATE).edit()
+                .putBoolean("runtime_cleanup_pending",true).apply();
+            android.util.Log.w("RenderEditorLaunch","Previous runtime cleanup deferred",error);
         }
-        if(f.isDirectory()) {
-            File[] children=f.listFiles();
-            if(children==null)throw new java.io.IOException("CANNOT_LIST_STAGE");
-            for(File child:children)deleteOwnedTree(child);
-        }
-        if(!f.delete())throw new java.io.IOException("CANNOT_REMOVE_STAGE");
     }
     private String readLog() {
         List<File> candidates=new ArrayList<>();

@@ -46,6 +46,25 @@ def _launch_settings(environ, script_file):
     return root, mode
 
 
+def _native_cache_settings(environ, script_file, root):
+    """Keep native thumbnails in Android's private cache, without changing HOME."""
+    parents = Path(script_file).resolve().parents
+    if (not root or len(parents) < 5 or parents[0].name != "startup"
+            or parents[1].name != "scripts" or parents[3].name != "blender"
+            or parents[4].name != "files"
+            or not re.fullmatch(r"[0-9]+\.[0-9]+", parents[2].name)
+            or Path(root).resolve() != parents[4] / "render_bpy_jobs"):
+        return None
+    if environ.get("XDG_CACHE_HOME"):
+        return environ["XDG_CACHE_HOME"]
+    cache = parents[4].parent / "cache" / "blender"
+    if cache.is_symlink() or cache.parent.is_symlink():
+        raise ValueError("NATIVE_CACHE_SYMLINK")
+    cache.mkdir(mode=0o700, parents=True, exist_ok=True)
+    environ["XDG_CACHE_HOME"] = str(cache)
+    return str(cache)
+
+
 ROOT, MOBILE_MODE = _launch_settings(os.environ, __file__)
 # Companion menus/HUD read the guest Python environment at import time. Publish
 # the validated private handoff there before importing any companion module.
@@ -53,6 +72,11 @@ if ROOT:
     os.environ["RENDER_AGENT_SPOOL"] = ROOT
 if MOBILE_MODE:
     os.environ["RENDER_MOBILE_UI_MODE"] = MOBILE_MODE
+try:
+    _native_cache_settings(os.environ, __file__, ROOT)
+except (OSError, ValueError) as error:
+    # Thumbnail caching is optional; its failure must not disable the executor.
+    print("Render native thumbnail cache unavailable:", type(error).__name__, flush=True)
 # Real native Blender has bpy.types.Operator; host protocol tests use bpy doubles.
 if getattr(getattr(bpy, "types", None), "Operator", None) is not None:
     import sys as _render_sys

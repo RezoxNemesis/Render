@@ -15,4 +15,10 @@ public final class NativeCommandBudget {
     public static long timeout(String action, JSONObject args, long ordinaryTimeout) {
         return frame(action, args) ? FRAME_TIMEOUT_MS : ordinaryTimeout;
     }
+
+    public static boolean readOnlyAssetPoll(String action, JSONObject args) {
+        if(!"blender.production.execute".equals(action))return false;
+        String op=args.optString("operation");
+        return "asset.search".equals(op)||"asset.download.status".equals(op);
+    }
 }

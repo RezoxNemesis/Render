@@ -241,7 +241,12 @@ public final class BlenderSpool {
         if (!working.isDirectory() && !working.mkdirs()) throw new IllegalStateException("CANNOT_CREATE_NATIVE_QUEUE");
         if (!results.isDirectory() && !results.mkdirs()) throw new IllegalStateException("CANNOT_CREATE_NATIVE_QUEUE");
         File ready=new File(root,"ready");
-        if (!NativeHeartbeat.ready(app))
+        // Slow viewport updates or a render can postpone the timer. Read-only
+        // asset polls may wait in its existing queue after this exact process
+        // has genuinely initialized. Never relax readiness for mutations, and
+        // never count a queued poll as a native result or fresh heartbeat.
+        if (!NativeHeartbeat.ready(app) && !(NativeCommandBudget.readOnlyAssetPoll(action,args)
+                && NativeHeartbeat.observedCurrentProcess(app)))
             throw new IllegalStateException("BLENDER_EDITOR_NOT_RUNNING");
         String id=UUID.randomUUID().toString().replace("-","");
         File request=new File(pending,id+".json");

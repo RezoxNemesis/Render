@@ -41,7 +41,33 @@ def valid_zip_entry(info):
         raise ValueError("UNSAFE_ENGINE_APK_MEMBER")
     return name
 
-def merge_manifest(source):
+def native_configuration_mask(value):
+    # CONFIG_ASSETS_PATHS is a framework configuration bit, absent from the
+    # public aapt flag names. An integer resource preserves it through Android's
+    # normal TypedArray/package parsing. GHOST already handles CONFIG_CHANGED.
+    flags = dict(mcc=1, mnc=2, locale=4, touchscreen=8, keyboard=16,
+                 keyboardHidden=32, navigation=64, orientation=128,
+                 screenLayout=256, uiMode=512, screenSize=1024,
+                 smallestScreenSize=2048, density=4096, layoutDirection=8192,
+                 colorMode=16384, grammaticalGender=32768,
+                 fontWeightAdjustment=0x10000000, fontScale=0x40000000)
+    result = 0
+    for token in filter(None, value.split("|")):
+        token = token.strip()
+        if token in flags:
+            result |= flags[token]
+        else:
+            try:
+                number = int(token, 0)
+            except ValueError:
+                raise ValueError("UNKNOWN_UPSTREAM_NATIVE_CONFIGURATION_FLAG") from None
+            if not 0 <= number <= 0xffffffff:
+                raise ValueError("INVALID_UPSTREAM_NATIVE_CONFIGURATION_MASK")
+            result |= number
+    return result | 0x80000000
+
+
+def merge_manifest(source, resources=None):
     root = ET.parse(source).getroot()
     root.attrib.pop("package", None)   # AGP 8+ namespace comes from Gradle.
     # Android 11+ package visibility: explicitly inspect only our known
@@ -66,6 +92,15 @@ def merge_manifest(source):
     # full landscape AND a portrait-focused native workspace on a phone.
     # Java BlenderMobileControls supplies the owner's preferred orientation.
     activity.set(ANDROID + "screenOrientation", "unspecified")
+    config_mask = native_configuration_mask(activity.get(ANDROID + "configChanges", ""))
+    activity.set(ANDROID + "configChanges", "@integer/render_native_config_changes")
+    if resources is not None:
+        config_file = Path(resources) / "values/render_native_configuration.xml"
+        if config_file.exists():
+            raise ValueError("UPSTREAM_NATIVE_CONFIGURATION_RESOURCE_COLLISION")
+        config_file.parent.mkdir(parents=True, exist_ok=True)
+        config_file.write_text('<resources><integer name="render_native_config_changes">'
+                               + hex(config_mask) + '</integer></resources>\n', encoding="utf8")
     # One launcher opens Render's hub; native editor keeps .blend VIEW/EDIT intents.
     for intent in list(activity.findall("intent-filter")):
         if any(x.get(ANDROID + "name") == "android.intent.action.MAIN"
@@ -293,7 +328,8 @@ def patch_native_activity(path):
         cls = "public class BlenderActivity extends NativeActivity {"
         if java.count(cls)!=1: raise ValueError("PINNED_BLENDER_CLASS_DECLARATION_CHANGED")
         java=java.replace(cls,cls+"\n  android.window.OnBackInvokedCallback renderBackCallback;",1)
-    if "  public void onBackPressed(" in java or "  protected void onDestroy(" in java:
+    if ("  public void onBackPressed(" in java or "  protected void onDestroy(" in java
+            or " void onConfigurationChanged(" in java):
         raise ValueError("PINNED_BLENDER_NAVIGATION_HOOK_COLLISION")
     # The system back callback handles Android 13+/16 gestures. This fallback
     # handles old navigation-key devices. Neither exits without confirmation.
@@ -301,6 +337,12 @@ def patch_native_activity(path):
   @Override
   public void onBackPressed() {
     BlenderMobileControls.confirmHome(this);
+  }
+
+  @Override
+  public void onConfigurationChanged(android.content.res.Configuration value) {
+    super.onConfigurationChanged(value);
+    com.rezox.render.NativeEditorConfiguration.configurationChanged(this);
   }
 
   @Override
@@ -378,7 +420,7 @@ def stage(engine, bridge, source, destination, expected_size=ENGINE_BYTES,
     lively = Path(__file__).resolve().parents[1] / "full-app/scripts/render_lively_scene.py"
     assembly = Path(__file__).resolve().parents[1] / "full-app/scripts/render_batch_assembly.py"
     attach_bpy_agent(assets / "blender_runtime.zip", startup, lively, assembly)
-    merged = merge_manifest(manifest)
+    merged = merge_manifest(manifest, destination / "res")
     merged.write(destination / "AndroidManifest.xml", encoding="utf-8", xml_declaration=True)
     notices = assets / "licenses"
     notices.mkdir(exist_ok=True)

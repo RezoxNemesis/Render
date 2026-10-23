@@ -110,6 +110,25 @@ class BlenderBridgeTests(unittest.TestCase):
         self.assertEqual("landscape", mode)
         self.assertFalse((files / "render_bpy_jobs/ready").exists())
 
+    def test_native_thumbnail_cache_uses_writable_android_cache_without_changing_home(self):
+        files, script = self.launch_fixture()
+        env = {"HOME": "/data"}
+        cache = self.module._native_cache_settings(env, script, str(files / "render_bpy_jobs"))
+        self.assertEqual(str(files.parent / "cache/blender"), cache)
+        self.assertTrue(Path(cache).is_dir());self.assertEqual("/data",env["HOME"])
+        self.assertEqual(cache,env["XDG_CACHE_HOME"])
+        explicit={"XDG_CACHE_HOME":"/owner/explicit/cache"}
+        self.assertEqual(explicit["XDG_CACHE_HOME"],self.module._native_cache_settings(explicit,script,str(files / "render_bpy_jobs")))
+
+    def test_native_cache_rejects_symlinks_and_does_not_configure_host_checkout(self):
+        files, script = self.launch_fixture()
+        (files.parent / "cache").symlink_to(files, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError,"NATIVE_CACHE_SYMLINK"):
+            self.module._native_cache_settings({},script,str(files / "render_bpy_jobs"))
+        env={}
+        self.assertIsNone(self.module._native_cache_settings(env,MODULE,self.tmp.name))
+        self.assertEqual({},env)
+
     def test_private_handoff_replaces_stale_environment_without_accepting_paths(self):
         files, script = self.launch_fixture(spool="/some/foreign/path")
         root, mode = self.module._launch_settings({"RENDER_AGENT_SPOOL": "/stale"}, script)

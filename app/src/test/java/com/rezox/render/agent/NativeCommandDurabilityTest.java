@@ -23,6 +23,9 @@ public class NativeCommandDurabilityTest {
         assertEquals(21600000,NativeCommandBudget.timeout("blender.production.execute",frame,600000));
         assertEquals(600000,NativeCommandBudget.timeout("blender.production.execute",new JSONObject().put("operation","scene.inspect"),600000));
         assertEquals(21630000,NativeWakeGuard.timeoutForAction("blender.production.render_frame"));
+        assertTrue(NativeCommandBudget.readOnlyAssetPoll("blender.production.execute",new JSONObject().put("operation","asset.search")));
+        assertFalse(NativeCommandBudget.readOnlyAssetPoll("blender.production.execute",new JSONObject().put("operation","asset.download")));
+        assertFalse(NativeCommandBudget.readOnlyAssetPoll("blender.production.execute",new JSONObject().put("operation","asset.import")));
     }
     @Test public void pauseWaitsForClaimedFrameAndRetainsItsExactReceipt()throws Exception{
         Context app=RuntimeEnvironment.getApplication();
@@ -66,5 +69,35 @@ public class NativeCommandDurabilityTest {
         catch(IllegalArgumentException expected){}
         JSONObject missing=BlenderSpool.inspect(app,new JSONObject().put("command_id","0".repeat(32)));
         assertFalse(missing.getBoolean("native_completion_received"));assertFalse(missing.getBoolean("safe_to_replay"));
+    }
+    @Test public void busyInitializedEditorAllowsAssetPollButNeverAnAssetMutation()throws Exception{
+        Context app=RuntimeEnvironment.getApplication();File root=new File(app.getFilesDir(),"render_bpy_jobs");
+        File pending=new File(root,"pending"),results=new File(root,"results");
+        pending.mkdirs();results.mkdirs();File ready=new File(root,"ready");
+        Files.write(ready.toPath(),Integer.toString(android.os.Process.myPid()).getBytes(StandardCharsets.US_ASCII));
+        ready.setLastModified(System.currentTimeMillis()-60000);
+        assertFalse(NativeHeartbeat.ready(app));
+        try{new BlenderSpool(app).execute("blender.production.execute",new JSONObject().put("operation","asset.download"),new AtomicBoolean());fail();}
+        catch(IllegalStateException expected){assertEquals("BLENDER_EDITOR_NOT_RUNNING",expected.getMessage());}
+        ExecutorService executor=Executors.newSingleThreadExecutor();File request=null,receipt=null;
+        try{
+            Future<JSONObject> future=executor.submit(()->new BlenderSpool(app).execute("blender.production.execute",
+                new JSONObject().put("operation","asset.download.status").put("payload",new JSONObject().put("download_id","f".repeat(32))),new AtomicBoolean()));
+            long deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(5);
+            while(System.nanoTime()<deadline){
+                File[] entries=pending.listFiles((d,n)->n.endsWith(".json"));
+                if(entries!=null&&entries.length>0){request=entries[0];break;}
+                if(future.isDone())future.get();Thread.sleep(5);
+            }
+            assertNotNull(request);
+            String id=new JSONObject(new String(Files.readAllBytes(request.toPath()),StandardCharsets.UTF_8)).getString("id");
+            receipt=new File(results,id+".json");
+            Files.write(receipt.toPath(),new JSONObject().put("id",id).put("state","succeeded")
+                .put("result",new JSONObject().put("state","downloaded")).toString().getBytes(StandardCharsets.UTF_8));
+            assertEquals("downloaded",future.get(5,TimeUnit.SECONDS).getString("state"));
+            assertFalse("Queueing/poll completion must not manufacture fresh liveness",NativeHeartbeat.ready(app));
+        }finally{
+            executor.shutdownNow();if(request!=null)request.delete();if(receipt!=null)receipt.delete();ready.delete();
+        }
     }
 }

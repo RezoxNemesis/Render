@@ -77,8 +77,10 @@ No additional MCP, relay or cloud renderer is introduced.
 
 ## Validation boundary
 
-On 2026-10-23, the prepared production source passed 136 Android/JVM unit tests
-and 100 Python contract tests. Both Android application builds and the plain
+On 2026-10-23, initial production source passed 136 Android/JVM unit tests
+and 100 Python contract tests. The follow-up fixes passed 141 Android/JVM tests
+and 117 Python checks, including the Blender HUD tests and runtime packaging
+seal tests. Both Android application builds and the plain
 instrumentation APK built successfully. These host tests use explicit doubles
 where appropriate and do not establish native scene or render completion.
 
@@ -91,16 +93,65 @@ translation without KVM; its speed and thermal behavior do not represent the
 owner's Dimensity 7300 phone.
 
 `NativeStudioChecks` provides fixed debug-emulator-only `core`, `assets`,
-`render` and read-only `status` phases through the app's actual ProductionBridge.
-Core/assets/render receipts are guarded against blind replay. Native feature,
-asset-network and screen-off render acceptance results will be recorded after
-those phases finish. A successful shell command alone is not a native pass.
+`render`, `launch`, `configuration` and read-only `status` phases through the app's actual ProductionBridge.
+Core/assets/render receipts are guarded against blind replay. The actual native
+core phase passed: checkpointing, quality preservation during a performance
+change, subdivision, normals, UV projection, invalid-modifier rejection without
+mutation, modifier application, transform application, original PNG import and
+metadata, viewport capture and the final checkpoint. The applied mesh has 98
+vertices / 96 faces. The in-Blender HUD reports an observed viewport draw with
+no draw error. See the [sanitized Android receipt](../benchmarks/native-studio-029/core-android-result.json)
+and [actual Android capture](../benchmarks/native-studio-029/core-android-viewport.png).
+An initial readiness-only failure was inspected and preserved before this run;
+no scene operation existed to replay.
 
-The clean workspace candidate is 302,116,716 bytes, SHA-256
+Two additional findings drove a follow-up candidate. A read-only asset poll
+was rejected while a slow software-GPU redraw postponed the heartbeat; it had
+only returned a loading catalog, with no download/import request. Read-only
+asset search/status can now wait in the queue after the same native process has
+genuinely initialized. Mutations still require fresh readiness, and queued work
+never counts as native completion. The captured HUD also exposed toolbar
+occlusion; its layout now reserves the toolbar/sidebar width.
+
+A later Android resource-configuration event (`CONFIG_ASSETS_PATHS`) destroyed
+and recreated NativeActivity in the same process, followed by a Vulkan driver
+crash. This occurred before the render test's `onStart`: there was no render
+test receipt, render-job preference or job directory, so no render was queued.
+The follow-up manifest preserves the original configuration flags plus that
+event through `@integer/render_native_config_changes`. The normal native
+configuration callback keeps the existing Blender context. A launch UUID and
+observed configuration callback count support a fixed emulator-only acceptance
+phase that requires the same activity identity and a fresh actual viewport
+after `am update-appinfo`. Android PackageManager resolved the installed flag in
+the actual launch-phase receipt. Callback/viewport acceptance is still pending.
+
+Normal extraction during that launch exposed another upgrade failure: the new
+runtime was sealed and activated, but deletion of the obsolete backup failed.
+Its Python executable shortcut pointed into the previous APK directory, already
+removed by Android. `File.exists()` followed that dangling shortcut and skipped
+it, leaving the parent directory non-empty. Cleanup now unlinks symbolic links
+before testing existence, without following their targets. Tests cover the
+actual dangling-APK-link case, preservation of a linked production directory and
+a missing/dangling root. Once a valid new runtime is active, an obsolete backup
+cleanup error is recorded and retried on a later sealed reuse; it no longer
+blocks launching that valid runtime. No production project is removed.
+
+Native checkpoints also exposed a thumbnail-cache write to unwritable
+`/data/.cache`. Validated Android startup now supplies a private
+`XDG_CACHE_HOME`, preserving explicit overrides and leaving `HOME` unchanged.
+Asset-network, resource-change and screen-off render acceptance remain pending.
+A successful shell command alone is not a native pass.
+
+The original clean workspace candidate was 302,116,716 bytes, SHA-256
 `ac6165d1a4917772810cfde25a157d28f2c8f2d70510b9913fcdbed98d646002`.
-All non-signature ZIP payloads match the installed candidate byte for byte;
-the installed incremental APK contained unused ZIP padding removed by a clean
-build. The candidate uses a separate workspace test signer. It is not an
+Its payloads matched the installed baseline candidate after removing unused ZIP
+padding from the incremental build. The follow-up cleanup candidate is
+302,119,988 bytes, SHA-256
+`7602172eb8b10960f0be1e99f2f145a5054c170c98f0e5db820d2ecfb13eabec`.
+Its runtime ZIP is
+`dcfc5e46efc1456d0e14d4fe5e01769f4285b0ddaf69b7b1d9b710802bb50991`;
+the corrected native engine remains unchanged. Both full app/test APK builds
+passed. The candidate uses a separate workspace test signer. It is not an
 owner-phone in-place update, and no phone installation is claimed.
 
 The owner's existing VideoStudio endpoint previously returned an explicit

@@ -21,10 +21,12 @@ public class NativeHeartbeatTest {
             for(String invalid:new String[]{"",Integer.toString(Process.myPid()+1),"invalid"}){
                 Files.write(file.toPath(),invalid.getBytes(StandardCharsets.US_ASCII));
                 assertFalse(NativeHeartbeat.ready(app));
+                assertFalse(NativeHeartbeat.observedCurrentProcess(app));
             }
             Files.write(file.toPath(),Integer.toString(Process.myPid()).getBytes(StandardCharsets.US_ASCII));
             assertTrue(NativeHeartbeat.ready(app));
             file.setLastModified(System.currentTimeMillis()-20000);assertFalse(NativeHeartbeat.ready(app));
+            assertTrue(NativeHeartbeat.observedCurrentProcess(app));
         }finally{Files.deleteIfExists(file.toPath());}
     }
 }

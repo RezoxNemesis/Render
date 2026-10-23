@@ -138,13 +138,48 @@ public final class NativeStudioChecks extends Instrumentation {
         evidence.put("foreground",call("render.job.status"));
         evidence.put("render",call("render.status",new JSONObject().put("job_id",id)));
     }
+    private void launch()throws Exception {
+        JSONObject caps=call("capabilities");
+        require(caps.optBoolean("native_activity_asset_change_handling_declared"),"ANDROID_DID_NOT_RESOLVE_NATIVE_CONFIGURATION_MASK");
+        if(!caps.optBoolean("native_editor_ready"))
+            evidence.put("open",operation("editor.open",new JSONObject()));
+        evidence.put("completed_editor_start",false);
+    }
+    private void configuration()throws Exception {
+        require(call("capabilities").optBoolean("native_activity_asset_change_handling_declared"),"NATIVE_CONFIGURATION_HANDLING_NOT_INSTALLED");
+        File handoff=new File(target.getFilesDir(),"render_native_launch.json");
+        JSONObject before=new JSONObject(new String(java.nio.file.Files.readAllBytes(handoff.toPath()),StandardCharsets.UTF_8));
+        String launch=before.getString("native_activity_launch_id");evidence.put("launch_id_before",launch);
+        android.content.SharedPreferences events=target.getSharedPreferences("render_editor_launch",Context.MODE_PRIVATE);
+        int count=events.getInt("native_configuration_count",0);evidence.put("configuration_count_before",count);
+        save("requesting_actual_android_application_resource_update");
+        try(android.os.ParcelFileDescriptor command=getUiAutomation().executeShellCommand("am update-appinfo 0 com.rezox.render");
+            java.io.InputStream stream=new android.os.ParcelFileDescriptor.AutoCloseInputStream(command)){
+            byte[] bytes=new byte[4096];int n=stream.read(bytes);
+            evidence.put("android_resource_update_output",n<0?"":new String(bytes,0,n,StandardCharsets.UTF_8));
+        }
+        long deadline=System.nanoTime()+180_000_000_000L;
+        while(System.nanoTime()<deadline){
+            if(events.getInt("native_configuration_pid",0)==android.os.Process.myPid()&&
+                events.getInt("native_configuration_count",0)>count&&call("capabilities").optBoolean("native_editor_ready"))break;
+            Thread.sleep(3000);
+        }
+        JSONObject after=new JSONObject(new String(java.nio.file.Files.readAllBytes(handoff.toPath()),StandardCharsets.UTF_8));
+        evidence.put("launch_id_after",after.getString("native_activity_launch_id"))
+            .put("configuration_count_after",events.getInt("native_configuration_count",0));
+        require(launch.equals(after.getString("native_activity_launch_id")),"ANDROID_RESOURCE_UPDATE_RECREATED_NATIVE_ACTIVITY");
+        require(events.getInt("native_configuration_pid",0)==android.os.Process.myPid()&&
+            events.getInt("native_configuration_count",0)>count,"ACTUAL_CONFIGURATION_CALLBACK_NOT_OBSERVED");
+        evidence.put("viewport",call("viewport.inspect"));
+        evidence.put("screenshot",operation("screenshot.capture",new JSONObject()));
+    }
     @Override public void onStart(){
         Bundle result=new Bundle();int code=Activity.RESULT_CANCELED;
         try{
             target=getTargetContext();
             require((target.getApplicationInfo().flags&ApplicationInfo.FLAG_DEBUGGABLE)!=0,"DEBUG_APPLICATION_REQUIRED");
             require("ranchu".equals(Build.HARDWARE)||"goldfish".equals(Build.HARDWARE),"ISOLATED_WORKSPACE_EMULATOR_REQUIRED");
-            require(phase.equals("core")||phase.equals("assets")||phase.equals("render")||phase.equals("status"),"UNKNOWN_FIXED_TEST_PHASE");
+            require(phase.equals("core")||phase.equals("assets")||phase.equals("render")||phase.equals("status")||phase.equals("configuration")||phase.equals("launch"),"UNKNOWN_FIXED_TEST_PHASE");
             File folder=new File(target.getFilesDir(),"StudioValidation");folder.mkdirs();
             File path=new File(folder,"029_"+phase+".json");
             require(phase.equals("status")||!path.exists(),"EXISTING_NATIVE_TEST_RECEIPT_INSPECT_BEFORE_REPLAY");
@@ -156,7 +191,7 @@ public final class NativeStudioChecks extends Instrumentation {
             require("Render Studio".equals(caps.getString("target_app"))&&"com.rezox.render".equals(caps.getString("target_package")),"WRONG_NATIVE_TARGET");
             publicId=caps.getString("render_public_id");evidence.put("render_public_id",publicId).put("capabilities",caps);
             require(target.getPackageManager().getPackageInfo(target.getPackageName(),0).getLongVersionCode()>=35,"UPGRADED_APK_REQUIRED");
-            if(phase.equals("core"))core();else if(phase.equals("assets"))assets();else if(phase.equals("render"))render();else status();
+            if(phase.equals("core"))core();else if(phase.equals("assets"))assets();else if(phase.equals("render"))render();else if(phase.equals("configuration"))configuration();else if(phase.equals("launch"))launch();else status();
             evidence.put("passed",true);save("passed_native_"+phase);code=Activity.RESULT_OK;
         }catch(Throwable error){
             try{if(evidence!=null){evidence.put("error",error.toString()).put("cause",String.valueOf(error.getCause()));save("failed_native_"+phase);}}catch(Exception ignored){}

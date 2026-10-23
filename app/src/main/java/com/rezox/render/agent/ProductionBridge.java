@@ -72,6 +72,8 @@ public final class ProductionBridge {
                 .put("render_public_id",publicId).put("target_package",context.getPackageName()).put("target_app","Render Studio")
                 .put("requires_target_id",true).put("maximum_request_bytes",131072).put("maximum_artifact_chunk_bytes",24576)
                 .put("native_editor_ready",editorReady(context)).put("native_window_capture_ready",ProductionCapture.available())
+                .put("native_activity_asset_change_handling_declared",
+                     com.rezox.render.NativeEditorConfiguration.handlesAssetConfigurationChanges(context))
                 .put("background_render_running",RenderManualJobs.active())
                 .put("android_h264_encoder_available",ProductionVideoEncoder.available()).put("cloud_rendering",false)
                 .put("automatic_image_to_3d_provider_installed",false).put("visual_quality_verified",false)

@@ -13,7 +13,13 @@ public final class NativeHeartbeat {
         if(context==null)return false;
         File file=new File(context.getFilesDir(),"render_bpy_jobs/ready");
         long age=System.currentTimeMillis()-file.lastModified();
-        if(!file.isFile()||file.length()<1||file.length()>32||age<0||age>=15000||Files.isSymbolicLink(file.toPath()))return false;
+        return age>=0&&age<15000&&observedCurrentProcess(context);
+    }
+    /** Initialization evidence only: a busy Blender timer is not fresh readiness. */
+    public static boolean observedCurrentProcess(Context context) {
+        if(context==null)return false;
+        File file=new File(context.getFilesDir(),"render_bpy_jobs/ready");
+        if(!file.isFile()||file.length()<1||file.length()>32||Files.isSymbolicLink(file.toPath()))return false;
         try {
             return Integer.toString(Process.myPid()).equals(new String(Files.readAllBytes(file.toPath()),StandardCharsets.US_ASCII).trim());
         }catch(java.io.IOException ignored){return false;}
