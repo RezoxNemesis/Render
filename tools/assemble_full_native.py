@@ -141,6 +141,20 @@ def merge_manifest(source):
     return ET.ElementTree(root)
 
 
+class _RuntimeScriptArchive(zipfile.ZipFile):
+    """Keep runtime seals stable when a checkout changes only file metadata."""
+
+    def write(self, filename, arcname=None, compress_type=None, compresslevel=None):
+        if arcname is None:
+            raise ValueError("RUNTIME_SCRIPT_ARCHIVE_NAME_REQUIRED")
+        entry = zipfile.ZipInfo(arcname, date_time=(2020, 1, 1, 0, 0, 0))
+        entry.create_system = 3
+        entry.external_attr = 0o100644 << 16
+        self.writestr(entry, Path(filename).read_bytes(),
+                      compress_type=self.compression if compress_type is None else compress_type,
+                      compresslevel=compresslevel)
+
+
 def attach_bpy_agent(runtime_zip, source_py, scene_py=None, batch_py=None):
     """Startup timer executes typed bpy operations, never arbitrary Python code."""
     with zipfile.ZipFile(runtime_zip) as packed:
@@ -153,7 +167,7 @@ def attach_bpy_agent(runtime_zip, source_py, scene_py=None, batch_py=None):
             raise ValueError("BLENDER_LIVELY_SCRIPT_COLLISION")
         if batch_py is not None and "scripts/startup/render_batch_assembly.py" in names:
             raise ValueError("BLENDER_BATCH_SCRIPT_COLLISION")
-    with zipfile.ZipFile(runtime_zip, "a") as packed:
+    with _RuntimeScriptArchive(runtime_zip, "a") as packed:
         packed.write(source_py, "scripts/startup/render_agent_startup.py",
                      compress_type=zipfile.ZIP_DEFLATED)
         if scene_py is not None:

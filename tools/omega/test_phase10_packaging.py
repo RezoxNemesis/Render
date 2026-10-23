@@ -18,7 +18,7 @@ class OmegaPackagingTests(unittest.TestCase):
         self.script = self.root / "render_agent_startup.py"
         for name in ("render_agent_startup.py", "render_lively_scene.py",
                      "render_batch_assembly.py", "render_session_tools.py",
-                     "render_v25_recovery.py", "render_assets.py",
+                     "render_v25_recovery.py", "render_assets.py", "render_native_hud.py",
                      "render_production.py", "render_production_contract.py",
                      "render_production_detail.py", "render_studio_ops.py",
                      "render_studio_contract.py", "omega_registry.py"):
