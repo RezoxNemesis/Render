@@ -193,6 +193,12 @@ public final class RenderManualJobs {
                     snap.optInt("completed"),snap.optInt("total"));
             }
         }catch(Exception error){
+            if(STOP.get()&&!(error instanceof BlenderSpool.RecoveryRequired)){
+                JSONObject last=status(app);
+                publish(app,jobId,"paused","Paused before the next native frame",
+                        last.optInt("completed"),last.optInt("total"));
+                ending="cancelled";
+            }else{
             // Do not erase the last valid PNG or overwrite the frozen .blend.
             String message=error.getMessage();
             String code=message!=null&&message.matches("[A-Z_]{3,96}")?
@@ -201,6 +207,7 @@ public final class RenderManualJobs {
             publish(app,jobId,"paused_error","Retryable: "+code,
                     last.optInt("completed"),last.optInt("total"));
             ending="failed";
+            }
         }finally{
             ScheduledFuture<?> ticker=pulse;
             if(ticker!=null)ticker.cancel(false);

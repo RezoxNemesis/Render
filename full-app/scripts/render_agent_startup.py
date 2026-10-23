@@ -14,16 +14,6 @@ import re
 import time
 
 import bpy
-# Real native Blender has bpy.types.Operator; host-only protocol tests intentionally
-# supply a minimal bpy double and never instantiate editor UI classes.
-if getattr(getattr(bpy, "types", None), "Operator", None) is not None:
-    import sys as _render_sys
-    _native_startup_dir = str(Path(__file__).resolve().parent)
-    if _native_startup_dir not in _render_sys.path:
-        _render_sys.path.insert(0, _native_startup_dir)
-    import render_session_tools as _render_session
-else:
-    _render_session = None
 
 def _launch_settings(environ, script_file):
     """Read Java's private handoff when native-bridge environ is a snapshot.
@@ -57,6 +47,21 @@ def _launch_settings(environ, script_file):
 
 
 ROOT, MOBILE_MODE = _launch_settings(os.environ, __file__)
+# Companion menus/HUD read the guest Python environment at import time. Publish
+# the validated private handoff there before importing any companion module.
+if ROOT:
+    os.environ["RENDER_AGENT_SPOOL"] = ROOT
+if MOBILE_MODE:
+    os.environ["RENDER_MOBILE_UI_MODE"] = MOBILE_MODE
+# Real native Blender has bpy.types.Operator; host protocol tests use bpy doubles.
+if getattr(getattr(bpy, "types", None), "Operator", None) is not None:
+    import sys as _render_sys
+    _native_startup_dir = str(Path(__file__).resolve().parent)
+    if _native_startup_dir not in _render_sys.path:
+        _render_sys.path.insert(0, _native_startup_dir)
+    import render_session_tools as _render_session
+else:
+    _render_session = None
 print("Render native startup: command spool " + ("configured" if ROOT else "missing"), flush=True)
 _UI_FOCUSED = False
 _LAST_HEARTBEAT = 0.0
@@ -705,6 +710,27 @@ def _native_ui_event(method, value):
         pass  # Optional viewport feedback never changes command execution.
 
 
+def _heartbeat(root):
+    """Only this actual bpy timer publishes readiness, bound to its process."""
+    global _LAST_HEARTBEAT
+    ready = root / "ready"
+    expected = str(os.getpid())
+    try:
+        matches = (ready.is_file() and not ready.is_symlink() and ready.stat().st_size <= 32
+                   and ready.read_text(encoding="ascii") == expected)
+    except (OSError, UnicodeError):
+        matches = False
+    if not matches:
+        temporary = root / "ready.native.tmp"
+        fd = os.open(str(temporary), os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        with os.fdopen(fd, "w", encoding="ascii") as output:
+            output.write(expected)
+        os.replace(temporary, ready)
+    else:
+        ready.touch()
+    _LAST_HEARTBEAT = time.time()
+
+
 def _poll():
     global _LAST_HEARTBEAT
     if not ROOT:
@@ -715,10 +741,10 @@ def _poll():
         path.mkdir(mode=0o700, parents=True, exist_ok=True)
     now = time.time()
     if now - _LAST_HEARTBEAT > 3.0:
-        (root / "ready").touch(exist_ok=True)
-        if not _LAST_HEARTBEAT:
+        first = not _LAST_HEARTBEAT
+        _heartbeat(root)
+        if first:
             print("Render native startup: Blender timer heartbeat active", flush=True)
-        _LAST_HEARTBEAT = now
     for incoming in sorted(pending.glob("*.json"))[:4]:
         name = incoming.stem
         if not _ID_PATTERN.fullmatch(name) or incoming.is_symlink():
@@ -747,6 +773,10 @@ def _poll():
                 code = type(error).__name__
             report = {"id": name, "state": "failed", "error": code}
         try:
+            # A long frame blocked this timer. Refresh liveness on the actual
+            # Blender thread BEFORE publishing its receipt, so the next frame
+            # cannot race a stale pre-render heartbeat.
+            _heartbeat(root)
             _write_result(target, report)
         except Exception:
             # Leave claimed file for crash/recovery inspection. No blind replay.

@@ -12,6 +12,8 @@ public final class NativeEditorConfiguration {
     private NativeEditorConfiguration() {}
 
     public static void publish(Context context) throws Exception {
+        // The previous process's file is never launch-completion evidence.
+        java.nio.file.Files.deleteIfExists(new File(context.getFilesDir(),"render_bpy_jobs/ready").toPath());
         String mode = context.getSharedPreferences("render_mobile_ui", Context.MODE_PRIVATE)
                 .getString("mode", "portrait");
         if (!"portrait".equals(mode) && !"landscape".equals(mode)) mode = "portrait";

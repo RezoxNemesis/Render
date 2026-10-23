@@ -7,6 +7,8 @@ from pathlib import Path
 import re
 
 OPERATIONS = frozenset((
+    'asset.search','asset.download','asset.download.status','asset.download.pause','asset.import',
+    'render.quality.inspect','render.quality.configure','render.performance.inspect','render.performance.configure',
     'capabilities', 'device.profile', 'editor.open', 'screenshot.capture',
     'artifact.read', 'artifact.export', 'reference.write',
     'asset.create', 'project.create', 'project.checkpoint', 'scene.inspect', 'mesh.create',
@@ -106,7 +108,7 @@ def render_spec(data):
               'output_kind': data.get('output_kind','ANIMATION')}
     if result['width']%2 or result['height']%2 or result['end']<result['start']:
         raise ValueError('INVALID_RENDER_RANGE_OR_DIMENSIONS')
-    if result['engine'] not in ('BLENDER_EEVEE','BLENDER_EEVEE_NEXT','CYCLES'):
+    if result['engine'] not in ('BLENDER_EEVEE','BLENDER_EEVEE_NEXT','CYCLES','BLENDER_WORKBENCH'):
         raise ValueError('INVALID_RENDER_ENGINE')
     if result['output_kind'] not in ('STILL','ANIMATION'):
         raise ValueError('INVALID_RENDER_OUTPUT_KIND')

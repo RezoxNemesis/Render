@@ -71,6 +71,27 @@ class BlenderBridgeTests(unittest.TestCase):
         self.assertEqual("Starter", report["result"]["sample_objects"][0]["name"])
         self.assertEqual(1, report["result"]["total_objects"])
 
+    def test_long_command_refreshes_native_liveness_before_receipt_publication(self):
+        ready=Path(self.tmp.name)/"ready"
+        writer=self.module._write_result
+        def long_command(command):
+            old=time.time()-1800
+            os.utime(ready,(old,old))
+            return {"frame":101}
+        def publish(path,result):
+            self.assertLess(time.time()-ready.stat().st_mtime,5)
+            writer(path,result)
+        self.module._dispatch=long_command
+        self.module._write_result=publish
+        self.assertEqual("succeeded",self.job("blender.scene.summary",{})["state"])
+
+    def test_native_heartbeat_replaces_corrupt_or_previous_process_identity(self):
+        ready=Path(self.tmp.name)/"ready"
+        for content in (b"",b"999999999",b"\xff\xfe"):
+            ready.write_bytes(content)
+            self.module._heartbeat(Path(self.tmp.name))
+            self.assertEqual(str(os.getpid()),ready.read_text())
+
     def launch_fixture(self, **settings):
         files = Path(self.tmp.name) / "files"
         script = files / "blender/5.3/scripts/startup/render_agent_startup.py"

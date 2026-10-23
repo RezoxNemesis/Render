@@ -50,12 +50,19 @@ public class ProductionBridgeTest {
         assertEquals(255,ProductionVideoEncoder.clamp(500));assertEquals(0,ProductionVideoEncoder.clamp(-100));
     }
     @Test public void referenceChunksAreChecksummedAndReplaySafe()throws Exception{
-        Context c=RuntimeEnvironment.getApplication();byte[] content=new byte[]{1,2,3,4};
+        Context c=RuntimeEnvironment.getApplication();
+        java.io.ByteArrayOutputStream image=new java.io.ByteArrayOutputStream();
+        android.graphics.Bitmap bitmap=android.graphics.Bitmap.createBitmap(2,2,android.graphics.Bitmap.Config.ARGB_8888);
+        bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,image);bitmap.recycle();
+        byte[] content=image.toByteArray();
         java.security.MessageDigest md=java.security.MessageDigest.getInstance("SHA-256");String digest=AgentPolicy.hex(md.digest(content));
-        JSONObject p=new JSONObject().put("sha256",digest).put("extension","png").put("offset",0).put("total_bytes",4)
+        JSONObject p=new JSONObject().put("sha256",digest).put("extension","png").put("offset",0).put("total_bytes",content.length)
             .put("base64",android.util.Base64.encodeToString(content,android.util.Base64.NO_WRAP)).put("finish",true);
         JSONObject one=ProductionFiles.writeReference(c,p),two=ProductionFiles.writeReference(c,p);
         assertTrue(one.getBoolean("complete"));assertEquals(one.getString("sha256"),two.getString("sha256"));
+        JSONObject metadata=StudioReferenceInbox.details(c,new JSONObject().put("asset",digest+".png"));
+        assertEquals(2,metadata.getInt("width"));assertEquals(2,metadata.getInt("height"));
         ProductionFiles.file(c,"Assets",one.getString("filename")).delete();
+        ProductionFiles.file(c,"Assets",digest+".meta.json").delete();
     }
 }

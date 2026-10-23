@@ -16,7 +16,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /** App-private native bpy main-thread command spool. Never executes Python text. */
 public final class BlenderSpool {
     public static final class RecoveryRequired extends Exception {
-        RecoveryRequired(String code) { super(code); }
+        public final String commandId;
+        RecoveryRequired(String code) { this(code, ""); }
+        RecoveryRequired(String code, String id) { super(code); commandId=id; }
     }
     private final File root;
     private final Context app;
@@ -239,7 +241,7 @@ public final class BlenderSpool {
         if (!working.isDirectory() && !working.mkdirs()) throw new IllegalStateException("CANNOT_CREATE_NATIVE_QUEUE");
         if (!results.isDirectory() && !results.mkdirs()) throw new IllegalStateException("CANNOT_CREATE_NATIVE_QUEUE");
         File ready=new File(root,"ready");
-        if (!ready.isFile() || System.currentTimeMillis()-ready.lastModified()>15000)
+        if (!NativeHeartbeat.ready(app))
             throw new IllegalStateException("BLENDER_EDITOR_NOT_RUNNING");
         String id=UUID.randomUUID().toString().replace("-","");
         File request=new File(pending,id+".json");
@@ -255,6 +257,7 @@ public final class BlenderSpool {
             action.equals("blender.scene.render_still") ? 480000L :
             action.equals("blender.project.save_copy") ? 120000L :
             action.equals("omega.dispatch") ? 120000L : 20000L;
+        timeoutMillis=NativeCommandBudget.timeout(action,args,timeoutMillis);
         JSONObject envelope=new JSONObject().put("id",id).put("action",action)
             .put("args",args).put("deadline",System.currentTimeMillis()/1000+timeoutMillis/1000);
         byte[] contents=envelope.toString().getBytes(StandardCharsets.UTF_8);
@@ -299,10 +302,9 @@ public final class BlenderSpool {
             if(resultFile.isFile()){
                 if(resultFile.length()>65536)throw new IllegalStateException("BLENDER_RESULT_TOO_LARGE");
                 byte[] bytes=Files.readAllBytes(resultFile.toPath());
-                resultFile.delete();
                 progressFile.delete();
                 JSONObject reply=new JSONObject(new String(bytes,StandardCharsets.UTF_8));
-                if(!id.equals(reply.optString("id")))throw new RecoveryRequired("BLENDER_RESULT_ID_MISMATCH");
+                if(!id.equals(reply.optString("id")))throw new RecoveryRequired("BLENDER_RESULT_ID_MISMATCH",id);
                 if(!"succeeded".equals(reply.optString("state")))
                     throw new IllegalStateException(reply.optString("error","BLENDER_NATIVE_ACTION_FAILED"));
                 JSONObject result=reply.getJSONObject("result");
@@ -312,13 +314,36 @@ public final class BlenderSpool {
             }
             if(cancelled.get()){
                 if(request.delete())throw new IllegalStateException("CANCELLED_BEFORE_NATIVE_START");
-                if(claimed.isFile())throw new RecoveryRequired("NATIVE_EXECUTION_OUTCOME_UNCERTAIN");
-                throw new RecoveryRequired("NATIVE_EXECUTION_OUTCOME_UNCERTAIN");
+                // A render pause is a frame boundary request. Do not drop the
+                // service/wake guard while Blender is still writing this PNG.
+                if(!NativeCommandBudget.frame(action,args))
+                    throw new RecoveryRequired("NATIVE_EXECUTION_OUTCOME_UNCERTAIN",id);
             }
             Thread.sleep(150);
         }
         // A command may have been taken by Blender without an acknowledgment.
         request.delete();
-        throw new RecoveryRequired("BLENDER_NATIVE_TIMEOUT_RECOVERY_REQUIRED");
+        throw new RecoveryRequired("BLENDER_NATIVE_TIMEOUT_RECOVERY_REQUIRED",id);
+    }
+
+    /** Exact-ID recovery inspection, including late results; never queues work. */
+    public static JSONObject inspect(Context context, JSONObject payload)throws Exception {
+        ProductionBridge.fields(payload,"command_id");
+        String id=payload.getString("command_id");
+        if(!id.matches("[a-f0-9]{32}"))throw new IllegalArgumentException("INVALID_NATIVE_COMMAND_ID");
+        File root=new File(context.getFilesDir(),"render_bpy_jobs");
+        JSONObject status=new JSONObject().put("command_id",id).put("replayed",false);
+        File result=new File(root,"results/"+id+".json");
+        if(result.isFile()&&!Files.isSymbolicLink(result.toPath())){
+            if(result.length()>131072)throw new IllegalStateException("BLENDER_RESULT_TOO_LARGE");
+            JSONObject reply=new JSONObject(new String(Files.readAllBytes(result.toPath()),StandardCharsets.UTF_8));
+            if(!id.equals(reply.optString("id")))throw new IllegalStateException("BLENDER_RESULT_ID_MISMATCH");
+            return status.put("state",reply.getString("state")).put("native_receipt",reply)
+                .put("native_completion_received",true);
+        }
+        String state=new File(root,"working/"+id+".json").isFile()?"claimed_outcome_pending":
+            new File(root,"pending/"+id+".json").isFile()?"queued":"not_found";
+        return status.put("state",state).put("native_completion_received",false)
+            .put("safe_to_replay",false);
     }
 }

@@ -24,7 +24,9 @@ public final class ProductionBridge {
         "world.configure","instances.plan","instances.create","reference.attach",
         "render.plan","render.step","render.batch","render.status","render.encode","drive.status","drive.backup",
         "render.storage.status","render.job.start","render.job.status","render.job.pause",
-        "render.job.export","render.job.export_segment","project.checkpoint_export"};
+        "render.job.export","render.job.export_segment","project.checkpoint_export","native.command.status",
+        "asset.search","asset.download","asset.download.status","asset.download.pause","asset.import",
+        "render.quality.inspect","render.quality.configure","render.performance.inspect","render.performance.configure"};
     private static final Set<String> OPERATIONS=new HashSet<>(Arrays.asList(OPS));
     private ProductionBridge(){}
     public static void fields(JSONObject p,String allowed)throws Exception {
@@ -45,7 +47,7 @@ public final class ProductionBridge {
         if(args.toString().getBytes(StandardCharsets.UTF_8).length>131072)throw new IllegalArgumentException("PRODUCTION_REQUEST_TOO_LARGE");
     }
     private static boolean editorReady(Context context){
-        File ready=new File(context.getFilesDir(),"render_bpy_jobs/ready");long age=System.currentTimeMillis()-ready.lastModified();return ready.isFile()&&age>=0&&age<15000;
+        return NativeHeartbeat.ready(context);
     }
     public static JSONObject profile(Context context)throws Exception {
         ActivityManager manager=context.getSystemService(ActivityManager.class);ActivityManager.MemoryInfo memory=new ActivityManager.MemoryInfo();
@@ -70,6 +72,7 @@ public final class ProductionBridge {
                 .put("render_public_id",publicId).put("target_package",context.getPackageName()).put("target_app","Render Studio")
                 .put("requires_target_id",true).put("maximum_request_bytes",131072).put("maximum_artifact_chunk_bytes",24576)
                 .put("native_editor_ready",editorReady(context)).put("native_window_capture_ready",ProductionCapture.available())
+                .put("background_render_running",RenderManualJobs.active())
                 .put("android_h264_encoder_available",ProductionVideoEncoder.available()).put("cloud_rendering",false)
                 .put("automatic_image_to_3d_provider_installed",false).put("visual_quality_verified",false)
                 .put("render_protocol","plan_then_batch_up_to_12_frames_with_cooldown_then_encode_then_export")
@@ -78,10 +81,18 @@ public final class ProductionBridge {
                 .put("drive_backup_via","user-granted Android Storage Access Framework; cloud storage only")
                 .put("drive_folder_granted",ProductionDriveStorage.status(context).getBoolean("folder_granted"))
                 .put("user_project_quality_changed",false)
+                .put("native_frame_timeout_ms",NativeCommandBudget.FRAME_TIMEOUT_MS)
+                .put("background_render_entrypoint","render.job.start")
+                .put("asset_catalog","Poly Haven CC0 models, materials and HDRIs")
+                .put("asset_catalog_is_infinite",false)
+                .put("asset_downloads_keep_requested_resolution",true)
+                .put("explicit_quality_configuration",true)
+                .put("read_only_native_receipt_recovery","native.command.status")
                 .put("omega_reserved_only_not_verified",new JSONArray(OmegaOperations.reserved()))
                 .put("omega_capabilities_operation","omega.integration.capabilities");
         }
         if(operation.equals("device.profile")){fields(p,"");return profile(context);}
+        if(operation.equals("native.command.status"))return BlenderSpool.inspect(context,p);
         // These operations remain authenticated/target-id scoped by the
         // existing Render/VideoStudio Binder checks above. No filesystem path
         // or arbitrary bpy operator is accepted from a remote command.
@@ -214,7 +225,7 @@ public final class ProductionBridge {
             nativePayload.put("available_memory_bytes",device.getLong("available_memory_bytes"));
         }
         JSONObject nativeArgs=new JSONObject().put("operation",operation).put("payload",nativePayload);
-        try(NativeWakeGuard wake=NativeWakeGuard.acquire(context,operation.equals("render.step")?"blender.scene.render_still":"blender.scene.batch_assembly")){
+        try(NativeWakeGuard wake=NativeWakeGuard.acquire(context,operation.equals("render.step")?"blender.production.render_frame":"blender.production.execute")){
             return new BlenderSpool(context).execute("blender.production.execute",nativeArgs,cancelled);
         }
     }

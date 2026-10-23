@@ -33,7 +33,7 @@ import java.util.UUID;
  */
 public final class StudioReferenceInbox {
     public static final int PICK_REFERENCE=714;
-    private static final long MAX_IMAGE=80L*1024*1024;
+    private static final long MAX_IMAGE=100L*1024*1024;
     private static final long MAX_VIDEO=512L*1024*1024;
     private static final long MAX_IMAGE_PIXELS=80_000_000L;
     private StudioReferenceInbox(){}
@@ -159,6 +159,20 @@ public final class StudioReferenceInbox {
         }
         try{Files.move(tmp.toPath(),file.toPath(),StandardCopyOption.REPLACE_EXISTING,StandardCopyOption.ATOMIC_MOVE);}
         catch(java.nio.file.AtomicMoveNotSupportedException e){Files.move(tmp.toPath(),file.toPath(),StandardCopyOption.REPLACE_EXISTING);}
+    }
+    /** The typed upload path shares the owner's URI import validation/index. */
+    static JSONObject indexStored(Context context,File file)throws Exception{
+        String name=file.getName();
+        if(!name.matches("[a-f0-9]{64}\\.(png|jpg|jpeg|webp|mp4)"))
+            throw new IllegalArgumentException("INVALID_IMPORTED_ASSET_NAME");
+        String ext=name.substring(65),actual=fileType(file);
+        if(!actual.equals(ext)&&!(actual.equals("jpg")&&ext.equals("jpeg")))
+            throw new IllegalArgumentException("REFERENCE_FORMAT_MISMATCH");
+        if(file.length()>(ext.equals("mp4")?MAX_VIDEO:MAX_IMAGE))
+            throw new IllegalArgumentException("REFERENCE_FILE_TOO_LARGE");
+        JSONObject data=metadata(context,file);
+        writeMetadata(context,data);
+        return data;
     }
     public static JSONObject receive(Context context,Intent intent)throws Exception{
         List<Uri> sources=selected(intent);

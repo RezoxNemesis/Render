@@ -163,7 +163,10 @@ public final class VideoStudioNativeBridgeService extends Service {
                 code=error.getClass().getSimpleName();
             state=error instanceof BlenderSpool.RecoveryRequired?"recovery_required":
                   cancel.get()?"cancelled":"failed";
-            try { outcome.put("ok",false).put("error",code).put("state",state); }
+            try { outcome.put("ok",false).put("error",code).put("state",state);
+                if(error instanceof BlenderSpool.RecoveryRequired)
+                    outcome.put("native_command_id",((BlenderSpool.RecoveryRequired)error).commandId)
+                        .put("recovery_operation","native.command.status"); }
             catch(Exception ignored){}
         } finally {
             // Every completed IPC receipt clearly identifies the actual

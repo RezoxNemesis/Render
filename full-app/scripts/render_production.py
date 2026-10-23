@@ -124,7 +124,7 @@ def _material(scene,p,root):
     color=C.triple(p['color'],0,1);metal=C.number(p.get('metallic',0),0,1);rough=C.number(p.get('roughness',0.5),0,1)
     emission=C.triple(p.get('emission',[0,0,0]),0,1);strength=C.number(p.get('emission_strength',0),0,10000)
     asset=C.owned_path(root/'Assets',p['asset']) if 'asset' in p else None
-    if asset is not None and (not asset.is_file() or asset.suffix.lower() not in ('.png','.jpg','.jpeg')):raise ValueError('REFERENCE_IMAGE_UNAVAILABLE')
+    if asset is not None and (not asset.is_file() or asset.suffix.lower() not in ('.png','.jpg','.jpeg','.webp')):raise ValueError('REFERENCE_IMAGE_UNAVAILABLE')
     material=bpy.data.materials.new(C.safe_name(p.get('name','ProductionMaterial')))
     material.use_nodes=True;material.diffuse_color=(*color,1)
     shader=material.node_tree.nodes.get('Principled BSDF')
@@ -186,7 +186,10 @@ def _instances(scene,p,available):
         raise
 
 def _plan_render(scene,p,root):
-    spec=C.render_spec(p)
+    # Omitting a setting means keep the artist's scene setting. A minimal MCP
+    # request must never silently replace its engine, resolution or samples.
+    import render_execution_settings
+    spec=C.render_spec(render_execution_settings.plan_payload(scene,p))
     if scene.camera is None:raise ValueError('CAMERA_REQUIRED')
     ident=uuid.uuid4().hex;folder=_job(root,ident);folder.mkdir(mode=0o700)
     checkpoint=folder/'snapshot.blend'
@@ -262,6 +265,13 @@ def execute(args, spool, command_id):
     operation,p=C.validate_envelope(args);root=_root(spool)
     scene=bpy.context.scene
     if scene is None:raise RuntimeError('NO_ACTIVE_SCENE')
+    if operation in ('asset.search','asset.download','asset.download.status','asset.download.pause','asset.import'):
+        import render_asset_library
+        return render_asset_library.execute(operation,scene,root,p)
+    if operation in ('render.quality.inspect','render.quality.configure',
+                     'render.performance.inspect','render.performance.configure'):
+        import render_execution_settings
+        return render_execution_settings.execute(operation,scene,p)
     if operation=='scene.inspect':
         C.fields(p,('offset','limit'))
         offset=C.integer(p.get('offset',0),0,10000000);limit=C.integer(p.get('limit',32),1,64)
@@ -330,7 +340,7 @@ def execute(args, spool, command_id):
         return _instances(scene,params,available)
     if operation=='reference.attach':
         C.fields(p,('asset','name','location','size'),('asset','name'));asset=C.owned_path(root/'Assets',p['asset'])
-        if not asset.is_file() or asset.suffix.lower() not in ('.png','.jpg','.jpeg'):raise ValueError('REFERENCE_IMAGE_UNAVAILABLE')
+        if not asset.is_file() or asset.suffix.lower() not in ('.png','.jpg','.jpeg','.webp'):raise ValueError('REFERENCE_IMAGE_UNAVAILABLE')
         name=_new_name(p['name']);location=C.triple(p.get('location',[0,0,0]));size=C.number(p.get('size',4),0.001,10000)
         image=bpy.data.images.load(str(asset),check_existing=True);image.pack();ob=bpy.data.objects.new(name,None);ob.empty_display_type='IMAGE';ob.data=image;ob.empty_display_size=size;ob.location=location;scene.collection.objects.link(ob)
         return {'object':name,'image':image.name,'packed':True,'is_3d_reconstruction':False}

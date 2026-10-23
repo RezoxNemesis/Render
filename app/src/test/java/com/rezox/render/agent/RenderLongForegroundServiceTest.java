@@ -16,6 +16,23 @@ import static org.junit.Assert.*;
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk=33,manifest=Config.NONE)
 public class RenderLongForegroundServiceTest {
+    @Test public void anotherJobCannotReplacePersistedRenderConsent()throws Exception{
+        Context app=RuntimeEnvironment.getApplication();
+        SharedPreferences prefs=app.getSharedPreferences(RenderLongForegroundService.PREFS,Context.MODE_PRIVATE);
+        String first="1".repeat(32),second="2".repeat(32);
+        File path=ProductionFiles.file(app,second,"manifest.json");
+        JSONObject manifest=new JSONObject().put("state","ready").put("next_frame",1)
+            .put("frames",new JSONObject()).put("fingerprint","same")
+            .put("spec",new JSONObject().put("start",1).put("end",2).put("frame_count",2));
+        try{
+            Files.write(path.toPath(),manifest.toString().getBytes(StandardCharsets.UTF_8));
+            prefs.edit().putString(RenderLongForegroundService.JOB,first).putBoolean(RenderLongForegroundService.WANTED,true).commit();
+            try{RenderLongForegroundService.request(app,second);fail();}
+            catch(IllegalStateException expected){assertEquals("ANOTHER_LONG_RENDER_JOB_PENDING_OR_RUNNING",expected.getMessage());}
+            assertEquals(first,prefs.getString(RenderLongForegroundService.JOB,""));
+            assertTrue(prefs.getBoolean(RenderLongForegroundService.WANTED,false));
+        }finally{prefs.edit().clear().commit();path.delete();}
+    }
     @Test public void rejectsArbitraryJobPathsAndNames(){
         assertFalse(RenderLongForegroundService.valid("../private"));
         assertFalse(RenderLongForegroundService.valid("/storage/emulated/0"));

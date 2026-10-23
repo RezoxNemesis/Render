@@ -1,0 +1,153 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+"""Explicit native render settings. Throughput controls never alter pixel quality."""
+import math
+try:
+    import bpy
+except ImportError:
+    bpy = None
+_INSTALLED = False
+
+
+def _samples(scene):
+    if scene.render.engine == "CYCLES" and hasattr(scene, "cycles"):
+        return scene.cycles, "samples"
+    eevee = getattr(scene, "eevee", None)
+    if eevee is not None and hasattr(eevee, "taa_render_samples"):
+        return eevee, "taa_render_samples"
+    return None, None
+
+
+def inspect(scene):
+    render = scene.render
+    owner, field = _samples(scene)
+    return {"engine": render.engine, "width": render.resolution_x,
+            "height": render.resolution_y, "percentage": render.resolution_percentage,
+            "fps": render.fps, "fps_base": render.fps_base,
+            "samples": getattr(owner, field) if owner else None,
+            "film_transparent": render.film_transparent,
+            "persistent_data": render.use_persistent_data,
+            "threads_mode": render.threads_mode, "threads": render.threads,
+            "denoising": bool(scene.cycles.use_denoising) if render.engine == "CYCLES" else None,
+            "silent_quality_changes": False,
+            "persistent_data_tradeoff": "Reuses render data between frames at the cost of retained memory",
+            "frame_checkpointing": True}
+
+
+def plan_payload(scene, requested):
+    current = inspect(scene)
+    result = {"width": current["width"] * current["percentage"] // 100,
+              "height": current["height"] * current["percentage"] // 100,
+              "engine": current["engine"], "fps": current["fps"],
+              "samples": current["samples"] if current["samples"] is not None else 64,
+              "start": scene.frame_start, "end": scene.frame_end}
+    result.update(requested)
+    return result
+
+
+def configure(scene, p, performance=False):
+    allowed = {"persistent_data", "threads_mode", "threads"} if performance else {
+        "engine", "width", "height", "percentage", "fps", "fps_base", "samples", "film_transparent", "denoising"}
+    if not isinstance(p, dict) or set(p) - allowed:
+        raise ValueError("UNKNOWN_RENDER_SETTING")
+    if scene.get("production_frozen_job"):
+        raise ValueError("RENDER_SNAPSHOT_IMMUTABLE")
+    ranges = {"width": (4, 65536), "height": (4, 65536), "percentage": (1, 100),
+              "fps": (1, 32767), "samples": (1, 16_777_216), "threads": (1, 1024)}
+    for key, value in p.items():
+        if key in ("persistent_data", "film_transparent", "denoising") and type(value) is not bool:
+            raise ValueError("RENDER_SETTING_REQUIRES_BOOLEAN")
+        if key == "engine" and value not in ("CYCLES", "BLENDER_EEVEE", "BLENDER_EEVEE_NEXT", "BLENDER_WORKBENCH"):
+            raise ValueError("INVALID_RENDER_ENGINE")
+        if key == "threads_mode" and value not in ("AUTO", "FIXED"):
+            raise ValueError("INVALID_RENDER_THREADS_MODE")
+        if key in ranges and (type(value) is not int or not ranges[key][0] <= value <= ranges[key][1]):
+            raise ValueError("RENDER_SETTING_OUT_OF_RANGE")
+        if key == "fps_base" and (type(value) not in (int, float) or not math.isfinite(value) or not 0.1 <= value <= 1000):
+            raise ValueError("INVALID_RENDER_FPS_BASE")
+    before, changes = inspect(scene), []
+
+    def set_value(owner, field, value):
+        changes.append((owner, field, getattr(owner, field)))
+        setattr(owner, field, value)
+        if getattr(owner, field) != value and not (field == "fps_base" and abs(getattr(owner, field) - value) < 1e-5):
+            raise ValueError("NATIVE_RENDER_SETTING_WAS_CLAMPED")
+    try:
+        if "engine" in p:
+            set_value(scene.render, "engine", p["engine"])
+        fields = {"width": "resolution_x", "height": "resolution_y", "percentage": "resolution_percentage",
+                  "fps": "fps", "fps_base": "fps_base", "film_transparent": "film_transparent",
+                  "persistent_data": "use_persistent_data", "threads_mode": "threads_mode", "threads": "threads"}
+        for key, field in fields.items():
+            if key in p:
+                set_value(scene.render, field, p[key])
+        if "samples" in p:
+            owner, field = _samples(scene)
+            if owner is None:
+                raise ValueError("ACTIVE_ENGINE_SAMPLE_SETTING_UNAVAILABLE")
+            set_value(owner, field, p["samples"])
+        if "denoising" in p:
+            if scene.render.engine != "CYCLES":
+                raise ValueError("DENOISING_SETTING_REQUIRES_CYCLES")
+            set_value(scene.cycles, "use_denoising", p["denoising"])
+    except Exception:
+        for owner, field, previous in reversed(changes):
+            setattr(owner, field, previous)
+        raise
+    return {"before": before, "after": inspect(scene), "requested_fields": sorted(p),
+            "quality_settings_changed": not performance and bool(p),
+            "existing_render_snapshots_changed": False, "native_execution_verified": True}
+
+
+def execute(operation, scene, p):
+    if operation.endswith("inspect"):
+        if p:
+            raise ValueError("UNKNOWN_RENDER_SETTING")
+        return inspect(scene)
+    return configure(scene, p, operation.startswith("render.performance"))
+
+
+if bpy is not None and getattr(getattr(bpy, "types", None), "Panel", None):
+    class RENDERSTUDIO_PT_execution(bpy.types.Panel):
+        bl_label = "Render Studio • Rendering"
+        bl_idname = "RENDERSTUDIO_PT_execution"
+        bl_space_type = "VIEW_3D"
+        bl_region_type = "UI"
+        bl_category = "Render Studio"
+        def draw(self, context):
+            layout, scene = self.layout, context.scene
+            render = scene.render
+            layout.prop(render, "engine")
+            row = layout.row(align=True)
+            row.prop(render, "resolution_x", text="Width")
+            row.prop(render, "resolution_y", text="Height")
+            layout.prop(render, "resolution_percentage", text="Output scale")
+            owner, field = _samples(scene)
+            if owner:
+                layout.prop(owner, field, text="Render samples")
+            if render.engine == "CYCLES":
+                layout.prop(scene.cycles, "use_denoising", text="Denoising")
+            layout.separator()
+            layout.prop(render, "use_persistent_data", text="Reuse data between frames")
+            layout.label(text="Cache uses more memory; output quality is unchanged")
+            layout.prop(render, "threads_mode", text="CPU threads")
+            if render.threads_mode == "FIXED":
+                layout.prop(render, "threads", text="Thread count")
+            layout.separator()
+            layout.operator("renderstudio.safe_render", text="Render with Background Checkpoints", icon="RENDER_ANIMATION")
+            layout.operator("renderstudio.resume_render", text="Resume Checkpointed Render", icon="PLAY")
+            layout.label(text="Android background limits still apply")
+
+
+def install():
+    global _INSTALLED
+    if not _INSTALLED and bpy is not None and not bpy.app.background:
+        bpy.utils.register_class(RENDERSTUDIO_PT_execution)
+        _INSTALLED = True
+
+
+def register():
+    pass
+
+
+def unregister():
+    pass

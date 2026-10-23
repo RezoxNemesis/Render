@@ -178,7 +178,8 @@ def attach_bpy_agent(runtime_zip, source_py, scene_py=None, batch_py=None):
                          compress_type=zipfile.ZIP_DEFLATED)
         # The runtime is immutable after stage; save/recovery helpers are
         # packaged alongside the upstream bpy startup script, not an APK shell.
-        for extra in ("render_session_tools.py", "render_v25_recovery.py", "render_assets.py", "render_native_hud.py"):
+        for extra in ("render_session_tools.py", "render_v25_recovery.py", "render_assets.py", "render_native_hud.py",
+                      "render_asset_library.py", "render_execution_settings.py"):
             source = Path(source_py).with_name(extra)
             if not source.is_file():
                 raise ValueError("SESSION_RUNTIME_NOT_PACKAGED")

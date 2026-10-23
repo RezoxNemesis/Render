@@ -20,6 +20,13 @@ _ALLOWED={
     'object.shade_flat': {'fields':('object',)},
     'object.add_modifier': {'fields':('object','type','name','levels','width','thickness')},
     'object.origin_to_geometry': {'fields':('object',)},
+    'object.transform_apply': {'fields':('object','location','rotation','scale')},
+    'object.modifier_apply': {'fields':('object','modifier')},
+    'object.modifier_remove': {'fields':('object','modifier')},
+    'mesh.subdivide': {'fields':('object','cuts')},
+    'mesh.recalculate_normals': {'fields':('object',)},
+    'mesh.merge_by_distance': {'fields':('object','distance')},
+    'uv.smart_project': {'fields':('object','angle_degrees','island_margin')},
 }
 _MODIFIERS={'SUBSURF','BEVEL','SOLIDIFY','MIRROR','WEIGHTED_NORMAL','DECIMATE','ARRAY','CLOTH'}
 def _check(p,allowed,required=()):
@@ -252,21 +259,65 @@ def _operator(scene,p):
             typ=arg.get('type')
             if typ not in _MODIFIERS:raise ValueError('MODIFIER_TYPE_NOT_ALLOWED')
             if len(ob.modifiers)>=32:raise ValueError('MODIFIER_LIMIT_REACHED')
-            mod=ob.modifiers.new(_name(arg.get('name','RenderModifier')),typ)
+            label=_name(arg.get('name','RenderModifier'))
+            # Validate first: a rejected command must not leave a modifier behind.
             if typ=='SUBSURF':
                 value=arg.get('levels',2)
                 if type(value) is not int or not 0<=value<=5:raise ValueError('INVALID_SUBSURF_LEVEL')
+            width=C.finite(arg.get('width',.02),0,100) if typ=='BEVEL' else None
+            thickness=C.finite(arg.get('thickness',.02),-.5,.5) if typ=='SOLIDIFY' else None
+            mod=ob.modifiers.new(label,typ)
+            if typ=='SUBSURF':
                 mod.levels=value;mod.render_levels=value
             if typ=='BEVEL':
-                mod.width=C.finite(arg.get('width',.02),0,100)
+                mod.width=width
                 mod.segments=3
-            if typ=='SOLIDIFY':mod.thickness=C.finite(arg.get('thickness',.02),-.5,.5)
+            if typ=='SOLIDIFY':mod.thickness=thickness
         elif name=='object.origin_to_geometry':
             with bpy.context.temp_override(object=ob,active_object=ob,selected_objects=[ob]):
                 result=bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY',center='BOUNDS')
             if 'FINISHED' not in result:raise RuntimeError('ORIGIN_SET_NOT_EXECUTED')
+        elif name=='object.transform_apply':
+            flags={key:arg.get(key,key=='scale') for key in ('location','rotation','scale')}
+            if any(type(value) is not bool for value in flags.values()):raise ValueError('INVALID_TRANSFORM_FLAGS')
+            result=bpy.ops.object.transform_apply(**flags)
+            if 'FINISHED' not in result:raise RuntimeError('TRANSFORM_NOT_APPLIED')
+        elif name in ('object.modifier_apply','object.modifier_remove'):
+            label=_name(arg.get('modifier'))
+            modifier=ob.modifiers.get(label)
+            if modifier is None:raise ValueError('MODIFIER_NOT_FOUND')
+            if name.endswith('remove'):ob.modifiers.remove(modifier)
+            elif 'FINISHED' not in bpy.ops.object.modifier_apply(modifier=label):
+                raise RuntimeError('MODIFIER_NOT_APPLIED')
+        elif name.startswith('mesh.'):
+            import bmesh
+            cuts=arg.get('cuts',1)
+            if name=='mesh.subdivide' and (type(cuts) is not int or not 1<=cuts<=8):raise ValueError('INVALID_SUBDIVISION_CUTS')
+            distance=C.finite(arg.get('distance',.0001),.0000001,1) if name.endswith('distance') else None
+            if name=='mesh.subdivide' and len(ob.data.edges)*(cuts+1)**2>2_000_000:
+                raise ValueError('SUBDIVISION_MEMORY_BUDGET_EXCEEDED')
+            mesh=bmesh.new()
+            try:
+                mesh.from_mesh(ob.data)
+                if name=='mesh.subdivide':bmesh.ops.subdivide_edges(mesh,edges=list(mesh.edges),cuts=cuts,use_grid_fill=True)
+                elif name=='mesh.recalculate_normals':bmesh.ops.recalc_face_normals(mesh,faces=list(mesh.faces))
+                elif name=='mesh.merge_by_distance':bmesh.ops.remove_doubles(mesh,verts=list(mesh.verts),dist=distance)
+                if ob.data.users>1:ob.data=ob.data.copy()
+                mesh.to_mesh(ob.data);ob.data.update()
+            finally:mesh.free()
+        elif name=='uv.smart_project':
+            angle=C.finite(arg.get('angle_degrees',66),1,89)
+            margin=C.finite(arg.get('island_margin',.02),0,.5)
+            try:
+                bpy.ops.object.mode_set(mode='EDIT')
+                bpy.ops.mesh.select_all(action='SELECT')
+                result=bpy.ops.uv.smart_project(angle_limit=math.radians(angle),island_margin=margin)
+                if 'FINISHED' not in result:raise RuntimeError('UV_PROJECT_NOT_EXECUTED')
+            finally:
+                if ob.mode!='OBJECT':bpy.ops.object.mode_set(mode='OBJECT')
         return {'object':ob.name,'operator':name,'executed_on_native_blender':True,
                 'performed_visible_pointer_click':False,
+                'vertices':len(ob.data.vertices),'polygons':len(ob.data.polygons),
                 'modifiers':[m.name for m in ob.modifiers]}
     finally:
         if ob.name in bpy.data.objects:ob.select_set(False)

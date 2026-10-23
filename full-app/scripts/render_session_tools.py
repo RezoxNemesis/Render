@@ -475,6 +475,11 @@ def install():
             pass
     import render_assets
     render_assets.install()
+    for optional in ("render_asset_library", "render_execution_settings"):
+        try:
+            importlib.import_module(optional).install()
+        except Exception as error:
+            print("Render optional panel unavailable:", optional, type(error).__name__, flush=True)
     import render_v25_recovery
     render_v25_recovery.install()
     try:

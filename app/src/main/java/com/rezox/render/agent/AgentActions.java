@@ -39,7 +39,7 @@ public final class AgentActions {
         if(context!=null){
             File heartbeat=new File(context.getFilesDir(),"render_bpy_jobs/ready");
             long age=System.currentTimeMillis()-heartbeat.lastModified();
-            editorReady=heartbeat.isFile() && age>=0 && age<15000;
+            editorReady=NativeHeartbeat.ready(context);
         }
         JSONArray out = new JSONArray();
         for (String id : AgentPolicy.ACTIONS.keySet()) {
@@ -192,7 +192,7 @@ public final class AgentActions {
             }
             File heartbeat=new File(context.getFilesDir(),"render_bpy_jobs/ready");
             long age=System.currentTimeMillis()-heartbeat.lastModified();
-            boolean editorReady=heartbeat.isFile() && age>=0 && age<15000;
+            boolean editorReady=NativeHeartbeat.ready(context);
             return new JSONObject()
                 .put("target_app","Render Studio")
                 .put("target_package",context.getPackageName())
@@ -216,7 +216,7 @@ public final class AgentActions {
             AgentWorkPresence.Snapshot work=AgentWorkPresence.snapshot(context);
             File ready=new File(context.getFilesDir(),"render_bpy_jobs/ready");
             long age=System.currentTimeMillis()-ready.lastModified();
-            boolean bridgeReady=ready.isFile() && age>=0 && age<15000;
+            boolean bridgeReady=NativeHeartbeat.ready(context);
             android.app.NotificationManager manager=context.getSystemService(
                     android.app.NotificationManager.class);
             boolean canNotify=manager!=null && manager.areNotificationsEnabled();
@@ -262,7 +262,15 @@ public final class AgentActions {
             File ready=new File(context.getFilesDir(),"render_bpy_jobs/ready");
             long age=System.currentTimeMillis()-ready.lastModified();
             result.put("editorCommandBridgeReady",
-                ready.isFile() && age>=0 && age<15000);
+                NativeHeartbeat.ready(context));
+            boolean editorReady=NativeHeartbeat.ready(context);
+            if(hasFullBlender(context)){
+                result.put("engineIntegrated",editorReady)
+                    .put("native_status",editorReady?
+                        "Full Android Blender editor and native command timer ready":
+                        RenderManualJobs.active()?"Native Blender render is in progress":
+                            "Full Android Blender bundled; awaiting native editor readiness");
+            }
             // Public signer identity only. Protect user app-data continuity.
             String signer=SigningIdentity.installedSigner(context);
             result.put("installedSignerSha256",signer);

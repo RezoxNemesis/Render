@@ -1,4 +1,5 @@
 import unittest
+import re
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 
@@ -12,7 +13,9 @@ class ThermalDriveInplaceTests(unittest.TestCase):
         self.assertIn('f3d63fb20be25ca0be8aa6a161d5cf13cd98ba2fa300c7a604cce35131b9eb30',ci.lower())
         self.assertNotIn('keytool -genkeypair',ci)
         self.assertNotIn('adb uninstall',ci)
-        self.assertIn("versionCode='30'",ci)
+        current=re.search(r"new='versionCode = ([0-9]+)'",source("tools/prepare_production_toolkit.py"))
+        self.assertIsNotNone(current)
+        self.assertIn("versionCode='"+current.group(1)+"'",ci)
         prep=source('tools/prepare_production_toolkit.py')
         self.assertIn('versionCode = 24',prep)
         self.assertIn('versionCode = 25',(ROOT/'tools/prepare_v23_reference.py').read_text())

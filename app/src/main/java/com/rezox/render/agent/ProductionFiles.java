@@ -72,14 +72,14 @@ public final class ProductionFiles {
     public static JSONObject writeReference(Context context,JSONObject p)throws Exception {
         ProductionBridge.fields(p,"sha256,extension,offset,total_bytes,base64,finish");
         String digest=p.getString("sha256"),ext=p.getString("extension").toLowerCase(java.util.Locale.ROOT);
-        if(!digest.matches("[a-f0-9]{64}")||!(ext.equals("png")||ext.equals("jpg")||ext.equals("jpeg")))throw new IllegalArgumentException("INVALID_REFERENCE_ID");
-        long total=ProductionBridge.integer(p,"total_bytes",1,100L*1024*1024,-1),offset=ProductionBridge.integer(p,"offset",0,total,0);
+        if(!digest.matches("[a-f0-9]{64}")||!(ext.equals("png")||ext.equals("jpg")||ext.equals("jpeg")||ext.equals("webp")||ext.equals("mp4")))throw new IllegalArgumentException("INVALID_REFERENCE_ID");
+        long total=ProductionBridge.integer(p,"total_bytes",1,(ext.equals("mp4")?512L:100L)*1024*1024,-1),offset=ProductionBridge.integer(p,"offset",0,total,0);
         String encoded=p.getString("base64");if(encoded.length()>32768)throw new IllegalArgumentException("REFERENCE_CHUNK_TOO_LARGE");
         byte[] data=Base64.decode(encoded,Base64.DEFAULT);if(data.length>24576||offset+data.length>total)throw new IllegalArgumentException("REFERENCE_CHUNK_TOO_LARGE");
         File dest=file(context,"Assets",digest+"."+ext),part=file(context,"Assets",digest+"."+ext+".partial");
         if(dest.isFile()){
             if(dest.length()!=total||!sha(dest).equals(digest))throw new IOException("REFERENCE_REVISION_CONFLICT");
-            return receipt(dest,"Assets").put("complete",true);
+            return receipt(dest,"Assets").put("complete",true).put("metadata",StudioReferenceInbox.indexStored(context,dest));
         }
         try(RandomAccessFile out=new RandomAccessFile(part,"rw")){
             if(out.length()>offset){
@@ -93,7 +93,7 @@ public final class ProductionFiles {
         if(p.optBoolean("finish",false)){
             if(part.length()!=total||!sha(part).equals(digest))throw new IOException("REFERENCE_HASH_MISMATCH");
             Files.move(part.toPath(),dest.toPath(),StandardCopyOption.ATOMIC_MOVE);
-            return receipt(dest,"Assets").put("complete",true);
+            return receipt(dest,"Assets").put("complete",true).put("metadata",StudioReferenceInbox.indexStored(context,dest));
         }
         return new JSONObject().put("complete",false).put("received_bytes",part.length()).put("total_bytes",total);
     }

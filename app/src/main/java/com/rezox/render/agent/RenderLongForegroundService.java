@@ -64,6 +64,11 @@ public final class RenderLongForegroundService extends Service {
         if(!valid(job))throw new IllegalArgumentException("INVALID_RENDER_JOB_ID");
         ProductionBatch.jobStatus(context,job); // Strictly app-owned manifest.
         Context c=context.getApplicationContext();
+        android.content.SharedPreferences prior=c.getSharedPreferences(PREFS,MODE_PRIVATE);
+        String priorJob=prior.getString(JOB,"");
+        if((RenderManualJobs.active()&&!job.equals(RenderManualJobs.currentJob())) ||
+           (prior.getBoolean(WANTED,false)&&valid(priorJob)&&!job.equals(priorJob)))
+            throw new IllegalStateException("ANOTHER_LONG_RENDER_JOB_PENDING_OR_RUNNING");
         state(c,job,"LAUNCH_REQUESTED",true);
         Intent start=new Intent(c,RenderLongForegroundService.class)
             .setAction(START).putExtra(JOB,job);
@@ -112,7 +117,12 @@ public final class RenderLongForegroundService extends Service {
             .put("android_force_stop_can_prevent_restart",true)
             .put("android_media_processing_quota_is_unlimited",false)
             .put("native_engine_independent_of_activity_verified",false)
+            .put("native_frame_timeout_ms",NativeCommandBudget.FRAME_TIMEOUT_MS)
+            .put("screen_off_uses_partial_cpu_wake_lock",true)
             .put("quality_reduced",false);
+        android.os.PowerManager power=c.getSystemService(android.os.PowerManager.class);
+        if(power!=null)result.put("battery_optimization_exempt",power.isIgnoringBatteryOptimizations(c.getPackageName()))
+            .put("screen_interactive",power.isInteractive()).put("power_save_mode",power.isPowerSaveMode());
         if(valid(job)){
             try{
                 JSONObject nativeState=ProductionBatch.jobStatus(c,job);
@@ -163,9 +173,7 @@ public final class RenderLongForegroundService extends Service {
     }
 
     public static boolean editorReady(Context c){
-        File ready=new File(c.getFilesDir(),"render_bpy_jobs/ready");
-        long age=System.currentTimeMillis()-ready.lastModified();
-        return ready.isFile()&&age>=0&&age<15000;
+        return NativeHeartbeat.ready(c);
     }
     @Override public void onCreate(){
         super.onCreate();
@@ -278,7 +286,8 @@ public final class RenderLongForegroundService extends Service {
             update("Open Render to restart its native Blender editor");
             stopSelf();return;
         }
-        if(RenderManualJobs.active()||RenderManualJobs.start(this,jobId)){
+        if((RenderManualJobs.active()&&jobId.equals(RenderManualJobs.currentJob())) ||
+           (!RenderManualJobs.active()&&RenderManualJobs.start(this,jobId))){
             startPending=false;
             state(this,jobId,"RENDERING",true);
             update("Rendering verified frames");

@@ -72,7 +72,7 @@ public final class ProductionBatch {
             public boolean frameSpaceAvailable()throws Exception{
                 return RenderStorageBudget.frameSpaceAvailable(context,p.getString("job_id"));
             }
-            public AutoCloseable wake(){return NativeWakeGuard.acquire(context,"blender.scene.render_video");}
+            public AutoCloseable wake(){return NativeWakeGuard.acquire(context,"blender.production.render_frame");}
             public JSONObject render(JSONObject args)throws Exception{
                 return new BlenderSpool(context).execute("blender.production.execute",args,cancelled);
             }
