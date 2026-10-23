@@ -25,8 +25,39 @@ if getattr(getattr(bpy, "types", None), "Operator", None) is not None:
 else:
     _render_session = None
 
-ROOT = os.environ.get("RENDER_AGENT_SPOOL", "")
-MOBILE_MODE = os.environ.get("RENDER_MOBILE_UI_MODE", "")
+def _launch_settings(environ, script_file):
+    """Read Java's private handoff when native-bridge environ is a snapshot.
+
+    The file cannot name paths or tools. The spool is derived from this bundled
+    startup script's exact Android runtime layout, never from JSON input.
+    """
+    root = environ.get("RENDER_AGENT_SPOOL", "")
+    mode = environ.get("RENDER_MOBILE_UI_MODE", "")
+    script = Path(script_file).resolve()
+    parents = script.parents
+    if (len(parents) >= 5 and parents[0].name == "startup"
+            and parents[1].name == "scripts"
+            and re.fullmatch(r"[0-9]+\.[0-9]+", parents[2].name)
+            and parents[3].name == "blender" and parents[4].name == "files"):
+        settings_file = parents[4] / "render_native_launch.json"
+        if settings_file.is_file() and not settings_file.is_symlink():
+            if settings_file.stat().st_size > 1024:
+                raise ValueError("NATIVE_LAUNCH_CONFIGURATION_TOO_LARGE")
+            settings = json.loads(settings_file.read_text(encoding="utf8"))
+            if (not isinstance(settings, dict) or settings.get("schema_version") != 1
+                    or settings.get("target_package") != "com.rezox.render"
+                    or settings.get("command_spool_enabled") is not True
+                    or settings.get("mobile_mode") not in ("portrait", "landscape")):
+                raise ValueError("INVALID_NATIVE_LAUNCH_CONFIGURATION")
+            spool = parents[4] / "render_bpy_jobs"
+            if spool.is_symlink():
+                raise ValueError("NATIVE_LAUNCH_SPOOL_SYMLINK")
+            root, mode = str(spool), settings["mobile_mode"]
+    return root, mode
+
+
+ROOT, MOBILE_MODE = _launch_settings(os.environ, __file__)
+print("Render native startup: command spool " + ("configured" if ROOT else "missing"), flush=True)
 _UI_FOCUSED = False
 _LAST_HEARTBEAT = 0.0
 _ID_PATTERN = re.compile(r"^[a-f0-9]{32}$")
@@ -685,6 +716,8 @@ def _poll():
     now = time.time()
     if now - _LAST_HEARTBEAT > 3.0:
         (root / "ready").touch(exist_ok=True)
+        if not _LAST_HEARTBEAT:
+            print("Render native startup: Blender timer heartbeat active", flush=True)
         _LAST_HEARTBEAT = now
     for incoming in sorted(pending.glob("*.json"))[:4]:
         name = incoming.stem

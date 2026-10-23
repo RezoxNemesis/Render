@@ -44,9 +44,15 @@ unexpected call instructions. The source diff applies to the exact pinned Git
 index. Actual full-engine staging and the complete Android APK build passed;
 the staged/packaged corrected engine and unchanged runtime ZIP hashes matched.
 
-A debugger-only alias repair routed the pending call through the real core
-function, without skipping it. That actual native process then loaded its
-startup file, initialized GPU UI resources and entered Python initialization.
-This verifies progress beyond the captured crash. It does **not** yet verify a
-fresh start of the corrected APK, a usable native viewport, the agent heartbeat,
-physical phone behavior, character likeness or completion of an animation.
+A debugger-only alias repair first routed the pending call through the real
+core function without skipping it. A subsequent cold process start used the
+exact packaged corrected library, with no debugger repair, and completed
+startup-file loading, GPU UI resource initialization, Python and `WM_init`.
+For this isolated userdebug test, only the extracted engine library was
+atomically replaced after stopping the app and checking both hashes. Installed
+APK metadata remained 0.28.2; a whole 0.28.3 APK install is not claimed. No app
+data or owner-phone files were cleared or changed.
+
+This verifies cold-start progress beyond the captured crash. A usable native
+viewport, the agent heartbeat, physical phone behavior, character likeness and
+completion of an animation still require their own actual results.

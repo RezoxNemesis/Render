@@ -233,6 +233,7 @@ def patch_native_activity(path):
     /* Render's app-private command spool, read by Blender's bpy startup timer.
        No Android listening port, no remote render process. */
     try {
+      com.rezox.render.NativeEditorConfiguration.publish(this);
       File commandDirectory = new File(getFilesDir(), "render_bpy_jobs");
       if (!commandDirectory.isDirectory() && !commandDirectory.mkdirs()) {
         throw new java.io.IOException("Cannot initialize Render command directory");

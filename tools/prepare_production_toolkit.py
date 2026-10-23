@@ -13,17 +13,18 @@ def replace(path,before,after):
 def promote_startup_version():
     for name in ('app/build.gradle.kts','full-app/app/build.gradle'):
         target=ROOT/name;source=target.read_text()
-        new='versionCode = 33' if name.endswith('.kts') else 'versionCode 33'
-        new_name='0.28.3-vulkan-timeline-fix'
+        new='versionCode = 34' if name.endswith('.kts') else 'versionCode 34'
+        new_name='0.28.4-native-launch-handoff'
         if new in source and new_name in source:continue
         previous=[]
         for code,version in ((30,'0.28.0-native-control-reliability'),
                              (31,'0.28.1-startup-diagnostics'),
-                             (32,'0.28.2-loader-diagnostics')):
+                             (32,'0.28.2-loader-diagnostics'),
+                             (33,'0.28.3-vulkan-timeline-fix')):
             old='versionCode = '+str(code) if name.endswith('.kts') else 'versionCode '+str(code)
             if source.count(old)==1 and source.count(version)==1:previous.append((old,version))
         if len(previous)!=1:
-            raise RuntimeError('V0283_STARTUP_VERSION_ADAPTER_DRIFT: '+name)
+            raise RuntimeError('V0284_STARTUP_VERSION_ADAPTER_DRIFT: '+name)
         old,old_name=previous[0]
         target.write_text(source.replace(old,new,1).replace(old_name,new_name,1))
 
@@ -38,12 +39,12 @@ def prepare():
             ('tools/assemble_full_native.py','render_studio_contract.py'),
             ('app/src/main/java/com/rezox/render/agent/ProductionBridge.java','StudioReferenceInbox.list(context,p)'),
             ('full-app/scripts/render_production.py','render_studio_ops.py'),
-            ('full-app/app/build.gradle','versionCode 33'),
-            ('app/build.gradle.kts','versionCode = 33'),
+            ('full-app/app/build.gradle','versionCode 34'),
+            ('app/build.gradle.kts','versionCode = 34'),
         )
         if not all(marker in (ROOT/path).read_text() for path,marker in required):
             raise RuntimeError('INCOMPLETE_V022_BUILD_ADAPTER_STATE')
-        print('Render 0.28.3 adapter verified; no second mutation')
+        print('Render 0.28.4 adapter verified; no second mutation')
         return
     prefix='app/src/main/java/com/rezox/render/agent/'
     replace(prefix+'AgentPolicy.java','registry.put("engine.status", Collections.emptySet());','registry.put("engine.status", Collections.emptySet());\n        registry.put("production.execute", fields("operation", "payload", "target_id"));')
@@ -151,5 +152,5 @@ def prepare():
             '0.27.0-resumable-long-render','0.28.0-native-control-reliability')
         target.write_text(source)
     promote_startup_version()
-    print('RENDER 0.28.3 development candidate staged (versionCode 33); original package and signer unchanged')
+    print('RENDER 0.28.3 development candidate staged (versionCode 34); original package and signer unchanged')
 if __name__=='__main__':prepare()

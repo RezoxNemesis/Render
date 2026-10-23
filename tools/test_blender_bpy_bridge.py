@@ -71,6 +71,46 @@ class BlenderBridgeTests(unittest.TestCase):
         self.assertEqual("Starter", report["result"]["sample_objects"][0]["name"])
         self.assertEqual(1, report["result"]["total_objects"])
 
+    def launch_fixture(self, **settings):
+        files = Path(self.tmp.name) / "files"
+        script = files / "blender/5.3/scripts/startup/render_agent_startup.py"
+        script.parent.mkdir(parents=True, exist_ok=True)
+        script.touch()
+        config = {"schema_version": 1, "target_package": "com.rezox.render",
+                  "command_spool_enabled": True, "mobile_mode": "landscape"}
+        config.update(settings)
+        (files / "render_native_launch.json").write_text(json.dumps(config))
+        return files, script
+
+    def test_native_bridge_without_environment_uses_private_launch_handoff(self):
+        files, script = self.launch_fixture()
+        root, mode = self.module._launch_settings({}, script)
+        self.assertEqual(str(files / "render_bpy_jobs"), root)
+        self.assertEqual("landscape", mode)
+        self.assertFalse((files / "render_bpy_jobs/ready").exists())
+
+    def test_private_handoff_replaces_stale_environment_without_accepting_paths(self):
+        files, script = self.launch_fixture(spool="/some/foreign/path")
+        root, mode = self.module._launch_settings({"RENDER_AGENT_SPOOL": "/stale"}, script)
+        self.assertEqual(str(files / "render_bpy_jobs"), root)
+
+    def test_native_launch_rejects_wrong_package_and_bad_schema(self):
+        for values in ({"target_package": "other.app"}, {"schema_version": 2},
+                       {"command_spool_enabled": False}, {"mobile_mode": "invalid"}):
+            with self.subTest(values=values):
+                _, script = self.launch_fixture(**values)
+                with self.assertRaisesRegex(ValueError, "INVALID_NATIVE_LAUNCH_CONFIGURATION"):
+                    self.module._launch_settings({}, script)
+
+    def test_native_launch_rejects_spool_symlink(self):
+        files, script = self.launch_fixture()
+        (files / "render_bpy_jobs").symlink_to(Path(self.tmp.name), target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, "NATIVE_LAUNCH_SPOOL_SYMLINK"):
+            self.module._launch_settings({}, script)
+
+    def test_no_private_handoff_does_not_enable_host_command_executor(self):
+        self.assertEqual(("", ""), self.module._launch_settings({}, MODULE))
+
     def test_native_bpy_cube_operation_and_postcondition(self):
         report = self.job("blender.object.add_cube",
                           {"name":"HeroCube", "size":2.0, "location":[3,1,5]})
