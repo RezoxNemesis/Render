@@ -44,6 +44,24 @@ public class RenderLongForegroundServiceTest {
             assertEquals("PAUSING_AFTER_FRAME",RenderLongForegroundService.status(app).getString("foreground_state"));
         }finally{prefs.edit().clear().commit();}
     }
+    @Test public void completedFramesCanEncodeAndExportWithoutLiveBlender(){
+        assertFalse(RenderLongForegroundService.requiresNativeEditor("encoded"));
+        assertFalse(RenderLongForegroundService.requiresNativeEditor("frames_complete"));
+        assertTrue(RenderLongForegroundService.requiresNativeEditor("rendering"));
+        assertTrue(RenderLongForegroundService.resumeAllowed(
+            true,false,false,"encoded","OUTPUT_READY_EXPORT_RETRYABLE"));
+        assertTrue(RenderLongForegroundService.resumeAllowed(
+            true,false,false,"frames_complete","AWAITING_EDITOR_FOREGROUND"));
+        assertFalse(RenderLongForegroundService.resumeAllowed(
+            true,false,false,"rendering","AWAITING_EDITOR_FOREGROUND"));
+        assertFalse(RenderLongForegroundService.resumeAllowed(
+            true,false,true,"encoded","OUTPUT_READY_EXPORT_RETRYABLE"));
+        assertFalse(RenderLongForegroundService.resumeAllowed(
+            false,false,false,"encoded","OUTPUT_READY_EXPORT_RETRYABLE"));
+        assertFalse(RenderLongForegroundService.resumeAllowed(
+            true,false,false,"encoded","COMPLETED_EXPORTED"));
+    }
+
     @Test public void authenticatedCommandCannotStartUnknownJob()throws Exception{
         Context app=RuntimeEnvironment.getApplication();
         try{RenderLongForegroundService.request(app,"../../../");fail();}
