@@ -142,6 +142,24 @@ public final class ProductionBridge {
                     .put("export_retry_operation","artifact.export")
                     .put("export_error",problem.getClass().getSimpleName());
             }
+            // If the owner granted a Documents folder, save a second
+            // readback-verified project copy there, without exposing raw paths.
+            // Failures preserve the native checkpoint and independent Downloads copy.
+            if(ProductionDriveStorage.status(context).optBoolean("folder_granted")){
+                try{
+                    JSONObject selected=ProductionDriveStorage.backup(context,new JSONObject()
+                        .put("category","Projects")
+                        .put("filename",checkpoint.getString("filename"))
+                        .put("expected_sha256",checkpoint.getString("sha256")));
+                    result.put("owner_folder_export",selected)
+                        .put("owner_folder_export_verified",
+                             selected.optBoolean("provider_readback_sha256_verified"));
+                }catch(Exception problem){
+                    result.put("owner_folder_export_verified",false)
+                        .put("owner_folder_export_retry_operation","drive.backup")
+                        .put("owner_folder_export_error",problem.getClass().getSimpleName());
+                }
+            }else result.put("owner_folder_permission_required",true);
             return result.put("native_execution_verified",true)
                 .put("quality_reduced",false);
         }
