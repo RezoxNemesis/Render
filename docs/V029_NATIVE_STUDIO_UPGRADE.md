@@ -123,7 +123,10 @@ configuration callback keeps the existing Blender context. A launch UUID and
 observed configuration callback count support a fixed emulator-only acceptance
 phase that requires the same activity identity and a fresh actual viewport
 after `am update-appinfo`. Android PackageManager resolved the installed flag in
-the actual launch-phase receipt. Callback/viewport acceptance is still pending.
+the actual launch-phase receipt. Actual Android acceptance then passed: the configuration callback count
+advanced from 0 to 1, the native launch UUID stayed identical, and a fresh
+Blender viewport inspection and SHA-verified capture completed. See the
+[sanitized configuration receipt](../benchmarks/native-studio-029/configuration-android-result.json).
 
 Normal extraction during that launch exposed another upgrade failure: the new
 runtime was sealed and activated, but deletion of the obsolete backup failed.
@@ -139,7 +142,9 @@ blocks launching that valid runtime. No production project is removed.
 Native checkpoints also exposed a thumbnail-cache write to unwritable
 `/data/.cache`. Validated Android startup now supplies a private
 `XDG_CACHE_HOME`, preserving explicit overrides and leaving `HOME` unchanged.
-Asset-network, resource-change and screen-off render acceptance remain pending.
+Asset-network and screen-off render acceptance remain pending. The revised
+HUD is installed; this configuration check did not observe its drawing, so
+its changed placement still requires an active native artist action capture.
 A successful shell command alone is not a native pass.
 
 The original clean workspace candidate was 302,116,716 bytes, SHA-256
