@@ -182,6 +182,8 @@ def execute(operation, scene, root, p):
             glb = False
         import render_file_ops
         operations.extend(render_file_ops.capabilities())
+        import render_reference_motion_contract
+        operations.extend(render_reference_motion_contract.capabilities())
         return {'operations': operations, 'blender_version': bpy.app.version_string,
                 'export_formats': ['BLEND'] + (['GLB'] if glb else []),
                 'sculpt_stroke_requires': 'active native sculpt brush and VIEW_3D context',
