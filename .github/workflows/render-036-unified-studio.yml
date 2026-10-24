@@ -47,6 +47,24 @@ jobs:
           LIBGL_ALWAYS_SOFTWARE: "1"
         run: |
           blender -b -noaudio --python-exit-code 1 --python tools/test_real_unified_studio.py
+  windowed-blender-native-ui:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install genuine Blender GUI and virtual display
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends blender xvfb
+      - name: Verify visible native Render Studio tabs and real viewport orbit
+        env:
+          PYTHONPATH: full-app/scripts
+          LIBGL_ALWAYS_SOFTWARE: "1"
+        run: |
+          timeout 120 xvfb-run -a -s "-screen 0 1280x900x24" \
+            blender --factory-startup -noaudio --python-exit-code 1 \
+            --python tools/test_real_unified_ui.py
+          echo 'PASS: genuine desktop Blender viewport and native addon panel'
   android-native-bridge:
     runs-on: ubuntu-24.04
     timeout-minutes: 40
