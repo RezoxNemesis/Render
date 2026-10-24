@@ -34,6 +34,21 @@ public final class ProductionVideoEncoder {
         try(FileOutputStream out=new FileOutputStream(tmp)){out.write(data.toString().getBytes(StandardCharsets.UTF_8));out.getFD().sync();}
         Files.move(tmp.toPath(),file.toPath(),StandardCopyOption.REPLACE_EXISTING,StandardCopyOption.ATOMIC_MOVE);
     }
+    /** Preserve an invalid previous output, rather than blocking every
+     * subsequent recovery or deleting the artist's original bytes. */
+    static void quarantineUnverifiedOutput(Context context,String jobId,String filename)throws Exception{
+        if(filename==null||!filename.endsWith(".mp4"))
+            throw new IllegalArgumentException("INVALID_VIDEO_NAME");
+        File output=ProductionFiles.file(context,jobId,filename);
+        if(!output.exists())return;
+        if(!output.isFile())throw new IllegalStateException("VIDEO_OUTPUT_CONFLICT");
+        File preserved=ProductionFiles.file(context,jobId,
+            filename.substring(0,filename.length()-4)+".unverified.mp4");
+        if(preserved.exists())throw new IllegalStateException(
+            "UNVERIFIED_VIDEO_NEEDS_MANUAL_INSPECTION");
+        Files.move(output.toPath(),preserved.toPath(),StandardCopyOption.ATOMIC_MOVE);
+    }
+
     /** MP4 sample timestamps use Blender fps/fps_base, not rounded fps.
      * MediaCodec KEY_FRAME_RATE is only a rate-control hint; muxed PTS
      * determines actual display timing, which still needs a device test. */
@@ -108,7 +123,13 @@ public final class ProductionVideoEncoder {
            ProductionSegmentedEncoder.hasCompleteMp4Container(output)&&
            ProductionFiles.sha(output).equals(prior.optString("sha256")))
             return prior;
-        if(output.exists())throw new IllegalStateException("VIDEO_OUTPUT_CONFLICT");
+        if(output.exists()){
+            // Exact prior result failed integrity/revision checks. Keep it
+            // under a non-exportable name, then regenerate from PNG masters.
+            if(finalizeJob&&"encoded".equals(manifest.optString("state"))&&prior!=null)
+                quarantineUnverifiedOutput(context,jobId,filename);
+            else throw new IllegalStateException("VIDEO_OUTPUT_CONFLICT");
+        }
         MediaFormat format=MediaFormat.createVideoFormat("video/avc",width,height);
         format.setInteger(MediaFormat.KEY_BIT_RATE,bitrate);
         // Integer codec rate is a configuration hint. Fractional cadence is
