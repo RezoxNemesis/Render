@@ -18,7 +18,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /** Stable typed envelope. New operations are validated by Render, not guessed from a version string. */
 public final class ProductionBridge {
     public static final String ACTION="production.execute";
-    private static final String[] OPS={"capabilities","device.profile","editor.open","screenshot.capture",
+    private static final String[] OPS={"capabilities","device.profile","editor.open","screenshot.capture","file.importers","file.inspect","file.import",
         "artifact.read","artifact.export","reference.write","project.create","project.checkpoint","project.list","project.restore","mesh.edit","curve.create","shape.create","shape.keys","rig.create","rig.bind","rig.keys",
         "scene.inspect","mesh.create","body.blockout","camera.frame","viewport.orient","sculpt.prepare","asset.create","material.assign","group.create","animation.keys","camera.aim",
         "world.configure","instances.plan","instances.create","reference.attach",
@@ -31,10 +31,11 @@ public final class ProductionBridge {
         "render.profile.inspect","render.profile.configure","render.scheduling.inspect","render.scheduling.configure",
         "artist.capabilities","artist.inspect","object.duplicate","object.remove","sculpt.mask","sculpt.stroke","facial.expression","material.inspect","light.configure","camera.configure","media.import","project.export"};
     private static final Set<String> OPERATIONS=new HashSet<>(Arrays.asList(OPS));
+    static {OPERATIONS.addAll(Arrays.asList(StorageOperations.NAMES));}
     private ProductionBridge(){}
     /** These controls must remain responsive while the serial native worker renders. */
     static boolean outOfBand(JSONObject args){
-        return Arrays.asList("ipc.command.status","ipc.command.cancel","native.command.status",
+        return StorageOperations.supports(args.optString("operation"))||Arrays.asList("ipc.command.status","ipc.command.cancel","native.command.status",
             "render.job.status","render.job.pause","render.job.cancel","render.queue.status",
             "device.profile","capabilities","connection.diagnose").contains(args.optString("operation"));
     }
@@ -77,6 +78,7 @@ public final class ProductionBridge {
         if(cancelled.get())throw new IllegalStateException("CANCELLED_BEFORE_NATIVE_START");
         if(operation.equals("capabilities")){
             fields(p,"");JSONArray operations=new JSONArray();for(String op:OPS)operations.put(op);
+            for(String op:StorageOperations.NAMES)operations.put(op);
             return new JSONObject().put("schema_version",1).put("envelope",ACTION).put("operations",operations)
                 .put("render_public_id",publicId).put("target_package",context.getPackageName()).put("target_app","Render Studio")
                 .put("requires_target_id",true).put("maximum_request_bytes",131072).put("maximum_artifact_chunk_bytes",24576)
@@ -112,6 +114,7 @@ public final class ProductionBridge {
                 .put("omega_capabilities_operation","omega.integration.capabilities");
         }
         if(operation.equals("device.profile")){fields(p,"");return profile(context);}
+        if(StorageOperations.supports(operation))return StorageOperations.execute(context,operation,p);
         if(operation.startsWith("render.scheduling."))return RenderScheduling.execute(context,p,operation.endsWith("configure"));
         if(operation.equals("native.command.status"))return BlenderSpool.inspect(context,p);
         if(operation.equals("ipc.command.status")){
@@ -247,7 +250,9 @@ public final class ProductionBridge {
                 .put("work",StudioLiveHandOverlay.snapshot(context))
                 .put("reference_inbox",StudioReferenceInbox.list(context,
                     new JSONObject().put("offset",0).put("limit",1)))
-                .put("native_binder_verified_by_this_call",true);
+                .put("local_dispatch_completed",true)
+                .put("native_binder_verified_by_this_call",false)
+                .put("binder_authentication_requires_end_to_end_check",true);
             return status;
         }
         if(operation.equals("reference.pick")){
@@ -300,6 +305,14 @@ public final class ProductionBridge {
             }
         }
         JSONObject nativePayload=new JSONObject(p.toString());
+        if(operation.equals("file.import")){
+            if(p.has("_available_memory_bytes"))throw new IllegalArgumentException("DEVICE_MEMORY_IS_NATIVE_ONLY");
+            if(!gate.renderAllowed)throw new IllegalStateException(gate.reason+"_ORIGINAL_RETAINED");
+            long available=device.optLong("available_memory_bytes",-1)-RenderScheduling.reserve(context);
+            if(device.optBoolean("low_memory")||available<128L*1024*1024)
+                throw new IllegalStateException("NATIVE_FILE_IMPORT_MEMORY_PRESSURE_ORIGINAL_RETAINED");
+            nativePayload.put("_available_memory_bytes",available);
+        }
         if(operation.equals("media.import")){
             JSONObject media=StudioReferenceInbox.details(context,new JSONObject().put("asset",p.getString("asset")));
             long pixels=(long)media.optInt("width")*media.optInt("height");

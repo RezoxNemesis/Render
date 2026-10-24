@@ -12,6 +12,17 @@ import render_asset_library as L
 import render_asset_sources as S
 
 class AssetSourceTests(unittest.TestCase):
+    def test_upstream_model_filter_failure_cannot_return_materials_as_models(self):
+        page={'numberOfResults':2926,'foundAssets':[{'assetId':'Bricks113A','dataType':'Material','downloadFolders':{}}]}
+        with patch.object(S,'_cached',return_value=(page,False,'')):
+            result=S.ambient_search(Path('.'),{'kind':'models'})
+        self.assertEqual([],result['results']);self.assertEqual(0,result['total_matches'])
+        self.assertFalse(result['upstream_filter_honored'])
+    def test_hdri_metadata_is_available_without_claiming_native_decoder_success(self):
+        page={'numberOfResults':1,'foundAssets':[{'assetId':'DayEnvironmentHDRI113','dataType':'HDRI','downloadFolders':{}}]}
+        with patch.object(S,'_cached',return_value=(page,False,'')):
+            result=S.ambient_search(Path('.'),{'kind':'hdris'})
+        self.assertEqual('hdris',result['results'][0]['kind']);self.assertTrue(result['results'][0]['native_import_available'])
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
         self.root=Path(self.tmp.name);self.folder=self.root/'download';self.folder.mkdir()

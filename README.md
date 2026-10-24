@@ -16,11 +16,13 @@ including the existing VideoStudio native Binder connection. The `app/` project
 also supplies the JNI bridge and project inspector; building only that module
 emits the smaller foundation APK, not the full editor.
 
-The 0.31.3 candidate retains the native-control and storage improvements and adds
-orthographic character review, checkpointed sculpt preparation and engine-specific
-Workbench antialiasing. See [release notes](docs/RELEASE_NOTES_0313.md),
-[native character controls](docs/NATIVE_CHARACTER_REVIEW.md) and the
-[build-specific workspace evidence](docs/WORKSPACE_TESTING_0313.md).
+The 0.32.0 candidate retains the native-control, durable rendering and character
+review improvements. It adds artist-granted folders, durable original-file
+transfers, dependency bundles and discoverable native model/media import through
+the existing VideoStudio connection. See [release notes](docs/RELEASE_NOTES_0320.md),
+[storage and ChatGPT operations](docs/ASSETS_AND_STORAGE.md),
+[workspace verification](docs/WORKSPACE_TESTING_0320.md) and the retained
+[native character evidence](docs/WORKSPACE_TESTING_0313.md).
 Host tests and APK builds do not establish native output quality, phone
 compatibility, performance or 24-hour endurance; native results are reported
 separately for their exact source builds.

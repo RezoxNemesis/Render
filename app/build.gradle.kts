@@ -8,8 +8,8 @@ android {
         applicationId = "com.rezox.render"
         minSdk = 28
         targetSdk = 35
-        versionCode = 39
-        versionName = "0.31.3-character-review"
+        versionCode = 40
+        versionName = "0.32.0-native-storage-assets"
         ndk { abiFilters += listOf("arm64-v8a") }
         externalNativeBuild {
             cmake { cppFlags += listOf("-std=c++20", "-Wall", "-Wextra", "-Werror") }

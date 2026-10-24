@@ -15,6 +15,22 @@ import static org.junit.Assert.*;
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk=33,manifest=Config.NONE)
 public class ProductionBridgeTest {
+    @Test public void folderWorkIsDiscoverableAndTargetScopedWhileBlenderIsUnavailable()throws Exception{
+        Context c=RuntimeEnvironment.getApplication();JSONObject args=new JSONObject().put("operation","storage.folder.create")
+            .put("payload",new JSONObject().put("location_id","workspace").put("name","ArtistProject"));
+        assertTrue(ProductionBridge.outOfBand(args));
+        try{ProductionBridge.execute(c,args,new AtomicBoolean(false));fail();}
+        catch(IllegalArgumentException expected){assertEquals("RENDER_TARGET_ID_REQUIRED_OR_MISMATCH",expected.getMessage());}
+        JSONObject caps=ProductionBridge.execute(c,new JSONObject().put("operation","capabilities"),new AtomicBoolean(false));
+        assertTrue(caps.getJSONArray("operations").toString().contains("storage.task.refresh"));
+        assertTrue(caps.getJSONArray("operations").toString().contains("file.importers"));
+        args.put("target_id",caps.getString("render_public_id"));
+        JSONObject discovery=ProductionBridge.execute(c,new JSONObject().put("operation","storage.capabilities")
+            .put("target_id",caps.getString("render_public_id")),new AtomicBoolean(false));
+        assertEquals(StorageOperations.NAMES.length,discovery.getJSONArray("operations").length());
+        JSONObject result=ProductionBridge.execute(c,args,new AtomicBoolean(false));assertTrue(result.getBoolean("directory"));
+        assertFalse(result.getBoolean("native_editor_required"));
+    }
     @Test public void compatibilityDiagnosisBypassesBusyNativeWorkAndNeedsNoEditor()throws Exception{
         JSONObject args=new JSONObject().put("operation","connection.diagnose").put("payload",new JSONObject());
         assertTrue(ProductionBridge.outOfBand(args));

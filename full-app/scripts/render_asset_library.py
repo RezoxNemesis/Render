@@ -430,7 +430,7 @@ def import_asset(scene, root, p):
             raise ValueError("ASSET_LOCAL_INTEGRITY_FAILED")
     if report.get("provider")=="AmbientCG":
         import render_asset_sources
-        return render_asset_sources.import_material(scene,root,report)
+        return render_asset_sources.import_material(scene,root,report,verified=True)
     key = report["download_id"]
     for collection in scene.collection.children_recursive:
         if collection.get("render_asset_download_id") == key:
@@ -716,7 +716,7 @@ def install():
     scene.render_asset_kind = bpy.props.EnumProperty(items=[(k, k.title(), k) for k in ("all", *_KINDS)], default="all")
     scene.render_asset_provider = bpy.props.EnumProperty(items=[("all","All supported sources",""),
         ("polyhaven","Poly Haven","CC0 models, HDRIs and materials"),
-        ("ambientcg","AmbientCG","CC0 PBR materials; other formats are discoverable")],default="all")
+        ("ambientcg","AmbientCG","CC0 PBR materials and HDR lighting; discover exact formats before downloading")],default="all")
     scene.render_asset_selection = bpy.props.EnumProperty(items=lambda self, context: _UI_ITEMS)
     scene.render_asset_resolution = bpy.props.EnumProperty(items=[(v, v, v) for v in _RESOLUTIONS], default="4k")
     scene.render_asset_download_id = bpy.props.StringProperty(options={"HIDDEN"})

@@ -160,16 +160,18 @@ public final class AgentActivity extends Activity {
         StudioUi.add(page,localBridge);
         StudioUi.space(page,14);
         LinearLayout cloudBackup=StudioUi.card(this);
-        StudioUi.add(cloudBackup,StudioUi.label(this,"OPTIONAL / GOOGLE DRIVE BACKUP"));
+        StudioUi.add(cloudBackup,StudioUi.label(this,"PROJECT FOLDERS / FILE TRANSFERS"));
         StudioUi.space(cloudBackup,7);
         StudioUi.add(cloudBackup,StudioUi.text(this,
-            "Choose a folder in Google Drive (if its Android document provider supports folders), or another document provider. Blender still renders on this phone. Saved .blend, PNG and MP4 files can be copied to the chosen location without Gallery access.",
+            "Choose a working folder in device storage or Google Drive, when its Android provider supports folders. ChatGPT can create subfolders, import original files and export verified project copies through your existing Render connection. Transfers and native Blender imports report separately. No Gallery access.",
             12,StudioUi.MUTED,false));
         StudioUi.space(cloudBackup,10);
-        addAction(cloudBackup,"CHOOSE BACKUP FOLDER",StudioUi.SECONDARY,()->{
+        addAction(cloudBackup,"CHOOSE WORKING / BACKUP FOLDER",StudioUi.SECONDARY,()->{
             try{ProductionDriveStorage.chooseFolder(this);}
             catch(Exception e){Toast.makeText(this,"Folder picker unavailable: "+e.getClass().getSimpleName(),Toast.LENGTH_LONG).show();}
         });
+        addAction(cloudBackup,"FILE TRANSFERS / PAUSE / RESUME / CANCEL",StudioUi.SECONDARY,()->showFileTransfers());
+        addAction(cloudBackup,"CHOOSE MODEL / IMAGE / VIDEO FILE",StudioUi.SECONDARY,()->StorageDocuments.pickFile(this));
         StudioUi.add(page,cloudBackup);
         LinearLayout referenceCard=StudioUi.card(this);
         StudioUi.add(referenceCard,StudioUi.label(this,"REFERENCE IMAGE / VIDEO INBOX"));
@@ -298,6 +300,12 @@ public final class AgentActivity extends Activity {
             setIntent(new Intent(this,AgentActivity.class));
             StudioReferenceInbox.openPicker(this);
         }
+        else if(getIntent()!=null&&"com.rezox.render.agent.PICK_STORAGE".equals(getIntent().getAction())){
+            setIntent(new Intent(this,AgentActivity.class));ProductionDriveStorage.chooseFolder(this);
+        }
+        else if(getIntent()!=null&&"com.rezox.render.agent.PICK_FILE".equals(getIntent().getAction())){
+            setIntent(new Intent(this,AgentActivity.class));StorageDocuments.pickFile(this);
+        }
     }
     private void confirmSharedReference(Intent inbound){
         if(inbound==null || !StudioReferenceInbox.isExplicitOwnerMediaIntent(inbound))return;
@@ -326,6 +334,34 @@ public final class AgentActivity extends Activity {
         super.onNewIntent(intent);
         if(StudioReferenceInbox.isExplicitOwnerMediaIntent(intent))
             confirmSharedReference(intent);
+        else if("com.rezox.render.agent.PICK_STORAGE".equals(intent.getAction()))ProductionDriveStorage.chooseFolder(this);
+        else if("com.rezox.render.agent.PICK_MEDIA".equals(intent.getAction()))StudioReferenceInbox.openPicker(this);
+        else if("com.rezox.render.agent.PICK_FILE".equals(intent.getAction()))StorageDocuments.pickFile(this);
+    }
+    private void showFileTransfers(){
+        perform(()->{
+            org.json.JSONArray rows=FileTransfers.list(this).getJSONArray("transfers");
+            if(rows.length()==0)return "No file transfers yet. Ask ChatGPT to inspect storage.capabilities through your existing Render connection.";
+            String[] labels=new String[rows.length()];
+            for(int i=0;i<rows.length();i++){
+                JSONObject row=rows.getJSONObject(i);
+                labels[i]=row.optString("kind")+" · "+row.optString("state")+" · "+row.optLong("bytes_transferred")/1048576+" MiB · "+row.optString("request_id");
+            }
+            ui.post(()->new AlertDialog.Builder(this).setTitle("File transfers")
+                .setItems(labels,(dialog,index)->{
+                    try{
+                        JSONObject row=rows.getJSONObject(index);String id=row.getString("transfer_id");
+                        new AlertDialog.Builder(this).setTitle(row.optString("request_id"))
+                            .setMessage(row.toString(2))
+                            .setNeutralButton("Pause",(d,w)->perform(()->FileTransfers.control(this,id,"pause").toString(2)))
+                            .setNegativeButton("Cancel transfer",(d,w)->perform(()->FileTransfers.control(this,id,"cancel").toString(2)))
+                            .setPositiveButton("Resume",(d,w)->perform(()->{
+                                FileTransfers.control(this,id,"resume");return FileTransferService.request(this,id).toString(2);
+                            })).show();
+                    }catch(Exception e){Toast.makeText(this,"Transfer unavailable",Toast.LENGTH_LONG).show();}
+                }).setNegativeButton("Close",null).show());
+            return "File transfers report copied bytes separately from native Blender imports. Failed or interrupted transfers require an explicit Resume.";
+        });
     }
     private void addAction(LinearLayout parent,String title,int style,Runnable action) {
         TextView view=StudioUi.action(this,title,style);
@@ -558,6 +594,7 @@ public final class AgentActivity extends Activity {
     });}
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){
         super.onActivityResult(requestCode,resultCode,data);
+        if(requestCode==StorageDocuments.PICK_FILE)perform(()->StorageDocuments.acceptFile(this,resultCode,data).toString(2));
         if(requestCode==StudioReferenceInbox.PICK_REFERENCE && resultCode==Activity.RESULT_OK){
             Intent ownerSelected=new Intent(Intent.ACTION_OPEN_DOCUMENT);
             if(data!=null){
@@ -571,8 +608,8 @@ public final class AgentActivity extends Activity {
             try{
                 boolean selected=ProductionDriveStorage.acceptFolderSelection(this,resultCode,data);
                 Toast.makeText(this,selected?
-                    "Backup folder linked; Render can copy verified files to this provider.":
-                    "No backup folder selected.",Toast.LENGTH_LONG).show();
+                    "Working folder linked. Import uses read access; creating folders and exporting requires the provider's write access.":
+                    "No working folder selected.",Toast.LENGTH_LONG).show();
             }catch(Exception e){
                 Toast.makeText(this,"Backup folder permission failed: "+e.getClass().getSimpleName(),Toast.LENGTH_LONG).show();
             }

@@ -346,6 +346,9 @@ def execute(args, spool, command_id):
     operation,p=C.validate_envelope(args);root=_root(spool)
     scene=bpy.context.scene
     if scene is None:raise RuntimeError('NO_ACTIVE_SCENE')
+    if operation in ('file.importers','file.inspect','file.import'):
+        import render_file_ops
+        return render_file_ops.execute(operation,scene,root,p)
     import render_artist_ops
     if operation in render_artist_ops.SCHEMAS:
         return render_artist_ops.execute(operation,scene,root,p)

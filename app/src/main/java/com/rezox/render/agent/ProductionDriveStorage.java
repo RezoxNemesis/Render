@@ -47,10 +47,14 @@ public final class ProductionDriveStorage {
         Uri tree=returned.getData();
         if(!ContentResolver.SCHEME_CONTENT.equals(tree.getScheme())||
             !DocumentsContract.isTreeUri(tree))throw new IllegalArgumentException("INVALID_BACKUP_DOCUMENT_TREE");
-        int permissions=Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION;
+        int permissions=returned.getFlags()&(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+        if((permissions&Intent.FLAG_GRANT_READ_URI_PERMISSION)==0)throw new IllegalStateException("DOCUMENT_PROVIDER_READ_PERMISSION_REQUIRED");
         context.getContentResolver().takePersistableUriPermission(tree,permissions);
-        if(!permissionExists(context,tree))throw new IllegalStateException("DOCUMENT_PROVIDER_PERMISSION_NOT_PERSISTED");
-        context.getSharedPreferences(PREFS,Context.MODE_PRIVATE).edit().putString(TREE,tree.toString()).commit();
+        boolean readable=false;
+        for(UriPermission p:context.getContentResolver().getPersistedUriPermissions())if(p.getUri().equals(tree)&&p.isReadPermission())readable=true;
+        if(!readable)throw new IllegalStateException("DOCUMENT_PROVIDER_PERMISSION_NOT_PERSISTED");
+        if(!context.getSharedPreferences(PREFS,Context.MODE_PRIVATE).edit().putString(TREE,tree.toString()).commit())
+            throw new IllegalStateException("DOCUMENT_FOLDER_SELECTION_NOT_PERSISTED");
         return true;
     }
     static boolean permissionExists(Context c,Uri tree){

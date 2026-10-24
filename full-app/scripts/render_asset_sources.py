@@ -72,17 +72,22 @@ def ambient_search(root,p):
                 for item in category.get('downloads',[]):
                     formats.append({'format':item.get('attribute'),'bytes':item.get('size'),
                                     'container':item.get('filetype')})
-        kind={'Material':'textures','HDRI':'hdris','3DModel':'models'}.get(asset.get('dataType'),'unknown')
+        asset_kind={'Material':'textures','HDRI':'hdris','3DModel':'models'}.get(asset.get('dataType'),'unknown')
+        # Unknown/retired upstream filters can return an unfiltered material
+        # page. Never label those results as models or HDRIs.
+        if kind!='all' and asset_kind!=kind:continue
         results.append({'id':'ambientcg__'+ident,'asset_id':ident,'name':asset.get('displayName',ident),
-                        'kind':kind,'provider':'AmbientCG','license':'CC0-1.0',
+                        'kind':asset_kind,'provider':'AmbientCG','license':'CC0-1.0',
                         'license_url':'https://docs.ambientcg.com/license/',
                         'source_url':'https://ambientcg.com/a/'+ident,
                         'preview_url':asset.get('previewImage',{}).get('256-PNG'),
                         'formats':formats[:48],
-                        'native_import_available':kind=='textures',
-                        'unavailable_reason':None if kind=='textures' else 'USE_POLY_HAVEN_OR_EXPLICIT_NATIVE_FILE_IMPORT'})
+                        'native_import_available':asset_kind in ('textures','hdris'),
+                        'unavailable_reason':None if asset_kind in ('textures','hdris') else 'USE_POLY_HAVEN_OR_EXPLICIT_NATIVE_FILE_IMPORT'})
+    mismatch=kind!='all' and any({'Material':'textures','HDRI':'hdris','3DModel':'models'}.get(a.get('dataType'))!=kind for a in (data or {}).get('foundAssets',[]))
     return {'state':'loading' if loading else 'ready' if data else 'unavailable',
-            'results':results,'total_matches':(data or {}).get('numberOfResults',0),
+            'results':results,'total_matches':len(results) if mismatch else (data or {}).get('numberOfResults',0),
+            'upstream_filter_honored':not mismatch,'unavailable_reason':'UPSTREAM_KIND_FILTER_UNAVAILABLE' if mismatch else None,
             'network_error':error,'provider':'AmbientCG','catalog_is_finite':True}
 
 
@@ -113,7 +118,7 @@ def details(root,p):
         return {'state':'ready','asset_id':ident,'provider':'AmbientCG','license':'CC0-1.0',
                 'license_url':'https://docs.ambientcg.com/license/', 'formats':formats[:64],
                 'preview_url':data.get('previewImage',{}).get('256-PNG'),
-                'publisher_digest_available':False,'native_import_available':data.get('dataType')=='Material'}
+                'publisher_digest_available':False,'native_import_available':data.get('dataType') in ('Material','HDRI')}
     url='https://api.polyhaven.com/files/'+native
     data,loading,error=_cached(root,url,lambda:L._json_url(url))
     formats=[]
@@ -172,17 +177,19 @@ def preview(root,p):
 def download(root,p):
     import render_asset_library as L
     L._fields(p,('asset_id','kind','resolution','format'),('asset_id','kind','resolution'))
-    ident=p['asset_id'][11:];resolution=p['resolution'];form=p.get('format','PNG')
-    if not L._ASSET.fullmatch(ident) or resolution not in L._RESOLUTIONS or p['kind']!='textures' or form not in ('PNG','JPG'):
-        raise ValueError('AMBIENTCG_IMPORT_SUPPORTS_EXPLICIT_PBR_TEXTURE_ZIPS')
+    ident=p['asset_id'][11:];resolution=p['resolution'];kind=p['kind'];form=p.get('format','HDR' if kind=='hdris' else 'PNG')
+    if (not L._ASSET.fullmatch(ident) or resolution not in L._RESOLUTIONS or kind not in ('textures','hdris')
+            or form not in (('HDR','EXR') if kind=='hdris' else ('PNG','JPG'))):
+        raise ValueError('AMBIENTCG_IMPORT_SUPPORTS_EXPLICIT_PBR_TEXTURE_OR_HDRI_ZIPS')
     asset,loading,error=_asset_details(root,ident)
     if not asset:raise ValueError('ASSET_DETAILS_LOADING_POLL_BEFORE_DOWNLOAD' if loading else 'ASSET_DETAILS_UNAVAILABLE')
-    requested=resolution.upper()+'-'+form
+    if asset.get('dataType')!=('HDRI' if kind=='hdris' else 'Material'):raise ValueError('ASSET_KIND_MISMATCH')
+    requested=resolution.upper() if kind=='hdris' else resolution.upper()+'-'+form
     files=[f for folder in asset.get('downloadFolders',{}).values()
            for category in folder.get('downloadFiletypeCategories',{}).values() for f in category.get('downloads',[])]
     item=next((f for f in files if f.get('attribute')==requested and f.get('filetype')=='zip'),None)
     if not item:raise ValueError('REQUESTED_ASSET_RESOLUTION_UNAVAILABLE')
-    job=hashlib.sha256(('ambientcg:'+ident+':'+requested).encode()).hexdigest()[:32]
+    job=hashlib.sha256(('ambientcg:'+ident+':'+requested+(':'+form if kind=='hdris' else '')).encode()).hexdigest()[:32]
     folder=L._library(root)/job
     if folder.is_symlink():raise ValueError('ASSET_LIBRARY_SYMLINK')
     folder.mkdir(exist_ok=True,mode=0o700)
@@ -195,7 +202,7 @@ def download(root,p):
             previous=json.loads(receipt.read_text())
             if previous.get('state')=='downloaded':return L.status(root,{'download_id':job})
         if any(t.is_alive() for t,_ in L._JOBS.values()):raise ValueError('ANOTHER_ASSET_DOWNLOAD_RUNNING')
-        report={'download_id':job,'asset_id':ident,'kind':'textures','provider':'AmbientCG',
+        report={'download_id':job,'asset_id':ident,'kind':kind,'provider':'AmbientCG',
                 'license':'CC0-1.0','source_url':'https://ambientcg.com/a/'+ident,
                 'resolution':resolution,'format':form,'state':'preparing','downloaded_bytes':0,
                 'total_bytes':item['size'],'publisher_digest_available':False,'originals_preserved':True}
@@ -264,7 +271,7 @@ def _archive(folder,item,report,stop):
             if entry.is_dir():continue
             if stat.S_IFMT(entry.external_attr>>16) not in (0,stat.S_IFREG):raise ValueError('ASSET_ARCHIVE_SPECIAL_FILE')
             path=L._relative(folder,'Originals/'+entry.filename)
-            if path.suffix.lower() not in ('.png','.jpg','.jpeg','.txt','.json','.usda'):raise ValueError('ASSET_ARCHIVE_FORMAT_UNSUPPORTED')
+            if path.suffix.lower() not in ('.png','.jpg','.jpeg','.txt','.json','.usda','.hdr','.exr'):raise ValueError('ASSET_ARCHIVE_FORMAT_UNSUPPORTED')
             path.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
             fd,name=tempfile.mkstemp(prefix='.render-unpack-',dir=path.parent)
             temporary=Path(name)
@@ -277,14 +284,34 @@ def _archive(folder,item,report,stop):
     report.update(integrity='HTTPS + provider size + ZIP CRC + local SHA-256; no publisher digest supplied')
 
 
-def import_material(scene,root,report):
+def import_material(scene,root,report,verified=False):
     import bpy
     import render_asset_library as L
     folder=L._library(root)/report['download_id']
-    for item in report['files']:
+    for item in (() if verified else report['files']):
         path=L._relative(folder,item['filename'])
         if not path.is_file() or path.stat().st_size!=item['bytes'] or L._digest(path)!=item['sha256']:
             raise ValueError('ASSET_LOCAL_INTEGRITY_FAILED')
+    if report['kind']=='hdris':
+        if scene.world and scene.world.get('render_asset_download_id')==report['download_id']:
+            return {'world':scene.world.name,'already_imported':True,'license':'CC0-1.0'}
+        suffix='.'+report['format'].lower()
+        candidates=[item for item in report['files'] if Path(item['filename']).suffix.lower()==suffix]
+        if len(candidates)!=1:raise ValueError('REQUESTED_HDRI_FORMAT_UNAVAILABLE_OR_AMBIGUOUS')
+        path=L._relative(folder,candidates[0]['filename'])
+        import render_file_contract as F
+        F.image_budget(path,1024**3)
+        world=scene.world.copy() if scene.world else bpy.data.worlds.new('CC0_'+report['asset_id']);world.use_nodes=True
+        nodes=world.node_tree.nodes;env=nodes.new('ShaderNodeTexEnvironment')
+        env.image=bpy.data.images.load(str(path),check_existing=True);env.image.pack()
+        background=next((n for n in nodes if n.type=='BACKGROUND'),None)
+        if background is None:
+            background=nodes.new('ShaderNodeBackground');output=nodes.new('ShaderNodeOutputWorld')
+            world.node_tree.links.new(background.outputs[0],output.inputs[0])
+        world.node_tree.links.new(env.outputs['Color'],background.inputs['Color']);scene.world=world
+        world['render_asset_download_id']=report['download_id'];world['license']='CC0-1.0'
+        return {'world':world.name,'already_imported':False,'original_hdr_preserved':True,
+                'license':'CC0-1.0','format':report['format'],'resolution':report['resolution']}
     existing=next((m for m in bpy.data.materials if m.get('render_asset_download_id')==report['download_id']),None)
     if existing:return {'material':existing.name,'already_imported':True}
     material=bpy.data.materials.new('CC0_'+report['asset_id']);material.use_nodes=True;material.use_fake_user=True

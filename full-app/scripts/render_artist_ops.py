@@ -180,6 +180,8 @@ def execute(operation, scene, root, p):
             glb = True
         except (AttributeError, RuntimeError):
             glb = False
+        import render_file_ops
+        operations.extend(render_file_ops.capabilities())
         return {'operations': operations, 'blender_version': bpy.app.version_string,
                 'export_formats': ['BLEND'] + (['GLB'] if glb else []),
                 'sculpt_stroke_requires': 'active native sculpt brush and VIEW_3D context',

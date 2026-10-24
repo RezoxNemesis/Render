@@ -111,6 +111,7 @@ def merge_manifest(source, resources=None):
     for permission in ("android.permission.FOREGROUND_SERVICE",
                        "android.permission.FOREGROUND_SERVICE_SPECIAL_USE",
                        "android.permission.FOREGROUND_SERVICE_MEDIA_PROCESSING",
+                       "android.permission.FOREGROUND_SERVICE_DATA_SYNC",
                        "android.permission.POST_NOTIFICATIONS",
                        "android.permission.WAKE_LOCK"):
         if permission not in existing:
@@ -166,6 +167,11 @@ def merge_manifest(source, resources=None):
         ANDROID + "value": "Explicit user-requested native Blender frame rendering with visible status, pause and crash-safe checkpoints",
     })
     ET.SubElement(application, "service", {
+        ANDROID + "name": "com.rezox.render.agent.FileTransferService",
+        ANDROID + "exported": "false",
+        ANDROID + "foregroundServiceType": "dataSync",
+    })
+    ET.SubElement(application, "service", {
         ANDROID + "name": "com.rezox.render.agent.VideoStudioNativeBridgeService",
         ANDROID + "exported": "true",
     })
@@ -208,7 +214,7 @@ def attach_bpy_agent(runtime_zip, source_py, scene_py=None, batch_py=None):
         if scene_py is not None:
             packed.write(scene_py, "scripts/startup/render_lively_scene.py",
                          compress_type=zipfile.ZIP_DEFLATED)
-        for name in ("render_artist_ops.py", "render_body_blockout.py", "render_character_tools.py", "render_asset_sources.py", "render_production.py", "render_production_contract.py", "render_production_detail.py", "render_studio_ops.py", "render_studio_contract.py"):
+        for name in ("render_file_contract.py", "render_file_ops.py", "render_artist_ops.py", "render_body_blockout.py", "render_character_tools.py", "render_asset_sources.py", "render_production.py", "render_production_contract.py", "render_production_detail.py", "render_studio_ops.py", "render_studio_contract.py"):
             source = Path(source_py).with_name(name)
             if not source.is_file():
                 raise ValueError("PRODUCTION_RUNTIME_NOT_PACKAGED")
