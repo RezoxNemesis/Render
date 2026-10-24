@@ -33,7 +33,15 @@ public final class RenderHubActivity extends Activity {
             ui.postDelayed(this,1000);
         }
     };
-    @Override public void onResume(){super.onResume();ui.post(refresh);}
+    @Override public void onResume(){
+        super.onResume();
+        ui.post(refresh);
+        // The owner has reopened Render; resume their previously consented
+        // job from committed PNG/MP4 receipts. Disk/hash work never blocks UI.
+        new Thread(()->com.rezox.render.agent.RenderLongForegroundService
+            .resumeConsentedVisibleJob(getApplicationContext()),
+            "render-resume-verified-export").start();
+    }
     @Override public void onPause(){ui.removeCallbacks(refresh);super.onPause();}
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);

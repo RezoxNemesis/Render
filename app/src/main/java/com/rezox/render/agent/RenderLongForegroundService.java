@@ -137,38 +137,55 @@ public final class RenderLongForegroundService extends Service {
     }
 
     /**
-     * Called ONLY after the owner returns to the visible native Blender editor.
-     * A persisted opt-in is necessary; never re-run a previously cancelled or
-     * complete render, and never ask Android to bypass thermal/FGS policies.
+     * A committed movie or complete PNG sequence can export/encode without bpy.
+     * Only genuinely unfinished Blender frames require a live editor heartbeat.
+     */
+    static boolean requiresNativeEditor(String renderState){
+        return !"encoded".equals(renderState)&&!"frames_complete".equals(renderState);
+    }
+
+    /** Pure, testable, non-destructive replay decision. */
+    static boolean resumeAllowed(boolean ownerConsented,boolean workerActive,
+                                 boolean editorReady,String renderState,String foregroundState){
+        return ownerConsented&&!workerActive&&
+            !"COMPLETED_EXPORTED".equals(foregroundState)&&
+            (!requiresNativeEditor(renderState)||editorReady);
+    }
+
+    /**
+     * Called after the owner returns to the Render Hub or visible Blender editor.
+     * Retains the exact old job and committed frame receipts. No force-stop,
+     * quota bypass, unapproved rerender or unrequested new project.
      */
     public static void resumeConsentedVisibleJob(Context context){
         Context c=context.getApplicationContext();
         android.content.SharedPreferences prefs=c.getSharedPreferences(PREFS,MODE_PRIVATE);
-        if(!prefs.getBoolean(WANTED,false)||RenderManualJobs.active()||!editorReady(c))
-            return;
-        long now=SystemClock.elapsedRealtime();
-        long attempted=prefs.getLong("last_owner_visible_attempt_uptime",-1L);
-        if(attempted>=0&&now-attempted>=0&&now-attempted<30000L)return;
-        // Persist the throttle BEFORE attempting a new Android service launch.
-        prefs.edit().putLong("last_owner_visible_attempt_uptime",now).commit();
+        boolean wanted=prefs.getBoolean(WANTED,false);
         String job=prefs.getString(JOB,"");
-        if(!valid(job))return;
+        if(!wanted||RenderManualJobs.active()||!valid(job))return;
         try{
-            JSONObject state=ProductionBatch.jobStatus(c,job);
-            if("encoded".equals(state.optString("state")))return;
-            JSONObject reading=ProductionThermalTelemetry.sample(c);
-            ProductionThermalPolicy.Decision decision=ProductionThermalPolicy.evaluate(
-                reading.optInt("thermal_status",-1),
-                reading.optBoolean("low_memory",false),
-                reading.optLong("available_memory_bytes",0),false);
-            if(!decision.renderAllowed){
-                state(c,job,decision.reason,true);
-                return;
+            JSONObject snapshot=ProductionBatch.jobStatus(c,job);
+            String stage=snapshot.optString("state");
+            if(!resumeAllowed(wanted,RenderManualJobs.active(),editorReady(c),
+                              stage,prefs.getString(STATE,"")))return;
+            long now=SystemClock.elapsedRealtime();
+            long attempted=prefs.getLong("last_owner_visible_attempt_uptime",-1L);
+            if(attempted>=0&&now-attempted>=0&&now-attempted<30000L)return;
+            prefs.edit().putLong("last_owner_visible_attempt_uptime",now).commit();
+            if(requiresNativeEditor(stage)){
+                JSONObject reading=ProductionThermalTelemetry.sample(c);
+                ProductionThermalPolicy.Decision decision=ProductionThermalPolicy.evaluate(
+                    reading.optInt("thermal_status",-1),
+                    reading.optBoolean("low_memory",false),
+                    reading.optLong("available_memory_bytes",0),false);
+                if(!decision.renderAllowed){
+                    state(c,job,decision.reason,true);
+                    return;
+                }
             }
             request(c,job);
         }catch(Exception ignored){
-            // A lost/corrupt manifest or Android quota denial requires a
-            // deliberate retry; no fabricated 100%-complete notification.
+            // No fabricated completion. Preserve any valid snapshot for owner review.
         }
     }
 
@@ -242,8 +259,10 @@ public final class RenderLongForegroundService extends Service {
             state(this,jobId,"PAUSED_OWNER",false);
             stopSelf();return START_NOT_STICKY;
         }
+        boolean needsEditor=true;
         try{
             JSONObject current=ProductionBatch.jobStatus(this,jobId);
+            needsEditor=requiresNativeEditor(current.optString("state"));
             if("encoded".equals(current.optString("state"))||
                 (current.optInt("next_frame")>current.optInt("end_frame")&&
                  RenderManualJobs.stillImage(RenderManualJobs.readManifest(this,jobId)))){
@@ -257,7 +276,7 @@ public final class RenderLongForegroundService extends Service {
             state(this,jobId,"CHECKPOINT_UNAVAILABLE",false);
             stopSelf();return START_NOT_STICKY;
         }
-        if(!editorReady(this)){
+        if(needsEditor&&!editorReady(this)){
             state(this,jobId,"AWAITING_EDITOR_FOREGROUND",true);
             update("Open Render Studio to restart the native Blender engine");
             stopSelf();return START_NOT_STICKY;
@@ -280,10 +299,24 @@ public final class RenderLongForegroundService extends Service {
         if(!getSharedPreferences(PREFS,MODE_PRIVATE).getBoolean(WANTED,false)){
             startPending=false;stopSelf();return;
         }
-        if(!editorReady(this)){
+        try{
+            JSONObject snapshot=ProductionBatch.jobStatus(this,jobId);
+            String stage=snapshot.optString("state");
+            if("encoded".equals(stage)){
+                startPending=false;
+                state(this,jobId,"EXPORTING_TO_DOWNLOADS",true);
+                monitor.execute(this::exportCompleted);
+                return;
+            }
+            if(requiresNativeEditor(stage)&&!editorReady(this)){
+                startPending=false;
+                state(this,jobId,"AWAITING_EDITOR_FOREGROUND",true);
+                update("Open Render to restart its native Blender editor");
+                stopSelf();return;
+            }
+        }catch(Exception problem){
             startPending=false;
-            state(this,jobId,"AWAITING_EDITOR_FOREGROUND",true);
-            update("Open Render to restart its native Blender editor");
+            state(this,jobId,"CHECKPOINT_UNAVAILABLE",false);
             stopSelf();return;
         }
         if((RenderManualJobs.active()&&jobId.equals(RenderManualJobs.currentJob())) ||
@@ -322,7 +355,7 @@ public final class RenderLongForegroundService extends Service {
         }catch(Exception problem){
             // Existing PNG and MP4 masters remain app-private, and already
             // exported parts have independent SHA-bound MediaStore receipts.
-            state(this,jobId,"OUTPUT_READY_EXPORT_RETRYABLE",false);
+            state(this,jobId,"OUTPUT_READY_EXPORT_RETRYABLE",true);
             update("Output safe; Downloads export pending: "+
                 problem.getClass().getSimpleName());
         }finally{stopSelf();}
