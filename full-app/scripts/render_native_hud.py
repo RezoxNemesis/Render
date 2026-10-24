@@ -88,8 +88,12 @@ def _frame_progress(value):
     done, total = value.get("completed"), value.get("total")
     if type(done) is not int or type(total) is not int or not 0 <= done <= total or total <= 0:
         return None
+    eta=value.get("estimated_remaining_ms",0)
+    elapsed=value.get("render_active_ms",0)
+    label=f"{done}/{total} frames • rendered {elapsed//60000}m"
+    if type(eta) is int and eta>0:label+=f" • ~{eta//60000}m frames left"
     return {"completed": done, "total": total, "fraction": done / total,
-            "label": f"{done}/{total} checkpointed frames", "job_id": value.get("job_id")}
+            "label": label, "job_id": value.get("job_id")}
 
 
 def model():

@@ -19,6 +19,6 @@ public final class NativeCommandBudget {
     public static boolean readOnlyAssetPoll(String action, JSONObject args) {
         if(!"blender.production.execute".equals(action))return false;
         String op=args.optString("operation");
-        return "asset.search".equals(op)||"asset.download.status".equals(op);
+        return "asset.search".equals(op)||"asset.details".equals(op)||"asset.preview".equals(op)||"asset.download.status".equals(op);
     }
 }

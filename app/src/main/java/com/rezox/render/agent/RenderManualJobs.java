@@ -43,6 +43,19 @@ public final class RenderManualJobs {
             "Frame "+done+"/"+Math.max(total,1)+" • "+detail,
             total>0?Math.min(100,(int)(done*100L/total)):-1);
     }
+    private static void timing(Context c,JSONObject progress){
+        JSONObject value=progress.optJSONObject("timing");
+        long elapsed=value==null?0:value.optLong("render_active_ms",0);
+        long average=value==null?0:value.optLong("estimated_frame_ms",0);
+        long remaining=Math.max(0,progress.optInt("total_frames")-progress.optInt("completed_frames"));
+        preferences(c).edit().putLong("render_active_ms",elapsed)
+            .putLong("estimated_remaining_render_ms",average>0?average*remaining:-1).apply();
+    }
+    public static String duration(long millis){
+        if(millis<0)return "unavailable";
+        long minutes=millis/60000;
+        return minutes>=60?(minutes/60)+"h "+(minutes%60)+"m":minutes+"m "+(millis/1000%60)+"s";
+    }
     static JSONObject readManifest(Context context,String job)throws Exception{
         File path=ProductionFiles.file(context,job,"manifest.json");
         if(!path.isFile()||path.length()>16*1024*1024)
@@ -68,6 +81,9 @@ public final class RenderManualJobs {
                 .put("completed",p.getInt("completed",0))
                 .put("total",p.getInt("total",0))
                 .put("updated",p.getLong("updated",0L))
+                .put("render_active_ms",p.getLong("render_active_ms",0))
+                .put("estimated_remaining_render_ms",p.getLong("estimated_remaining_render_ms",-1))
+                .put("estimate_scope","remaining frames only; excludes encoding, cooling and exports")
                 .put("pausing",STOP.get()&&ACTIVE.get());
         }catch(Exception error){return data;}
     }
@@ -107,6 +123,7 @@ public final class RenderManualJobs {
         try{
             while(!STOP.get()){
                 JSONObject before=ProductionBatch.jobStatus(app,jobId);
+                timing(app,before);
                 int done=before.getInt("completed_frames"),total=before.getInt("total_frames");
                 String state=before.getString("state");
                 boolean still=stillImage(readManifest(app,jobId));
@@ -166,6 +183,7 @@ public final class RenderManualJobs {
                     .put("max_frames",1).put("max_wall_ms",540000)
                     .put("cooldown_max_ms",60000);
                 JSONObject after=ProductionBatch.advance(app,request,STOP);
+                timing(app,after);
                 done=after.getInt("completed_frames");
                 String reason=after.optString("reason","FRAME_COMPLETED");
                 publish(app,jobId,after.optString("state","ready"),reason,done,total);

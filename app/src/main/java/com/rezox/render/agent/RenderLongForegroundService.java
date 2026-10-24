@@ -33,6 +33,7 @@ public final class RenderLongForegroundService extends Service {
     public static final String START="com.rezox.render.LONG_RENDER_START";
     public static final String RESUME="com.rezox.render.LONG_RENDER_RESUME";
     public static final String PAUSE="com.rezox.render.LONG_RENDER_PAUSE";
+    public static final String CANCEL="com.rezox.render.LONG_RENDER_CANCEL";
     public static final String CHANNEL="render-long-media-processing";
     static final String PREFS="render_long_job_v1";
     static final String JOB="job_id";
@@ -68,7 +69,12 @@ public final class RenderLongForegroundService extends Service {
         String priorJob=prior.getString(JOB,"");
         if((RenderManualJobs.active()&&!job.equals(RenderManualJobs.currentJob())) ||
            (prior.getBoolean(WANTED,false)&&valid(priorJob)&&!job.equals(priorJob)))
-            throw new IllegalStateException("ANOTHER_LONG_RENDER_JOB_PENDING_OR_RUNNING");
+        {
+            RenderJobQueue.state(c,job,"queued");
+            return new JSONObject().put("job_id",job).put("durably_queued",true)
+                .put("native_render_started",false).put("queue",RenderJobQueue.status(c));
+        }
+        RenderJobQueue.state(c,job,"starting");
         state(c,job,"LAUNCH_REQUESTED",true);
         Intent start=new Intent(c,RenderLongForegroundService.class)
             .setAction(START).putExtra(JOB,job);
@@ -100,10 +106,24 @@ public final class RenderLongForegroundService extends Service {
         String job=c.getSharedPreferences(PREFS,MODE_PRIVATE).getString(JOB,"");
         if(!valid(job))throw new IllegalStateException("NO_LONG_RENDER_JOB");
         state(c,job,"PAUSING_AFTER_FRAME",false);
+        RenderJobQueue.state(c,job,"paused");
         RenderManualJobs.pause();
         return new JSONObject().put("job_id",job).put("pause_requested",true)
             .put("will_stop_after_current_native_frame",true)
             .put("quality_reduced",false);
+    }
+    public static JSONObject requestCancel(Context context,String job)throws Exception{
+        if(!valid(job))throw new IllegalArgumentException("INVALID_RENDER_JOB_ID");
+        ProductionBatch.jobStatus(context,job);
+        RenderJobQueue.state(context,job,"cancelled");
+        String current=context.getSharedPreferences(PREFS,MODE_PRIVATE).getString(JOB,"");
+        if(job.equals(current)){
+            state(context,job,"CANCELLED_AFTER_FRAME",false);RenderManualJobs.pause();
+        }
+        return new JSONObject().put("job_id",job).put("cancel_requested",true)
+            .put("completed_frames_retained",true).put("checkpoint_retained",true)
+            .put("current_frame_may_finish",job.equals(RenderManualJobs.currentJob()))
+            .put("retry_operation","render.job.retry");
     }
 
     public static JSONObject status(Context context)throws Exception{
@@ -132,7 +152,7 @@ public final class RenderLongForegroundService extends Service {
                 result.put("render_status_unavailable",error.getClass().getSimpleName());
             }
         }
-        result.put("native_worker",RenderManualJobs.status(c));
+        result.put("native_worker",RenderManualJobs.status(c)).put("queue",RenderJobQueue.status(c));
         return result;
     }
 
@@ -206,6 +226,9 @@ public final class RenderLongForegroundService extends Service {
         PendingIntent pause=PendingIntent.getService(this,92,
             new Intent(this,RenderLongForegroundService.class).setAction(PAUSE),
             PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
+        PendingIntent cancel=PendingIntent.getService(this,93,
+            new Intent(this,RenderLongForegroundService.class).setAction(CANCEL).putExtra(JOB,jobId),
+            PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
         String caption=completed+"/"+Math.max(1,total)+" verified frames — "+detail;
         Notification.Builder builder=new Notification.Builder(this,CHANNEL)
             .setSmallIcon(android.R.drawable.ic_media_play)
@@ -215,7 +238,8 @@ public final class RenderLongForegroundService extends Service {
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .addAction(new Notification.Action.Builder(
-                android.R.drawable.ic_media_pause,"Pause after frame",pause).build());
+                android.R.drawable.ic_media_pause,"Pause after frame",pause).build())
+            .addAction(new Notification.Action.Builder(android.R.drawable.ic_menu_close_clear_cancel,"Cancel job",cancel).build());
         if(total>0)builder.setProgress(total,Math.max(0,Math.min(total,completed)),false);
         else builder.setProgress(0,0,true);
         return builder.build();
@@ -241,7 +265,11 @@ public final class RenderLongForegroundService extends Service {
             stopSelf();return START_NOT_STICKY;
         }
 
-        if(command!=null && PAUSE.equals(command.getAction())){
+        if(command!=null && (PAUSE.equals(command.getAction())||CANCEL.equals(command.getAction()))){
+            try{
+                if(CANCEL.equals(command.getAction()))requestCancel(this,jobId);
+                else RenderJobQueue.state(this,jobId,"paused");
+            }catch(Exception problem){android.util.Log.w("RenderLongJob","Could not persist queue control",problem);}
             ownerPause=true;RenderManualJobs.pause();
             state(this,jobId,"PAUSING_AFTER_FRAME",false);
             update("Current Blender frame will finish before service stops");
@@ -323,6 +351,7 @@ public final class RenderLongForegroundService extends Service {
            (!RenderManualJobs.active()&&RenderManualJobs.start(this,jobId))){
             startPending=false;
             state(this,jobId,"RENDERING",true);
+            try{RenderJobQueue.state(this,jobId,"running");}catch(Exception ignored){}
             update("Rendering verified frames");
             return;
         }
@@ -340,6 +369,7 @@ public final class RenderLongForegroundService extends Service {
 
     private void exportCompleted(){
         if(destroyed||ownerPause)return;
+        boolean nextStarted=false;
         state(this,jobId,"EXPORTING_TO_DOWNLOADS",true);
         update("Copying verified movie parts to Download/RenderStudio");
         try{
@@ -351,14 +381,21 @@ public final class RenderLongForegroundService extends Service {
                 !delivered.optBoolean("readback_sha256_verified"))
                 throw new IllegalStateException("DOWNLOADS_READBACK_UNCONFIRMED");
             state(this,jobId,"COMPLETED_EXPORTED",false);
+            RenderJobQueue.state(this,jobId,"completed");
             update("All video outputs verified in Downloads");
+            String next=RenderJobQueue.next(this);
+            if(valid(next)&&!destroyed&&!ownerPause){
+                idlePolls=0;
+                JSONObject accepted=request(this,next);
+                nextStarted=accepted.optBoolean("foreground_launch_requested");
+            }
         }catch(Exception problem){
             // Existing PNG and MP4 masters remain app-private, and already
             // exported parts have independent SHA-bound MediaStore receipts.
             state(this,jobId,"OUTPUT_READY_EXPORT_RETRYABLE",true);
             update("Output safe; Downloads export pending: "+
                 problem.getClass().getSimpleName());
-        }finally{stopSelf();}
+        }finally{if(!nextStarted)stopSelf();}
     }
 
     private void update(String message){
@@ -379,7 +416,8 @@ public final class RenderLongForegroundService extends Service {
                 update("Finishing the current frame before pausing");
                 return;
             }
-            state(this,jobId,"PAUSED_OWNER",false);
+            try{state(this,jobId,RenderJobQueue.cancelled(this,jobId)?"CANCELLED":"PAUSED_OWNER",false);}
+            catch(Exception ignored){state(this,jobId,"PAUSED_OWNER",false);}
             update("Paused at verified frame boundary");
             stopSelf();
             return;
@@ -402,6 +440,7 @@ public final class RenderLongForegroundService extends Service {
             exportCompleted();return;
         }
         String ending=state.equals("paused_error")?"PAUSED_ERROR":"PAUSED";
+        try{if(!RenderJobQueue.cancelled(this,jobId))RenderJobQueue.state(this,jobId,"paused");}catch(Exception ignored){}
         state(this,jobId,ending,false);
         update(ending);
         stopSelf();

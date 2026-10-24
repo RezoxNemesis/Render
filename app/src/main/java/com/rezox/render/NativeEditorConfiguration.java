@@ -10,6 +10,8 @@ import org.json.JSONObject;
 /** Disk handoff also works when an ARM native bridge snapshots a separate environ. */
 public final class NativeEditorConfiguration {
     private static final java.util.concurrent.atomic.AtomicInteger CONFIGURATIONS=new java.util.concurrent.atomic.AtomicInteger();
+    private static volatile String launchId="";
+    public static String launchId(){return launchId;}
     private NativeEditorConfiguration() {}
 
     public static void publish(Context context) throws Exception {
@@ -18,9 +20,10 @@ public final class NativeEditorConfiguration {
         String mode = context.getSharedPreferences("render_mobile_ui", Context.MODE_PRIVATE)
                 .getString("mode", "portrait");
         if (!"portrait".equals(mode) && !"landscape".equals(mode)) mode = "portrait";
+        launchId=java.util.UUID.randomUUID().toString();
         JSONObject settings = new JSONObject().put("schema_version", 1)
                 .put("target_package", context.getPackageName())
-                .put("native_activity_launch_id", java.util.UUID.randomUUID().toString())
+                .put("native_activity_launch_id", launchId)
                 .put("command_spool_enabled", true).put("mobile_mode", mode);
         AtomicFile file = new AtomicFile(new File(context.getFilesDir(), "render_native_launch.json"));
         FileOutputStream out = file.startWrite();

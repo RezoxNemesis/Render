@@ -30,7 +30,13 @@ public final class VideoStudioNativeBridgeService extends Service {
     public static final int EXECUTE = 1;
     public static final int RESPONSE = 2;
     private static volatile AtomicBoolean runningCancellation;
+    private static volatile String runningCommandId="";
     private static volatile VideoStudioNativeBridgeService currentService;
+    private volatile boolean destroying;
+    private final java.util.Set<String> scheduled=java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private final Handler retry=new Handler(Looper.getMainLooper());
+    private final ThreadPoolExecutor controls=new ThreadPoolExecutor(1,1,0L,TimeUnit.MILLISECONDS,
+        new ArrayBlockingQueue<>(4),new ThreadPoolExecutor.AbortPolicy());
     /** Commands waiting only inside Render Android; not the cloud transport. */
     public static int pendingBinderCommands(){
         VideoStudioNativeBridgeService current=currentService;
@@ -51,6 +57,15 @@ public final class VideoStudioNativeBridgeService extends Service {
     public static void requestCancel() {
         AtomicBoolean flag = runningCancellation;
         if(flag != null) flag.set(true);
+    }
+    public static JSONObject cancelCommand(android.content.Context context,String id)throws Exception{
+        boolean queued;
+        try(AgentJournal journal=new AgentJournal(context)){queued=journal.cancelQueued(id);}
+        boolean active=id.equals(runningCommandId)&&runningCancellation!=null;
+        if(active)runningCancellation.set(true);
+        return new JSONObject().put("command_id",id).put("queued_cancelled",queued)
+            .put("cancellation_requested",active).put("native_completion_confirmed",false)
+            .put("current_frame_may_finish",active).put("replayed",false);
     }
 
     /** Shared by Android unit tests and the Binder entry point. */
@@ -76,6 +91,12 @@ public final class VideoStudioNativeBridgeService extends Service {
                 secrets.status("Render native command journal requires recovery.");
             }
         }
+        if(secrets.videoStudioBridgeEnabled()){
+            try{for(JSONObject command:journal.queued()){
+                String id=command.getString("journal_id");command.remove("journal_id");
+                schedule(null,id,command);
+            }}catch(Exception error){secrets.status("Durable Binder queue requires inspection.");}
+        }
     }
 
     private final Messenger messenger = new Messenger(new Handler(Looper.getMainLooper()) {
@@ -96,14 +117,38 @@ public final class VideoStudioNativeBridgeService extends Service {
             final String id=data == null ? "" : data.getString("commandId","");
             final String action=data == null ? "" : data.getString("action","");
             final String raw=data == null ? "{}" : data.getString("args","{}");
-            if(!id.matches("[A-Za-z0-9_-]{8,128}") || raw.length()>32768 ||
+            if(!id.matches("[A-Za-z0-9_-]{8,128}") || raw.getBytes(java.nio.charset.StandardCharsets.UTF_8).length>131072 ||
                 !action.matches("[A-Za-z0-9._-]{1,80}")) {
                 send(caller,id,error("INVALID_RENDER_IPC_ENVELOPE"));
                 return;
             }
-            try { worker.execute(() -> executeNative(caller,id,action,raw)); }
-            catch(RejectedExecutionException ex) {
-                send(caller,id,error("RENDER_NATIVE_QUEUE_FULL_OR_STOPPING"));
+            try {
+                JSONObject args=new JSONObject(raw);
+                java.util.Set<String> fields=new java.util.HashSet<>();args.keys().forEachRemaining(fields::add);
+                AgentPolicy.validate(id,1,action,fields);
+                if(ProductionBridge.ACTION.equals(action)&&ProductionBridge.outOfBand(args)){
+                    controls.execute(()->{
+                        try{send(caller,id,new JSONObject().put("ok",true)
+                            .put("native_result",ProductionBridge.execute(VideoStudioNativeBridgeService.this,args,new AtomicBoolean(false)))
+                            .put("target_package",getPackageName()).put("target_app",RenderConnectionCard.APP)
+                            .put("render_public_id",secrets.renderPublicId()));}
+                        catch(Exception error){send(caller,id,error(safeCode(error)));}
+                    });
+                    return;
+                }
+                JSONObject command=new JSONObject().put("device_id","videostudio-native-ipc")
+                    .put("request_id",id).put("api_version",1).put("action",action).put("args",args);
+                String digest=AgentPolicy.sha256(command.toString());
+                if(!journal.enqueue(id,digest,command)){
+                    JSONObject prior=journal.snapshot(id,digest);
+                    if("queued".equals(prior.optString("state")))schedule(caller,id,command);
+                    else if("running_on_device".equals(prior.optString("state")))
+                        send(caller,id,new JSONObject().put("ok",false).put("state","running_on_device")
+                            .put("command_id",id).put("safe_to_replay",false).put("poll_operation","ipc.command.status"));
+                    else send(caller,id,prior.getJSONObject("result"));
+                }else schedule(caller,id,command);
+            } catch(Exception ex) {
+                send(caller,id,error(safeCode(ex)));
             }
         }
     });
@@ -112,13 +157,31 @@ public final class VideoStudioNativeBridgeService extends Service {
         return messenger.getBinder();
     }
 
-    private void executeNative(Messenger caller,String id,String action,String raw) {
+    private static String safeCode(Exception error){
+        String code=error.getMessage();
+        return code!=null&&code.matches("[A-Z_]{3,96}")?code:error.getClass().getSimpleName();
+    }
+    private void schedule(Messenger caller,String id,JSONObject command){
+        if(destroying||!scheduled.add(id))return;
+        try{worker.execute(()->executeNative(caller,id,command));}
+        catch(RejectedExecutionException error){
+            scheduled.remove(id);
+            // Acceptance is already durable. Report queued, never invite a new ID.
+            send(caller,id,error("COMMAND_DURABLY_QUEUED_POLL_EXACT_ID"));
+            if(!destroying)retry.postDelayed(()->schedule(caller,id,command),5000);
+        }
+    }
+    private void executeNative(Messenger caller,String id,JSONObject command) {
+        if(destroying){scheduled.remove(id);return;}
         if(!AgentExecutionLock.BUSY.compareAndSet(false,true)){
-            send(caller,id,error("RENDER_NATIVE_EXECUTOR_BUSY"));
+            scheduled.remove(id);
+            retry.postDelayed(()->schedule(caller,id,command),5000);
             return;
         }
+        String action=command.optString("action");
         AtomicBoolean cancel=new AtomicBoolean(false);
         runningCancellation=cancel;
+        runningCommandId=id;
         JSONObject outcome=error("RENDER_NATIVE_ACTION_FAILED");
         String state="failed";
         boolean journaled=false;
@@ -126,16 +189,14 @@ public final class VideoStudioNativeBridgeService extends Service {
         try {
             if(!secrets.videoStudioBridgeEnabled())
                 throw new IllegalStateException("RENDER_DIRECT_BRIDGE_DISABLED_ON_PHONE");
-            JSONObject args=new JSONObject(raw);
+            JSONObject args=command.getJSONObject("args");
             java.util.Set<String> fields=new java.util.HashSet<>();
             args.keys().forEachRemaining(fields::add);
             AgentPolicy.validate(id,1,action,fields);
-            JSONObject command=new JSONObject().put("device_id","videostudio-native-ipc")
-                .put("request_id",id).put("api_version",1).put("action",action).put("args",args);
             String digest=AgentPolicy.sha256(command.toString());
-            if(!journal.begin(id,digest,command)) {
+            if(!journal.claim(id,digest)) {
                 JSONObject prior=journal.snapshot(id,digest);
-                if(prior!=null && !"running_on_device".equals(prior.optString("state"))) {
+                if(prior!=null && !"running_on_device".equals(prior.optString("state")) && !"queued".equals(prior.optString("state"))) {
                     // The finally block will send exactly one native receipt.
                     // No Blender operation or journal replay occurs.
                     outcome=prior.getJSONObject("result");
@@ -145,6 +206,7 @@ public final class VideoStudioNativeBridgeService extends Service {
             }
             journaled=true;
             liveWork=true;
+            BlenderSpool.carrier(id);
             AgentWorkPresence.begin(this,"render."+action,"VideoStudio MCP v3 Binder");
             JSONObject nativeResult=new AgentActions(this).execute(command,cancel);
             if(cancel.get() || !secrets.videoStudioBridgeEnabled()) {
@@ -194,6 +256,9 @@ public final class VideoStudioNativeBridgeService extends Service {
             }
             send(caller,id,outcome);
             runningCancellation=null;
+            BlenderSpool.carrier(null);
+            runningCommandId="";
+            scheduled.remove(id);
             AgentExecutionLock.BUSY.set(false);
         }
     }
@@ -219,8 +284,11 @@ public final class VideoStudioNativeBridgeService extends Service {
     }
 
     @Override public void onDestroy(){
+        destroying=true;
+        retry.removeCallbacksAndMessages(null);
         currentService=null;
         requestCancel();
+        controls.shutdown();
         worker.shutdown();
         super.onDestroy();
     }

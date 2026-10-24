@@ -108,6 +108,8 @@ public final class ProductionVideoEncoder {
         // carried precisely in the PTS assigned to each actual PNG frame.
         format.setInteger(MediaFormat.KEY_FRAME_RATE,(int)Math.round(requestedFps));format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL,1);
         format.setInteger(MediaFormat.KEY_COLOR_FORMAT,MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible);
+        format.setInteger(MediaFormat.KEY_COLOR_STANDARD,MediaFormat.COLOR_STANDARD_BT601_NTSC);
+        format.setInteger(MediaFormat.KEY_COLOR_RANGE,MediaFormat.COLOR_RANGE_LIMITED);
         String codecName=new MediaCodecList(MediaCodecList.REGULAR_CODECS).findEncoderForFormat(format);
         if(codecName==null)throw new IllegalStateException("REQUESTED_H264_FORMAT_UNAVAILABLE");
         JSONObject device=ProductionBridge.profile(context);
@@ -142,7 +144,7 @@ public final class ProductionVideoEncoder {
                             try{
                                 if(bitmap.getWidth()!=width||bitmap.getHeight()!=height)throw new IllegalStateException("FRAME_DIMENSIONS_MISMATCH");
                                 Image image=codec.getInputImage(index);if(image==null)throw new IllegalStateException("ENCODER_FLEXIBLE_IMAGE_UNAVAILABLE");
-                                try{fill(bitmap,image);}finally{image.close();}
+                                try{ProductionYuv.fill(bitmap,image);}finally{image.close();}
                             }finally{bitmap.recycle();}
                             codec.queueInputBuffer(index,0,width*height*3/2,pts,0);inputFrame++;lastProgress=SystemClock.elapsedRealtime();
                         }

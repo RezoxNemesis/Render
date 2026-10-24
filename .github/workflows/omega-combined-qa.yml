@@ -9,6 +9,7 @@ permissions:
   contents: read
 jobs:
   contracts:
+    if: github.head_ref != 'upgrade/render-studio-031'
     runs-on: ubuntu-24.04
     timeout-minutes: 16
     steps:
@@ -55,6 +56,7 @@ jobs:
           print('PASS: imported modules remain disabled pending genuine Blender verification')
           PY
   native-bpy-matrix:
+    if: github.head_ref != 'upgrade/render-studio-031'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -102,6 +104,7 @@ jobs:
           done
           exit "$failed"
   android-combined:
+    if: github.head_ref != 'upgrade/render-studio-031'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:

@@ -208,6 +208,12 @@ def attach_bpy_agent(runtime_zip, source_py, scene_py=None, batch_py=None):
         if scene_py is not None:
             packed.write(scene_py, "scripts/startup/render_lively_scene.py",
                          compress_type=zipfile.ZIP_DEFLATED)
+        for name in ("render_artist_ops.py", "render_asset_sources.py", "render_production.py", "render_production_contract.py", "render_production_detail.py", "render_studio_ops.py", "render_studio_contract.py"):
+            source = Path(source_py).with_name(name)
+            if not source.is_file():
+                raise ValueError("PRODUCTION_RUNTIME_NOT_PACKAGED")
+            packed.write(source, "scripts/startup/" + name,
+                         compress_type=zipfile.ZIP_DEFLATED)
         if batch_py is not None:
             packed.write(batch_py, "scripts/startup/render_batch_assembly.py",
                          compress_type=zipfile.ZIP_DEFLATED)
@@ -308,7 +314,7 @@ def patch_native_activity(path):
                   "\n    enterImmersive();")
     if old_launch not in java:
         raise ValueError("PINNED_NATIVE_BLENDER_LAUNCH_HOOK_CHANGED")
-    java = java.replace(old_launch, "    BlenderMobileControls.attach(this);", 1)
+    java = java.replace(old_launch, "    BlenderMobileControls.attach(this);\n    com.rezox.render.agent.ProductionCapture.attach(this);\n    com.rezox.render.agent.StudioLiveHandOverlay.attach(this);", 1)
     old_immersive = """  private void enterImmersive() {
     View d = getWindow().getDecorView();
     d.setSystemUiVisibility(
@@ -346,7 +352,14 @@ def patch_native_activity(path):
   }
 
   @Override
+  public boolean dispatchTouchEvent(android.view.MotionEvent event) {
+    com.rezox.render.agent.StudioLiveHandOverlay.onRealTouch(event);
+    return super.dispatchTouchEvent(event);
+  }
+
+  @Override
   protected void onDestroy() {
+    com.rezox.render.agent.StudioLiveHandOverlay.detach(this);
     BlenderMobileControls.detach(this);
     super.onDestroy();
   }

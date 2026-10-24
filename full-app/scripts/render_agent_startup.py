@@ -43,6 +43,10 @@ def _launch_settings(environ, script_file):
             if spool.is_symlink():
                 raise ValueError("NATIVE_LAUNCH_SPOOL_SYMLINK")
             root, mode = str(spool), settings["mobile_mode"]
+            launch = settings.get("native_activity_launch_id", "")
+            if not isinstance(launch, str) or not re.fullmatch(r"[a-f0-9-]{36}", launch):
+                raise ValueError("INVALID_NATIVE_LAUNCH_ID")
+            environ["RENDER_NATIVE_LAUNCH_ID"] = launch
     return root, mode
 
 
@@ -66,6 +70,7 @@ def _native_cache_settings(environ, script_file, root):
 
 
 ROOT, MOBILE_MODE = _launch_settings(os.environ, __file__)
+_NATIVE_LAUNCH_ID = os.environ.get("RENDER_NATIVE_LAUNCH_ID", "")
 # Companion menus/HUD read the guest Python environment at import time. Publish
 # the validated private handoff there before importing any companion module.
 if ROOT:
@@ -83,7 +88,11 @@ if getattr(getattr(bpy, "types", None), "Operator", None) is not None:
     _native_startup_dir = str(Path(__file__).resolve().parent)
     if _native_startup_dir not in _render_sys.path:
         _render_sys.path.insert(0, _native_startup_dir)
-    import render_session_tools as _render_session
+    try:
+        import render_session_tools as _render_session
+    except Exception as error:
+        _render_session = None
+        print("Render optional studio UI unavailable:", type(error).__name__, flush=True)
 else:
     _render_session = None
 print("Render native startup: command spool " + ("configured" if ROOT else "missing"), flush=True)
@@ -91,7 +100,7 @@ _UI_FOCUSED = False
 _LAST_HEARTBEAT = 0.0
 _ID_PATTERN = re.compile(r"^[a-f0-9]{32}$")
 _OBJECT_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,63}$")
-_MAX_BYTES = 65536
+_MAX_BYTES = 131072
 
 def _number(value, lower, upper):
     return type(value) in (int, float) and math.isfinite(value) and lower <= value <= upper
@@ -446,6 +455,9 @@ def _dispatch(command):
             "capability_revision": omega_registry.CAPABILITY_REVISION,
         }
         return omega_registry.dispatch(args["operation"], args["payload"], context)
+    if action == "blender.production.execute":
+        import render_production
+        return render_production.execute(args, ROOT, command.get("id"))
     # Local touch-overlay UI operations; NOT remotely registered agent actions.
     if action == "blender.ui.adjust_scale":
         if set(args) != {"delta"} or not _number(args.get("delta"), -.25, .25):
@@ -752,6 +764,14 @@ def _heartbeat(root):
         os.replace(temporary, ready)
     else:
         ready.touch()
+    if _NATIVE_LAUNCH_ID:
+        state = root / "ready-state.json"
+        temporary = root / "ready-state.native.tmp"
+        fd = os.open(str(temporary), os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        with os.fdopen(fd, "w", encoding="utf8") as output:
+            json.dump({"pid": os.getpid(), "launch_id": _NATIVE_LAUNCH_ID,
+                       "stage": "bpy_timer_ready", "studio_ui_available": _render_session is not None}, output)
+        os.replace(temporary, state)
     _LAST_HEARTBEAT = time.time()
 
 
@@ -796,6 +816,8 @@ def _poll():
             if not re.fullmatch(r"[A-Z_]{3,96}", code):
                 code = type(error).__name__
             report = {"id": name, "state": "failed", "error": code}
+            if getattr(error,"render_checkpoint",None):
+                report["checkpoint"]=error.render_checkpoint
         try:
             # A long frame blocked this timer. Refresh liveness on the actual
             # Blender thread BEFORE publishing its receipt, so the next frame

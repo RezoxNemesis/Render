@@ -34,7 +34,7 @@ import java.util.UUID;
 public final class StudioReferenceInbox {
     public static final int PICK_REFERENCE=714;
     private static final long MAX_IMAGE=100L*1024*1024;
-    private static final long MAX_VIDEO=512L*1024*1024;
+    private static final long MAX_VIDEO=2L*1024*1024*1024;
     private static final long MAX_IMAGE_PIXELS=80_000_000L;
     private StudioReferenceInbox(){}
 
@@ -90,6 +90,13 @@ public final class StudioReferenceInbox {
         File dir=ProductionFiles.folder(context,"Assets");
         File temp=ProductionFiles.file(context,"Assets","Reference_"+UUID.randomUUID().toString().replace("-","")+".partial");
         byte[] buf=new byte[256*1024];long total=0;
+        long declared=-1;
+        try(Cursor row=context.getContentResolver().query(uri,new String[]{OpenableColumns.SIZE},null,null,null)){
+            if(row!=null&&row.moveToFirst()&&!row.isNull(0))declared=row.getLong(0);
+        }
+        if(declared>MAX_VIDEO)throw new IllegalArgumentException("REFERENCE_VIDEO_LIMIT_TWO_GIB_USE_EXPLICIT_SMALLER_FILE");
+        if(declared>0&&dir.getUsableSpace()<declared+128L*1024*1024)
+            throw new IllegalArgumentException("REFERENCE_IMPORT_NEEDS_MORE_FREE_STORAGE");
         MessageDigest md=MessageDigest.getInstance("SHA-256");
         try(InputStream input=context.getContentResolver().openInputStream(uri);
             OutputStream output=new FileOutputStream(temp)){
@@ -97,6 +104,7 @@ public final class StudioReferenceInbox {
             int n;
             while((n=input.read(buf))!=-1){
                 total+=n;if(total>MAX_VIDEO)throw new IllegalArgumentException("REFERENCE_FILE_TOO_LARGE");
+                if(dir.getUsableSpace()<n+128L*1024*1024)throw new IllegalArgumentException("REFERENCE_IMPORT_STORAGE_PRESSURE");
                 md.update(buf,0,n);output.write(buf,0,n);
             }
             output.flush();
@@ -123,7 +131,8 @@ public final class StudioReferenceInbox {
     private static JSONObject metadata(Context context,File file)throws Exception{
         String name=file.getName();String hash=name.substring(0,64),ext=name.substring(65);
         JSONObject data=new JSONObject().put("asset",name).put("sha256",hash)
-            .put("bytes",file.length()).put("extension",ext).put("native_import_verified",true)
+            .put("bytes",file.length()).put("extension",ext).put("android_inbox_copy_verified",true)
+            .put("native_import_verified",false).put("native_blender_import_operation","media.import")
             .put("gallery_browsed",false).put("original_bytes_preserved",true);
         if(ext.equals("mp4")){
             MediaMetadataRetriever retriever=new MediaMetadataRetriever();

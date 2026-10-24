@@ -29,10 +29,15 @@ _CATALOG_ERROR = ""
 _JOBS = {}
 _KINDS = {"hdris": 0, "textures": 1, "models": 2}
 _RESOLUTIONS = ("1k", "2k", "4k", "8k", "16k")
-_HOSTS = {"api.polyhaven.com", "dl.polyhaven.org", "cdn.polyhaven.com"}
+_HOSTS = {"api.polyhaven.com", "dl.polyhaven.org", "cdn.polyhaven.com",
+          "ambientcg.com", "dl.ambientcg.com", "downloads.ambientcg.com",
+          "acg-download.struffelproductions.com", "acg-media.struffelproductions.com"}
 _ASSET = re.compile(r"^[A-Za-z0-9_-]{1,96}$")
 _INSTALLED = False
 _UI_ITEMS = [("NONE", "Search the CC0 catalog", "")]
+_UI_RESULTS = {}
+_UI_PREVIEW_REQUEST = ""
+_UI_PREVIEWS = None
 
 
 def _fields(p, allowed, required=()):
@@ -75,7 +80,7 @@ def _opener():
 
 
 def _request(url, headers=None):
-    options = {"User-Agent": "RenderStudio/0.29 (native Blender CC0 asset browser)",
+    options = {"User-Agent": "RenderStudio/0.31 (native Blender CC0 asset browser)",
                "Accept": "application/json, application/octet-stream"}
     options.update(headers or {})
     return _opener().open(urllib.request.Request(_url(url), headers=options), timeout=30)
@@ -124,7 +129,7 @@ def _refresh(root):
             _CATALOG_ERROR = type(error).__name__
 
 
-def search(root, p):
+def _poly_search(root, p):
     global _CATALOG, _CATALOG_THREAD
     _fields(p, ("query", "kind", "offset", "limit", "refresh"))
     query, kind = p.get("query", ""), p.get("kind", "all")
@@ -174,6 +179,35 @@ def search(root, p):
             "network_error": error, "provider": "Poly Haven", "license": "CC0-1.0",
             "license_url": "https://polyhaven.com/license", "catalog_is_finite": True,
             "original_asset_quality_changed": False}
+
+
+def search(root, p):
+    _fields(p, ("query", "kind", "offset", "limit", "refresh", "provider"))
+    provider=p.get("provider", "all")
+    if provider not in ("all", "polyhaven", "ambientcg"):
+        raise ValueError("ASSET_PROVIDER_UNAVAILABLE")
+    query={key:value for key,value in p.items() if key!="provider"}
+    # The existing catalog validates search bounds, also for federated requests.
+    if provider=="all":
+        query["limit"]=max(1,p.get("limit",20)//2)
+        query["offset"]=p.get("offset",0)//2
+    poly=_poly_search(root,query)
+    for item in poly["results"]:
+        item["preview_url"]="https://cdn.polyhaven.com/asset_img/thumbs/"+item["id"]+".png?width=256"
+        item["license_url"]="https://polyhaven.com/license"
+        item["formats_metadata_operation"]="asset.details"
+        item["download_bytes"]=None  # Unknown until exact format/resolution is selected.
+    if provider=="polyhaven":return poly
+    import render_asset_sources
+    ambient=render_asset_sources.ambient_search(root,query)
+    if provider=="ambientcg":return ambient
+    return {"state":"loading" if "loading" in (poly["state"],ambient["state"]) else "ready",
+            "results":poly["results"]+ambient["results"],
+            "total_matches":poly["total_matches"]+ambient["total_matches"],
+            "providers":[{"provider":v["provider"],"state":v["state"],"network_error":v.get("network_error","")}
+                         for v in (poly,ambient)],
+            "next_offset":p.get("offset",0)+p.get("limit",20),"license":"CC0-1.0",
+            "provider_pagination_independent":True,"original_asset_quality_changed":False}
 
 
 def _relative(folder, name):
@@ -234,6 +268,10 @@ def _download_file(target, item, stopped, progress):
     if part.is_symlink():
         raise ValueError("ASSET_PARTIAL_SYMLINK")
     offset = part.stat().st_size if part.is_file() else 0
+    if offset == item["bytes"] and _digest(part,"md5")==item["md5"]:
+        os.replace(part,target)
+        progress(item["bytes"])
+        return
     if offset >= item["bytes"]:
         offset = 0
     headers = {"Range": "bytes=%d-" % offset} if offset else {}
@@ -304,6 +342,9 @@ def _download(root, job, folder, report, stop):
 
 
 def download(root, p):
+    if isinstance(p.get("asset_id"),str) and p["asset_id"].startswith("ambientcg__"):
+        import render_asset_sources
+        return render_asset_sources.download(root,p)
     _fields(p, ("asset_id", "resolution", "kind"), ("asset_id", "resolution", "kind"))
     ident, resolution, kind = p["asset_id"], p["resolution"], p["kind"]
     if (not isinstance(ident, str) or not _ASSET.fullmatch(ident)
@@ -375,6 +416,9 @@ def import_asset(scene, root, p):
         path = _relative(folder, item["filename"])
         if not path.is_file() or path.stat().st_size != item["bytes"] or _digest(path) != item["sha256"]:
             raise ValueError("ASSET_LOCAL_INTEGRITY_FAILED")
+    if report.get("provider")=="AmbientCG":
+        import render_asset_sources
+        return render_asset_sources.import_material(scene,root,report)
     key = report["download_id"]
     for collection in scene.collection.children_recursive:
         if collection.get("render_asset_download_id") == key:
@@ -446,6 +490,9 @@ def import_asset(scene, root, p):
 
 
 def execute(operation, scene, root, p):
+    if operation in ("asset.details","asset.preview"):
+        import render_asset_sources
+        return render_asset_sources.details(root,p) if operation=="asset.details" else render_asset_sources.preview(root,p)
     if operation == "asset.search":
         return search(root, p)
     if operation == "asset.download":
@@ -471,11 +518,15 @@ if bpy is not None and getattr(getattr(bpy, "types", None), "Operator", None):
         bl_description = "Search Poly Haven models, materials and HDRIs inside Blender"
 
         def execute(self, context):
-            global _UI_ITEMS
+            global _UI_ITEMS, _UI_RESULTS, _UI_PREVIEW_REQUEST
             try:
                 result = search(_root(), {"query": context.scene.render_asset_query,
-                                         "kind": context.scene.render_asset_kind, "limit": 40})
-                _UI_ITEMS = [(item["id"], item["name"], item["kind"] + " / CC0") for item in result["results"]]
+                                         "kind": context.scene.render_asset_kind, "limit": 40,
+                                         "provider": context.scene.render_asset_provider})
+                _UI_RESULTS = {item["id"]: item for item in result["results"]}
+                if _UI_PREVIEWS is not None:_UI_PREVIEWS.clear()
+                _UI_PREVIEW_REQUEST = ""
+                _UI_ITEMS = [(item["id"], item["name"], item["kind"] + " / " + item["provider"] + " / CC0") for item in result["results"]]
                 if not _UI_ITEMS:
                     _UI_ITEMS = [("NONE", "Catalog loading" if result["state"] == "loading" else "No matching assets", "")]
                 context.scene.render_asset_message = result["state"] + " • " + str(result["total_matches"]) + " matches"
@@ -493,8 +544,9 @@ if bpy is not None and getattr(getattr(bpy, "types", None), "Operator", None):
                 scene = context.scene
                 kind = scene.render_asset_kind
                 if kind == "all":
-                    matches = search(_root(), {"query": scene.render_asset_selection, "limit": 40})
-                    kind = next(item["kind"] for item in matches["results"] if item["id"] == scene.render_asset_selection)
+                    selected = _UI_RESULTS.get(scene.render_asset_selection)
+                    if selected is None:raise ValueError("SELECT_ASSET_FROM_CURRENT_SEARCH")
+                    kind = selected["kind"]
                 result = download(_root(), {"asset_id": scene.render_asset_selection,
                                            "kind": kind, "resolution": scene.render_asset_resolution})
                 scene.render_asset_download_id = result["download_id"]
@@ -510,11 +562,37 @@ if bpy is not None and getattr(getattr(bpy, "types", None), "Operator", None):
 
         def execute(self, context):
             try:
+                import render_artist_ops
+                render_artist_ops.checkpoint(context.scene,_root(),"asset.import")
                 import_asset(context.scene, _root(), {"download_id": context.scene.render_asset_download_id})
                 return {"FINISHED"}
             except Exception as error:
                 self.report({"ERROR"}, str(error))
                 return {"CANCELLED"}
+
+    class RENDERSTUDIO_OT_asset_preview(bpy.types.Operator):
+        bl_idname = "renderstudio.asset_preview"
+        bl_label = "Preview / Download Details"
+        def execute(self, context):
+            global _UI_PREVIEW_REQUEST
+            _UI_PREVIEW_REQUEST=context.scene.render_asset_selection
+            try:
+                import render_asset_sources
+                result=render_asset_sources.details(_root(),{"asset_id":_UI_PREVIEW_REQUEST})
+                context.scene.render_asset_message="Metadata "+result["state"]+" • CC0"
+                return {"FINISHED"}
+            except Exception as error:
+                self.report({"ERROR"},str(error));return {"CANCELLED"}
+
+    class RENDERSTUDIO_OT_asset_pause(bpy.types.Operator):
+        bl_idname = "renderstudio.asset_pause"
+        bl_label = "Pause Download"
+        def execute(self, context):
+            try:
+                status(_root(),{"download_id":context.scene.render_asset_download_id},True)
+                return {"FINISHED"}
+            except Exception as error:
+                self.report({"ERROR"},str(error));return {"CANCELLED"}
 
     class RENDERSTUDIO_OT_image_reference(bpy.types.Operator):
         bl_idname = "renderstudio.import_image_reference"
@@ -553,12 +631,32 @@ if bpy is not None and getattr(getattr(bpy, "types", None), "Operator", None):
         bl_category = "Render Studio"
 
         def draw(self, context):
+            global _UI_PREVIEWS
             layout, scene = self.layout, context.scene
             layout.prop(scene, "render_asset_query", text="Search")
+            layout.prop(scene, "render_asset_provider", text="Source")
             layout.prop(scene, "render_asset_kind", text="Library")
             layout.operator("renderstudio.asset_catalog", icon="VIEWZOOM")
             layout.label(text=scene.render_asset_message)
             layout.prop(scene, "render_asset_selection", text="Asset")
+            layout.operator("renderstudio.asset_preview",icon="IMAGE_DATA")
+            if _UI_PREVIEW_REQUEST and _UI_PREVIEW_REQUEST==scene.render_asset_selection:
+                try:
+                    import render_asset_sources
+                    info=render_asset_sources.details(_root(),{"asset_id":_UI_PREVIEW_REQUEST})
+                    for item in info.get("formats",[])[:8]:
+                        label=str(item.get("resolution",item.get("format","")))+" "+str(item.get("format",""))
+                        layout.label(text=label+" • %.1f MiB"%(item.get("bytes",0)/1024**2))
+                    preview=render_asset_sources.preview(_root(),{"asset_id":_UI_PREVIEW_REQUEST})
+                    if preview["state"]=="ready":
+                        import bpy.utils.previews
+                        if _UI_PREVIEWS is None:_UI_PREVIEWS=bpy.utils.previews.new()
+                        if _UI_PREVIEW_REQUEST not in _UI_PREVIEWS:
+                            _UI_PREVIEWS.load(_UI_PREVIEW_REQUEST,preview["preview_file"],"IMAGE")
+                        layout.template_icon(icon_value=_UI_PREVIEWS[_UI_PREVIEW_REQUEST].icon_id,scale=6)
+                    elif preview.get("error"):layout.label(text=preview["error"],icon="ERROR")
+                except Exception as error:
+                    layout.label(text="Preview unavailable: "+type(error).__name__)
             layout.prop(scene, "render_asset_resolution", text="Texture size")
             layout.operator("renderstudio.asset_download", icon="IMPORT")
             if scene.render_asset_download_id:
@@ -572,12 +670,16 @@ if bpy is not None and getattr(getattr(bpy, "types", None), "Operator", None):
                         layout.label(text=state["state"])
                     if state.get("error"):
                         layout.label(text=state["error"], icon="ERROR")
+                    if state["state"] in ("preparing","downloading"):
+                        layout.operator("renderstudio.asset_pause",icon="PAUSE")
+                    if state["state"] in ("paused","interrupted","failed"):
+                        layout.label(text="Download again to resume the same original files")
                     row = layout.row()
                     row.enabled = state["state"] == "downloaded"
                     row.operator("renderstudio.asset_import")
                 except Exception:
                     layout.label(text="Download status unavailable")
-            layout.label(text="Poly Haven • CC0 • originals preserved")
+            layout.label(text="Poly Haven / AmbientCG • CC0 • originals retained")
             layout.separator()
             layout.operator("renderstudio.import_image_reference", icon="IMAGE_DATA")
 
@@ -600,12 +702,16 @@ def install():
     scene = bpy.types.Scene
     scene.render_asset_query = bpy.props.StringProperty(name="Search", default="grass", maxlen=120)
     scene.render_asset_kind = bpy.props.EnumProperty(items=[(k, k.title(), k) for k in ("all", *_KINDS)], default="all")
+    scene.render_asset_provider = bpy.props.EnumProperty(items=[("all","All supported sources",""),
+        ("polyhaven","Poly Haven","CC0 models, HDRIs and materials"),
+        ("ambientcg","AmbientCG","CC0 PBR materials; other formats are discoverable")],default="all")
     scene.render_asset_selection = bpy.props.EnumProperty(items=lambda self, context: _UI_ITEMS)
     scene.render_asset_resolution = bpy.props.EnumProperty(items=[(v, v, v) for v in _RESOLUTIONS], default="4k")
     scene.render_asset_download_id = bpy.props.StringProperty(options={"HIDDEN"})
     scene.render_asset_message = bpy.props.StringProperty(default="Search models, materials and HDR lighting")
     for cls in (RENDERSTUDIO_OT_catalog, RENDERSTUDIO_OT_asset_download,
-                RENDERSTUDIO_OT_asset_import, RENDERSTUDIO_OT_image_reference, RENDERSTUDIO_PT_library):
+                RENDERSTUDIO_OT_asset_import, RENDERSTUDIO_OT_asset_preview, RENDERSTUDIO_OT_asset_pause,
+                RENDERSTUDIO_OT_image_reference, RENDERSTUDIO_PT_library):
         bpy.utils.register_class(cls)
     bpy.app.timers.register(_redraw, first_interval=1, persistent=True)
     _INSTALLED = True

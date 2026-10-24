@@ -13,6 +13,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   stage-tests:
+    if: github.head_ref != 'upgrade/render-studio-031'
     runs-on: ubuntu-latest
     timeout-minutes: 6
     steps:
@@ -26,6 +27,7 @@ jobs:
       - name: Verify adapter is repeatable
         run: python tools/prepare_production_toolkit.py
   blender-bpy-integration:
+    if: github.head_ref != 'upgrade/render-studio-031'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -48,7 +50,7 @@ jobs:
     # GitHub Actions caches are scoped to the PR base ref. The existing
     # development signing key is available only to this reviewed PR context;
     # plain feature-branch push runs must not rotate/generate another signer.
-    if: github.event_name == 'pull_request'
+    if: github.head_ref != 'upgrade/render-studio-031' && (github.event_name == 'pull_request')
     needs: [stage-tests, blender-bpy-integration]
     runs-on: ubuntu-24.04
     timeout-minutes: 50

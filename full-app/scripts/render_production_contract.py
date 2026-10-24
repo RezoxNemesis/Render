@@ -7,13 +7,18 @@ from pathlib import Path
 import re
 
 OPERATIONS = frozenset((
-    'asset.search','asset.download','asset.download.status','asset.download.pause','asset.import',
+    'artist.capabilities','artist.inspect','object.duplicate','object.remove','sculpt.mask','sculpt.stroke','facial.expression','material.inspect','light.configure','camera.configure','media.import','project.export',
+    'asset.search','asset.details','asset.preview','asset.download','asset.download.status','asset.download.pause','asset.import',
     'render.quality.inspect','render.quality.configure','render.performance.inspect','render.performance.configure',
+    'render.profile.inspect','render.profile.configure',
     'capabilities', 'device.profile', 'editor.open', 'screenshot.capture',
     'artifact.read', 'artifact.export', 'reference.write',
     'asset.create', 'project.create', 'project.checkpoint', 'scene.inspect', 'mesh.create',
+    'project.list','project.restore','mesh.edit','curve.create','shape.create','shape.keys','rig.create','rig.bind','rig.keys',
     'material.assign', 'group.create', 'animation.keys', 'camera.aim',
     'world.configure', 'instances.plan', 'instances.create', 'reference.attach',
+    'reference.bind','reference.landmarks','viewport.inspect','viewport.configure','viewport.focus',
+    'object.geometry','operator.describe','operator.execute',
     'render.plan', 'render.step', 'render.status', 'render.encode',
 ))
 NAME = re.compile(r'^[A-Za-z][A-Za-z0-9_-]{0,63}$')

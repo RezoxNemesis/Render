@@ -292,7 +292,12 @@ public final class AgentActivity extends Activity {
             "SCREEN CAPTURE ENABLED  •  Secret fields remain masked. This connection never uses cloud Blender rendering. Device and permission limitations still apply.",
             11,StudioUi.MUTED,false));
         ui.post(refresh);
-        if(StudioReferenceInbox.isExplicitOwnerMediaIntent(getIntent()))confirmSharedReference(getIntent());
+        if(StudioReferenceInbox.isExplicitOwnerMediaIntent(getIntent()))
+            confirmSharedReference(getIntent());
+        else if(getIntent()!=null&&"com.rezox.render.agent.PICK_MEDIA".equals(getIntent().getAction())){
+            setIntent(new Intent(this,AgentActivity.class));
+            StudioReferenceInbox.openPicker(this);
+        }
     }
     private void confirmSharedReference(Intent inbound){
         if(inbound==null || !StudioReferenceInbox.isExplicitOwnerMediaIntent(inbound))return;
@@ -379,7 +384,7 @@ public final class AgentActivity extends Activity {
     private void shareRenderConnection(){
         String card=RenderConnectionCard.shareText(secrets.renderPublicId(),
             secrets.videoStudioBridgeEnabled(),
-            installedVideoStudioBuild()>=RenderConnectionCard.MIN_VIDEOSTUDIO_BUILD);
+            installedVideoStudioBuild()>=RenderConnectionCard.MIN_VIDEOSTUDIO_BUILD,getPackageName());
         Intent send=new Intent(Intent.ACTION_SEND);
         send.setType("text/plain");
         send.putExtra(Intent.EXTRA_TEXT,card);

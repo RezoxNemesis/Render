@@ -22,6 +22,7 @@ import com.rezox.render.ui.StudioViewportArt;
  */
 public final class RenderHubActivity extends Activity {
     private TextView agentWorkStatus;
+    private TextView renderStatus;
     private final Handler ui=new Handler(Looper.getMainLooper());
     private final Runnable refresh=new Runnable(){
         @Override public void run(){
@@ -29,6 +30,18 @@ public final class RenderHubActivity extends Activity {
                 AgentWorkPresence.Snapshot work=AgentWorkPresence.snapshot(RenderHubActivity.this);
                 agentWorkStatus.setText((work.isWorking()?"👆  ":
                         work.needsRecovery()?"⚠  ":"✋  ")+work.description());
+            }
+            if(renderStatus!=null){
+                org.json.JSONObject s=com.rezox.render.agent.RenderManualJobs.status(RenderHubActivity.this);
+                String detail=s.optString("detail",s.optString("state","idle"));
+                try{
+                    org.json.JSONArray queue=com.rezox.render.agent.RenderJobQueue.status(RenderHubActivity.this).getJSONArray("entries");
+                    int queued=0;
+                    for(int i=0;i<queue.length();i++)if("queued".equals(queue.getJSONObject(i).optString("state")))queued++;
+                    detail+="\n"+queued+" queued jobs • "+s.optInt("completed")+"/"+s.optInt("total")+" verified frames";
+                }catch(Exception error){detail+="\nQueue requires inspection";}
+                renderStatus.setText(detail+"\nNative editor: "+
+                    (com.rezox.render.agent.NativeHeartbeat.ready(RenderHubActivity.this)?"ready":"not ready or busy"));
             }
             ui.postDelayed(this,1000);
         }
@@ -112,6 +125,30 @@ public final class RenderHubActivity extends Activity {
         landscape.setContentDescription("Open full native Blender landscape studio");
         landscape.setOnClickListener(v->launchEditor("landscape"));
         StudioUi.add(page,editor);
+        StudioUi.space(page,14);
+        LinearLayout jobs=StudioUi.card(this);
+        StudioUi.add(jobs,StudioUi.label(this,"RENDER QUEUE / SAVED FRAME PROGRESS"));
+        renderStatus=StudioUi.text(this,"Reading saved work…",13,StudioUi.WHITE,false);
+        StudioUi.add(jobs,renderStatus);
+        for(String control:new String[]{"Pause","Resume / Retry","Cancel job"}){
+            TextView button=StudioUi.action(this,control,StudioUi.SECONDARY);
+            button.setContentDescription(control+" checkpointed render; keep completed frames");
+            button.setOnClickListener(v->new Thread(()->{
+                try{
+                    String job=com.rezox.render.agent.RenderManualJobs.status(this).optString("job_id","");
+                    if(job.isEmpty())job=com.rezox.render.agent.RenderManualJobs.newestRecoverable(this);
+                    if(control.equals("Pause"))com.rezox.render.agent.RenderLongForegroundService.requestPause(this);
+                    else if(control.equals("Cancel job"))com.rezox.render.agent.RenderLongForegroundService.requestCancel(this,job);
+                    else com.rezox.render.agent.RenderLongForegroundService.request(this,job);
+                }catch(Exception error){runOnUiThread(()->android.widget.Toast.makeText(this,error.getMessage(),android.widget.Toast.LENGTH_LONG).show());}
+            },"render-owner-control").start());
+            StudioUi.add(jobs,button);
+        }
+        TextView scheduling=StudioUi.action(this,"Memory reserve / Frame pacing",StudioUi.SECONDARY);
+        scheduling.setOnClickListener(v->com.rezox.render.agent.RenderScheduling.showControls(this));
+        StudioUi.add(jobs,scheduling);
+        StudioUi.add(jobs,StudioUi.text(this,"Android may pause background work. Force-stop stops execution; saved frames remain recoverable.",12,StudioUi.MUTED,false));
+        StudioUi.add(page,jobs);
         StudioUi.space(page,14);
 
         LinearLayout agent=StudioUi.violetCard(this);

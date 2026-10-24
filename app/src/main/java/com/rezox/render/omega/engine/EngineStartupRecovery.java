@@ -8,6 +8,9 @@ import java.util.UUID;
 public final class EngineStartupRecovery {
     public static final String EXTRA_REQUEST="render.explicit_editor_request";
     private static final String PREF="render_editor_launch";
+    private static volatile boolean nativeStartInProcess;
+    public static boolean launchInFlight(){return nativeStartInProcess;}
+    public static void preparationFailed(){nativeStartInProcess=false;}
     private EngineStartupRecovery(){}
     private static SharedPreferences prefs(Context context){
         return context.getApplicationContext().getSharedPreferences(PREF,Context.MODE_PRIVATE);
@@ -29,6 +32,7 @@ public final class EngineStartupRecovery {
         return !state.getBoolean("native_launch_pending",false);
     }
     public static synchronized void markPending(Context context){
+        nativeStartInProcess=true;
         if(!prefs(context).edit().putBoolean("native_launch_pending",true).commit())
             throw new IllegalStateException("EDITOR_RECOVERY_STATE_NOT_WRITABLE");
     }

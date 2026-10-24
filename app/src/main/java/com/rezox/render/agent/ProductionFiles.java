@@ -22,7 +22,7 @@ public final class ProductionFiles {
         return root.getCanonicalFile();
     }
     public static File folder(Context context,String category)throws Exception {
-        if(category==null||!(category.matches("[a-f0-9]{32}")||category.equals("Assets")||category.equals("Captures")||category.equals("Projects")))
+        if(category==null||!(category.matches("[a-f0-9]{32}")||category.equals("Assets")||category.equals("Captures")||category.equals("Projects")||category.equals("Exports")))
             throw new IllegalArgumentException("INVALID_ARTIFACT_CATEGORY");
         File root=root(context),dir=new File(root,category);
         if(Files.isSymbolicLink(dir.toPath())||!root.equals(dir.getCanonicalFile().getParentFile()))throw new IOException("ARTIFACT_OUTSIDE_SCOPE");

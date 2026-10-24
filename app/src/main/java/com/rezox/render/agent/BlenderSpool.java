@@ -15,6 +15,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /** App-private native bpy main-thread command spool. Never executes Python text. */
 public final class BlenderSpool {
+    private static final ThreadLocal<String> CARRIER=new ThreadLocal<>();
+    static void carrier(String id){if(id==null)CARRIER.remove();else CARRIER.set(id);}
     public static final class RecoveryRequired extends Exception {
         public final String commandId;
         RecoveryRequired(String code) { this(code, ""); }
@@ -51,6 +53,7 @@ public final class BlenderSpool {
             throw new IllegalArgumentException("INVALID_FRAME");
     }
     private static void checkArguments(String action, JSONObject args) throws Exception {
+        if("blender.production.execute".equals(action)){ProductionBridge.validate(args);return;}
         if("omega.dispatch".equals(action)){
             if(args.length()!=3 || !(args.opt("operation") instanceof String)
                     || !OmegaOperations.isReserved(args.getString("operation"))
@@ -249,13 +252,17 @@ public final class BlenderSpool {
                 && NativeHeartbeat.observedCurrentProcess(app)))
             throw new IllegalStateException("BLENDER_EDITOR_NOT_RUNNING");
         String id=UUID.randomUUID().toString().replace("-","");
+        if(CARRIER.get()!=null){
+            try(AgentJournal journal=new AgentJournal(app)){journal.attachNative(CARRIER.get(),id);}
+        }
         File request=new File(pending,id+".json");
         File claimed=new File(working,id+".json");
         File resultFile=new File(results,id+".json");
         File progressFile=new File(new File(root,"progress"),id+".json");
         long lastPresenceUpdate=0;
         long lastProgressModified=-1;
-        long timeoutMillis=action.equals("blender.scene.render_video") ? 1800000L :
+        long timeoutMillis=action.equals("blender.production.execute") ? 600000L :
+            action.equals("blender.scene.render_video") ? 1800000L :
             action.equals("blender.scene.create_lively_project") ? 120000L :
             action.equals("blender.scene.populate_lively") ? 120000L :
             action.equals("blender.scene.batch_assembly") ? 120000L :
@@ -266,7 +273,7 @@ public final class BlenderSpool {
         JSONObject envelope=new JSONObject().put("id",id).put("action",action)
             .put("args",args).put("deadline",System.currentTimeMillis()/1000+timeoutMillis/1000);
         byte[] contents=envelope.toString().getBytes(StandardCharsets.UTF_8);
-        if(contents.length>65536)throw new IllegalArgumentException("NATIVE_COMMAND_TOO_LARGE");
+        if(contents.length>131072)throw new IllegalArgumentException("NATIVE_COMMAND_TOO_LARGE");
         File temporary=File.createTempFile("render-",".part",pending);
         try(FileOutputStream output=new FileOutputStream(temporary)) {
             output.write(contents);output.getFD().sync();
@@ -305,7 +312,7 @@ public final class BlenderSpool {
                 lastPresenceUpdate=now;
             }
             if(resultFile.isFile()){
-                if(resultFile.length()>65536)throw new IllegalStateException("BLENDER_RESULT_TOO_LARGE");
+                if(resultFile.length()>131072)throw new IllegalStateException("BLENDER_RESULT_TOO_LARGE");
                 byte[] bytes=Files.readAllBytes(resultFile.toPath());
                 progressFile.delete();
                 JSONObject reply=new JSONObject(new String(bytes,StandardCharsets.UTF_8));
@@ -324,7 +331,11 @@ public final class BlenderSpool {
                 if(!NativeCommandBudget.frame(action,args))
                     throw new RecoveryRequired("NATIVE_EXECUTION_OUTCOME_UNCERTAIN",id);
             }
-            Thread.sleep(150);
+            try{Thread.sleep(150);}catch(InterruptedException stopped){
+                Thread.currentThread().interrupt();
+                request.delete();
+                throw new RecoveryRequired("NATIVE_EXECUTION_OUTCOME_UNCERTAIN",id);
+            }
         }
         // A command may have been taken by Blender without an acknowledgment.
         request.delete();

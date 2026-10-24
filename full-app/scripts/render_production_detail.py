@@ -119,7 +119,7 @@ def execute(operation,p,root,scene,C):
             if ob.mode!='OBJECT':bpy.ops.object.mode_set(mode='OBJECT')
             bpy.data.objects.remove(ob,do_unlink=True);raise
         finally:
-            if ob.name in bpy.data.objects:ob.select_set(False)
+            if name in bpy.data.objects:bpy.data.objects[name].select_set(False)
             for item in selected:
                 if item.name in bpy.context.view_layer.objects:item.select_set(True)
             if previous and previous.name in bpy.context.view_layer.objects:bpy.context.view_layer.objects.active=previous

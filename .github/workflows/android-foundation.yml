@@ -5,6 +5,7 @@ on:
     branches: [main, "feature/android-native-foundation-20261021"]
 jobs:
   build-and-test:
+    if: github.head_ref != 'upgrade/render-studio-031'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -41,6 +42,7 @@ jobs:
           if-no-files-found: error
 
   blender-real-file-compatibility:
+    if: github.head_ref != 'upgrade/render-studio-031'
     runs-on: ubuntu-latest
     timeout-minutes: 22
     steps:

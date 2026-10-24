@@ -153,6 +153,15 @@ public final class EditorLaunchActivity extends Activity {
         });
     }
     private void prepare() {
+        if(com.rezox.render.agent.NativeHeartbeat.observedCurrentProcess(this)){
+            startActivity(new Intent().setClassName(this,"org.blender.blender.BlenderActivity")
+                .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT|Intent.FLAG_ACTIVITY_SINGLE_TOP));
+            finish();return;
+        }
+        if(EngineStartupRecovery.launchInFlight()&&!GLOBAL_PREFLIGHT.get()){
+            report("Blender launch is already in progress. Waiting for its native timer; no second engine was launched.");
+            return;
+        }
         if(!starting.compareAndSet(false,true))return;
         if(!GLOBAL_PREFLIGHT.compareAndSet(false,true)){
             starting.set(false);
@@ -201,7 +210,7 @@ public final class EditorLaunchActivity extends Activity {
                 handedToUi=true;
                 runOnUiThread(()->{
                     try{
-                        if(isFinishing()||isDestroyed())return;
+                        if(isFinishing()||isDestroyed()){EngineStartupRecovery.preparationFailed();return;}
                         Intent intent=new Intent().setClassName(this,
                             "org.blender.blender.BlenderActivity");
                         startActivity(intent);
@@ -209,10 +218,12 @@ public final class EditorLaunchActivity extends Activity {
                         // StartActivity does not attest an actual GPU frame.
                         status.setText("Native Blender activity requested; first Vulkan pixels remain unverified.");
                     }catch(Exception e) {
+                        EngineStartupRecovery.preparationFailed();
                         status.setText("EDITOR_ACTIVITY_LAUNCH_FAILED: "+e.getClass().getSimpleName());
                     }finally{GLOBAL_PREFLIGHT.set(false);}
                 });
             }catch(Exception error){
+                EngineStartupRecovery.preparationFailed();
                 String text="Editor preparation failed: "+error.getMessage();
                 EngineEvidence.record(this,EngineEvidence.Stage.PREFLIGHT_FAILED);
                 report(text);
@@ -227,6 +238,8 @@ public final class EditorLaunchActivity extends Activity {
         File container=new File(getFilesDir(),"blender");
         if(!container.isDirectory()&&!container.mkdirs())
             throw new java.io.IOException("RUNTIME_PARENT_NOT_WRITABLE");
+        if(getFilesDir().getUsableSpace()<128L*1024*1024)
+            throw new java.io.IOException("FREE_STORAGE_BEFORE_BLENDER_STARTUP");
         File root=new File(container,VERSION);
         File backup=new File(container,VERSION+".previous");
         // Crash between root->backup and stage->root must not force a fresh
@@ -287,6 +300,8 @@ public final class EditorLaunchActivity extends Activity {
                     while((n=input.read(buffer))!=-1) {
                         output.write(buffer,0,n);
                         total+=n;
+                        if(total>4L*1024*1024*1024||target.getUsableSpace()<64L*1024*1024)
+                            throw new java.io.IOException("BLENDER_RUNTIME_STORAGE_LIMIT");
                     }
                 }
                 entries++;

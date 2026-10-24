@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 """Explicit native render settings. Throughput controls never alter pixel quality."""
 import math
+import json
 try:
     import bpy
 except ImportError:
@@ -14,6 +15,8 @@ def _samples(scene):
     eevee = getattr(scene, "eevee", None)
     if eevee is not None and hasattr(eevee, "taa_render_samples"):
         return eevee, "taa_render_samples"
+    if eevee is not None and hasattr(eevee, "taa_samples"):
+        return eevee, "taa_samples"
     return None, None
 
 
@@ -44,13 +47,11 @@ def plan_payload(scene, requested):
     return result
 
 
-def configure(scene, p, performance=False):
+def validate(p, performance=False):
     allowed = {"persistent_data", "threads_mode", "threads"} if performance else {
         "engine", "width", "height", "percentage", "fps", "fps_base", "samples", "film_transparent", "denoising"}
     if not isinstance(p, dict) or set(p) - allowed:
         raise ValueError("UNKNOWN_RENDER_SETTING")
-    if scene.get("production_frozen_job"):
-        raise ValueError("RENDER_SNAPSHOT_IMMUTABLE")
     ranges = {"width": (4, 65536), "height": (4, 65536), "percentage": (1, 100),
               "fps": (1, 32767), "samples": (1, 16_777_216), "threads": (1, 1024)}
     for key, value in p.items():
@@ -64,9 +65,17 @@ def configure(scene, p, performance=False):
             raise ValueError("RENDER_SETTING_OUT_OF_RANGE")
         if key == "fps_base" and (type(value) not in (int, float) or not math.isfinite(value) or not 0.1 <= value <= 1000):
             raise ValueError("INVALID_RENDER_FPS_BASE")
+
+
+def configure(scene, p, performance=False):
+    validate(p, performance)
+    if scene.get("production_frozen_job"):
+        raise ValueError("RENDER_SNAPSHOT_IMMUTABLE")
     before, changes = inspect(scene), []
 
     def set_value(owner, field, value):
+        if getattr(owner, field) == value:
+            return  # Avoid invalidating compiled shaders/render caches.
         changes.append((owner, field, getattr(owner, field)))
         setattr(owner, field, value)
         if getattr(owner, field) != value and not (field == "fps_base" and abs(getattr(owner, field) - value) < 1e-5):
@@ -98,7 +107,48 @@ def configure(scene, p, performance=False):
             "existing_render_snapshots_changed": False, "native_execution_verified": True}
 
 
+def profiles(scene, p, configure_profile=False):
+    if not isinstance(p, dict) or set(p) - ({"profile", "settings"} if configure_profile else set()):
+        raise ValueError("UNKNOWN_RENDER_PROFILE_ARGUMENT")
+    saved = json.loads(scene.get("render_studio_profiles_v1", '{}'))
+    if not isinstance(saved, dict):
+        raise ValueError("RENDER_PROFILE_CORRUPT")
+    if configure_profile:
+        if scene.get("production_frozen_job"):
+            raise ValueError("RENDER_SNAPSHOT_IMMUTABLE")
+        name, settings = p.get("profile"), p.get("settings")
+        if name not in ("preview", "final") or not isinstance(settings, dict):
+            raise ValueError("INVALID_RENDER_PROFILE")
+        validate(settings)
+        merged = dict(saved.get(name, {}), **settings)
+        saved[name] = merged
+        scene["render_studio_profiles_v1"] = json.dumps(saved, sort_keys=True, allow_nan=False)
+    return {"profiles": {name: saved.get(name, {}) for name in ("preview", "final")},
+            "unset_fields": "inherit artist scene settings at plan creation",
+            "active_scene_quality_changed": False, "final_quality_silently_reduced": False}
+
+
+def profile_plan(scene, requested):
+    requested = dict(requested)
+    name = requested.pop("profile", "final")
+    if name not in ("preview", "final"):
+        raise ValueError("INVALID_RENDER_PROFILE")
+    overrides = profiles(scene, {})["profiles"][name]
+    current = inspect(scene)
+    combined = dict(current, **overrides)
+    plan = plan_payload(scene, {})
+    for key in ("engine", "fps", "samples"):
+        if key in overrides:
+            plan[key] = combined[key]
+    for key in ("width", "height"):
+        plan[key] = combined[key] * combined["percentage"] // 100
+    plan.update(requested)
+    return plan, name, overrides
+
+
 def execute(operation, scene, p):
+    if operation.startswith("render.profile."):
+        return profiles(scene, p, operation.endswith("configure"))
     if operation.endswith("inspect"):
         if p:
             raise ValueError("UNKNOWN_RENDER_SETTING")
@@ -107,6 +157,15 @@ def execute(operation, scene, p):
 
 
 if bpy is not None and getattr(getattr(bpy, "types", None), "Panel", None):
+    class RENDERSTUDIO_OT_store_preview_profile(bpy.types.Operator):
+        bl_idname = "renderstudio.store_preview_profile"
+        bl_label = "Save Preview Scale"
+        def execute(self, context):
+            profiles(context.scene, {"profile": "preview", "settings": {
+                "percentage": context.scene.render_preview_scale}}, True)
+            self.report({"INFO"}, "Preview profile saved; final and scene settings preserved")
+            return {"FINISHED"}
+
     class RENDERSTUDIO_PT_execution(bpy.types.Panel):
         bl_label = "Render Studio • Rendering"
         bl_idname = "RENDERSTUDIO_PT_execution"
@@ -127,6 +186,10 @@ if bpy is not None and getattr(getattr(bpy, "types", None), "Panel", None):
             if render.engine == "CYCLES":
                 layout.prop(scene.cycles, "use_denoising", text="Denoising")
             layout.separator()
+            layout.label(text="Preview and final profiles inherit unset settings")
+            layout.prop(scene, "render_studio_profile", text="Job profile")
+            layout.prop(scene, "render_preview_scale", text="Preview output %")
+            layout.operator("renderstudio.store_preview_profile", text="Save Preview Scale")
             layout.prop(render, "use_persistent_data", text="Reuse data between frames")
             layout.label(text="Cache uses more memory; output quality is unchanged")
             layout.prop(render, "threads_mode", text="CPU threads")
@@ -141,6 +204,11 @@ if bpy is not None and getattr(getattr(bpy, "types", None), "Panel", None):
 def install():
     global _INSTALLED
     if not _INSTALLED and bpy is not None and not bpy.app.background:
+        bpy.types.Scene.render_studio_profile = bpy.props.EnumProperty(
+            items=[("final", "Final", "Preserve artist settings unless explicitly configured"),
+                   ("preview", "Preview", "Use the separately saved preview settings")], default="final")
+        bpy.types.Scene.render_preview_scale = bpy.props.IntProperty(default=50, min=1, max=100)
+        bpy.utils.register_class(RENDERSTUDIO_OT_store_preview_profile)
         bpy.utils.register_class(RENDERSTUDIO_PT_execution)
         _INSTALLED = True
 

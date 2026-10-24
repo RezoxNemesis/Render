@@ -42,6 +42,7 @@ public final class ProductionBatch {
             .put("start_frame",spec.getInt("start")).put("end_frame",spec.getInt("end"))
             .put("completed_frames",m.getJSONObject("frames").length())
             .put("fingerprint",m.getString("fingerprint"))
+            .put("timing",m.optJSONObject("timing"))
             .put("quality_reduced",false)
             .put("source_checkpoint_preserved",true);
     }
@@ -80,12 +81,15 @@ public final class ProductionBatch {
     }
 
     static JSONObject advance(Context context,JSONObject p,AtomicBoolean cancelled,Runtime runtime)throws Exception{
-        ProductionBridge.fields(p,"job_id,max_frames,max_wall_ms,cooldown_max_ms,expected_fingerprint");
+        ProductionBridge.fields(p,"job_id,max_frames,max_wall_ms,cooldown_max_ms,expected_fingerprint,expected_next_frame");
         String jobId=p.getString("job_id");
         JSONObject current=jobStatus(context,jobId);
         if(p.has("expected_fingerprint") &&
             !current.getString("fingerprint").equals(p.getString("expected_fingerprint")))
             throw new IllegalArgumentException("RENDER_REVISION_CONFLICT");
+        if(p.has("expected_next_frame") &&
+           ProductionBridge.integer(p,"expected_next_frame",1,10000000,-1)!=current.getInt("next_frame"))
+            throw new IllegalArgumentException("RENDER_NEXT_FRAME_CONFLICT");
         int maxFrames=(int)ProductionBridge.integer(p,"max_frames",1,12,8);
         long maxWall=ProductionBridge.integer(p,"max_wall_ms",30000,540000,360000);
         long cooldown=ProductionBridge.integer(p,"cooldown_max_ms",0,90000,60000);
@@ -104,9 +108,7 @@ public final class ProductionBatch {
                     reason="FRAMES_COMPLETE";break;
                 }
                 JSONObject reading=runtime.sample();
-                ProductionThermalPolicy.Decision decision=ProductionThermalPolicy.evaluate(
-                    reading.getInt("thermal_status"),reading.getBoolean("low_memory"),
-                    reading.getLong("available_memory_bytes"),cancelled.get());
+                ProductionThermalPolicy.Decision decision=RenderScheduling.evaluate(context,reading,cancelled.get());
                 if(!decision.renderAllowed){
                     if(!decision.reason.equals("PAUSED_THERMAL_PRESSURE")||cooldown==0){
                         return report(context,jobId,cancelled.get()?"PAUSED_USER_STOP":decision.reason,produced,runtime.now()-started,reading);
@@ -122,8 +124,7 @@ public final class ProductionBatch {
                         runtime.sleep(Math.max(1,Math.min(5000,Math.min(cooldown-(runtime.now()-pauseStarted),
                             maxWall-(runtime.now()-started)))));
                         reading=runtime.sample();
-                        decision=ProductionThermalPolicy.evaluate(reading.getInt("thermal_status"),
-                            reading.getBoolean("low_memory"),reading.getLong("available_memory_bytes"),cancelled.get());
+                        decision=RenderScheduling.evaluate(context,reading,cancelled.get());
                         // An unavailable sensor is not a confirmed cool sample
                         // after Android has already reported severe pressure.
                         if(decision.renderAllowed&&!decision.statusUnavailable){
@@ -166,12 +167,9 @@ public final class ProductionBatch {
                 if("frames_complete".equals(result.optString("state"))){
                     reason="FRAMES_COMPLETE";break;
                 }
-                if(reading.optInt("thermal_status")==2){
-                    // Tiny pacing at Android MODERATE prevents avoidable ramp-up
-                    // without changing any pixel-quality setting.
-                    runtime.sleep(ProductionThermalPolicy.evaluate(2,false,
-                        reading.getLong("available_memory_bytes"),false).cooldownMillis);
-                }
+                long pacing=Math.max(RenderScheduling.gap(context),reading.optInt("thermal_status")==2?1500:0);
+                for(long waited=0;waited<pacing&&!cancelled.get();waited+=500)
+                    runtime.sleep(Math.min(500,pacing-waited));
             }
             if(produced==maxFrames && !reason.equals("FRAMES_COMPLETE"))
                 reason="BATCH_LIMIT_REACHED";

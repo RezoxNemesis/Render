@@ -340,6 +340,18 @@ public final class BlenderMobileControls {
                 });
             }
         });
+        TextView cancelRender=button(activity,"Cancel job • keep frames");
+        cancelRender.setTextSize(11);
+        cancelRender.setContentDescription("Cancel the current render job and retain verified frames and checkpoint for retry");
+        progressPanel.addView(cancelRender,new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,px(activity,39)));
+        cancelRender.setOnClickListener(v->WORK.execute(()->{
+            try{
+                String job=RenderManualJobs.status(activity).optString("job_id","");
+                RenderLongForegroundService.requestCancel(activity,job);
+                toast(activity,"Cancelled after current frame; saved work retained");
+            }catch(Exception error){toast(activity,"Cancel unavailable: "+error.getMessage());}
+        }));
         // Startup has no defensible percentage. Show elapsed waiting time
         // until bpy actually responds, independently of render-frame progress.
         LinearLayout startupPanel=new LinearLayout(activity);
@@ -366,7 +378,7 @@ public final class BlenderMobileControls {
             @Override public void run(){
                 if(activity.isFinishing()||activity.isDestroyed())return;
                 long heartbeatAge=System.currentTimeMillis()-editorHeartbeat.lastModified();
-                if(!editorResponded[0]&&editorHeartbeat.isFile()&&heartbeatAge>=0&&heartbeatAge<15000){
+                if(!editorResponded[0]&&com.rezox.render.agent.NativeHeartbeat.ready(activity)){
                     editorResponded[0]=true;
                     com.rezox.render.omega.engine.EngineStartupRecovery.markReady(activity);
                 }
@@ -395,7 +407,10 @@ public final class BlenderMobileControls {
                     frameProgress.setProgress(total>0?(int)(100L*done/total):0);
                     String detail=snapshot.optString("detail",state);
                     if(detail.length()>50)detail=detail.substring(0,47)+"...";
-                    frameStatus.setText("Render "+done+"/"+total+" frames\n"+detail);
+                    long eta=snapshot.optLong("estimated_remaining_render_ms",-1);
+                    frameStatus.setText("Render "+done+"/"+total+" frames\n"+detail+
+                        "\nRendered: "+RenderManualJobs.duration(snapshot.optLong("render_active_ms",0))+
+                        (eta>=0?" • remaining ~"+RenderManualJobs.duration(eta):" • estimate pending"));
                     renderControl.setText(RenderManualJobs.active()?
                         (snapshot.optBoolean("pausing")?"Finishing current frame…":
                          "Pause after frame"):"▶ Resume saved render");

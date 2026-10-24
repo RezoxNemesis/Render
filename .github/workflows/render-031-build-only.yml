@@ -1,0 +1,120 @@
+name: Render 0.31 build only - runtime testing skipped
+on:
+  pull_request:
+    branches: [feature/native-production-toolkit-20261022]
+permissions:
+  contents: read
+concurrency:
+  group: render-031-build-only-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  signed-native-build:
+    if: github.head_ref == 'upgrade/render-studio-031'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tools/prepare_production_toolkit.py
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Restore historical signing identity (never generate a new key)
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.android/render-production-development.keystore
+          key: render-production-development-signing-v1
+          fail-on-cache-miss: true
+      - name: Verify pinned historical signer fingerprint
+        run: |
+          set -euo pipefail
+          KEY="$HOME/.android/render-production-development.keystore"
+          test -s "$KEY"
+          keytool -list -v -keystore "$KEY" -storepass android -alias androiddebugkey > "$RUNNER_TEMP/render-development-key-proof.txt"
+          grep -Fqi 'F3:D6:3F:B2:0B:E2:5C:A0:BE:8A:A6:A1:61:D5:CF:13:CD:98:BA:2F:A3:00:C7:A6:04:CC:E3:51:31:B9:EB:30' "$RUNNER_TEMP/render-development-key-proof.txt"
+          echo "RENDER_DEVELOPMENT_KEYSTORE=$KEY" >> "$GITHUB_ENV"
+          echo 'Development signer matches pinned historical Render signer; the installed device certificate has NOT been queried by this job.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Install Android SDK NDK and CMake
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -path "*/bin/sdkmanager" -type f | sort -V | tail -1)"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" --install "platforms;android-35" "build-tools;35.0.0" "cmake;3.22.1" "ndk;27.2.12479018"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+      - name: Compile native JNI and Android production bridge (no tests)
+        run: gradle --no-daemon :app:assembleDebug
+      - name: Download verified pinned Android Blender engine
+        run: |
+          curl -fL --retry 3 --connect-timeout 15 "https://github.com/simfeo/blender/releases/download/android-alpha-4/blender-full.apk" -o "$RUNNER_TEMP/blender-full.apk"
+          echo "3fe775a1e14470ebfcd3c25ae32b57003433f04552f896880631ae98b1f18aea  $RUNNER_TEMP/blender-full.apk" | sha256sum --check --status
+          test "$(stat -c%s "$RUNNER_TEMP/blender-full.apk")" = "286561495"
+      - name: Retrieve pinned upstream Android launcher
+        run: |
+          mkdir "$RUNNER_TEMP/full-blender-src"
+          git -C "$RUNNER_TEMP/full-blender-src" init -q
+          git -C "$RUNNER_TEMP/full-blender-src" remote add origin https://github.com/simfeo/blender.git
+          git -C "$RUNNER_TEMP/full-blender-src" sparse-checkout init --cone
+          git -C "$RUNNER_TEMP/full-blender-src" sparse-checkout set build_files/android/apk/app/src/main
+          git -C "$RUNNER_TEMP/full-blender-src" -c protocol.version=2 fetch --depth=1 --filter=blob:none origin d93bd33cba768e19ee4387a31c0ea137ee2f0047
+          git -C "$RUNNER_TEMP/full-blender-src" checkout --detach -q FETCH_HEAD
+          test "$(git -C "$RUNNER_TEMP/full-blender-src" rev-parse HEAD)" = "d93bd33cba768e19ee4387a31c0ea137ee2f0047"
+      - name: Stage actual engine and production runtime
+        run: python tools/assemble_full_native.py --engine-apk "$RUNNER_TEMP/blender-full.apk" --bridge-apk app/build/outputs/apk/debug/app-debug.apk --upstream-source "$RUNNER_TEMP/full-blender-src" --output full-app/stage
+      - name: Compile original-package development candidate
+        run: gradle -p full-app --no-daemon :app:assembleDebug
+      - name: Verify APK runtime manifest and certificate
+        run: |
+          set -euo pipefail
+          APK=full-app/app/build/outputs/apk/debug/app-debug.apk
+          unzip -tqq "$APK"
+          unzip -Z -1 "$APK" | grep -Fx 'lib/arm64-v8a/libblender.so'
+          unzip -Z -1 "$APK" | grep -Fx 'lib/arm64-v8a/librender_bridge.so'
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee "$RUNNER_TEMP/render-production-signature.txt"
+          grep -Fqi 'f3d63fb20be25ca0be8aa6a161d5cf13cd98ba2fa300c7a604cce35131b9eb30' "$RUNNER_TEMP/render-production-signature.txt"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | tee "$RUNNER_TEMP/render-production-badging.txt"
+          grep -Fq "versionCode='36'" "$RUNNER_TEMP/render-production-badging.txt"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump xmltree "$APK" AndroidManifest.xml | tee "$RUNNER_TEMP/render-long-service-manifest.txt"
+          grep -Fq "RenderLongForegroundService" "$RUNNER_TEMP/render-long-service-manifest.txt"
+          grep -Fq "FOREGROUND_SERVICE_MEDIA_PROCESSING" "$RUNNER_TEMP/render-long-service-manifest.txt"
+          python3 - <<'PY'
+          import io,zipfile
+          with zipfile.ZipFile('full-app/app/build/outputs/apk/debug/app-debug.apk') as a:
+              with zipfile.ZipFile(io.BytesIO(a.read('assets/blender_runtime.zip'))) as z:
+                  for name in ('render_artist_ops.py','render_asset_sources.py','render_production.py','render_production_contract.py','render_production_detail.py','render_studio_ops.py','render_studio_contract.py','render_session_tools.py','render_v25_recovery.py','render_assets.py','render_native_hud.py','render_asset_library.py','render_execution_settings.py', 'omega_registry.py'):
+                      assert 'scripts/startup/'+name in z.namelist()
+                  phases = (
+                      'phase01_engine.py','phase02_render.py','phase03_agent.py',
+                      'phase04_geometry.py','phase05_character.py','phase06_rig.py',
+                      'phase07_motion.py','phase08_world.py','phase09_vfx.py',
+                      'phase11_artist.py','phase12_quality.py','phase13_simulation.py'
+                  )
+                  for name in phases:
+                      assert 'scripts/startup/omega/'+name in z.namelist(), name
+          print('PASS: production runtime packaged with native Blender')
+          PY
+          cp "$APK" "$RUNNER_TEMP/Render-0.31.0-historical-signer-candidate.apk"
+          sha256sum "$RUNNER_TEMP/Render-0.31.0-historical-signer-candidate.apk" > "$RUNNER_TEMP/render-production-sha256.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Render-0.31.0-HISTORICAL-SIGNER-NATIVE-CANDIDATE
+          path: ${{ runner.temp }}/Render-0.31.0-historical-signer-candidate.apk
+          compression-level: 0
+          retention-days: 7
+          if-no-files-found: error
+      - name: Record release boundary
+        run: echo 'Render 0.31.0 original-package APK uses the pinned historical development signer with versionCode 36; any actual install still requires matching the device-installed signature, sufficient free disk and owner approval. Never uninstall or clear original app data. Permanent release key remains protected.' >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Render-0.31.0-build-and-signature-proof
+          path: |
+            ${{ runner.temp }}/render-production-signature.txt
+            ${{ runner.temp }}/render-production-badging.txt
+            ${{ runner.temp }}/render-production-sha256.txt
+            ${{ runner.temp }}/render-long-service-manifest.txt
+
+          retention-days: 14

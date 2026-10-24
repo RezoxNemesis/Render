@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import sys
 import uuid
+import time
 import bpy
 from mathutils import Vector
 
@@ -189,7 +190,12 @@ def _plan_render(scene,p,root):
     # Omitting a setting means keep the artist's scene setting. A minimal MCP
     # request must never silently replace its engine, resolution or samples.
     import render_execution_settings
-    spec=C.render_spec(render_execution_settings.plan_payload(scene,p))
+    plan, profile, quality = render_execution_settings.profile_plan(scene,p)
+    spec=C.render_spec(plan)
+    spec['profile']=profile
+    spec['quality_overrides']=quality
+    unpacked=[image for image in bpy.data.images if image.source=='FILE' and not image.packed_file]
+    if unpacked:raise ValueError('PACK_EXTERNAL_IMAGES_BEFORE_CHECKPOINT')
     if scene.camera is None:raise ValueError('CAMERA_REQUIRED')
     ident=uuid.uuid4().hex;folder=_job(root,ident);folder.mkdir(mode=0o700)
     checkpoint=folder/'snapshot.blend'
@@ -211,7 +217,23 @@ def _status(manifest):
     return {'job_id':manifest['job_id'],'state':manifest['state'],'completed_frames':len(manifest['frames']),
             'total_frames':manifest['spec']['frame_count'],'next_frame':manifest['next_frame'],
             'spec':manifest['spec'],'fingerprint':manifest['fingerprint'],'quality_reduced':False,
-            'video_created':manifest['state']=='encoded','native_execution_verified':True}
+            'video_created':manifest['state']=='encoded','native_execution_verified':True,
+            'timing':manifest.get('timing',{})}
+
+def _render_exact(scene, frame):
+    # A render operator can inherit the active window frame despite scene=.
+    window=bpy.context.window
+    original=window.scene if window else None
+    try:
+        if window:window.scene=scene
+        scene.frame_set(frame)
+        with bpy.context.temp_override(scene=scene, view_layer=scene.view_layers[0]):
+            result=bpy.ops.render.render(write_still=True,scene=scene.name)
+        if scene.frame_current!=frame:
+            raise RuntimeError('RENDER_FRAME_CONTEXT_MISMATCH')
+        return result
+    finally:
+        if window and original is not None:window.scene=original
 
 def _step(root,p):
     C.fields(p,('job_id',),('job_id',));folder=_job(root,p['job_id']);path=folder/'manifest.json'
@@ -230,32 +252,49 @@ def _step(root,p):
         with bpy.data.libraries.load(str(folder/'snapshot.blend'),link=False) as (src,dst):
             if manifest['source_scene'] not in src.scenes:raise ValueError('CHECKPOINT_SCENE_MISSING')
             dst.scenes=[manifest['source_scene']]
-        scene=dst.scenes[0];scene['production_frozen_job']=manifest['job_id']
+        scene=dst.scenes[0]
+        import render_execution_settings
+        render_execution_settings.configure(scene,spec.get('quality_overrides',{}))
+        scene['production_frozen_job']=manifest['job_id']
     render=scene.render
     engine=spec['engine']
     try:
-        render.engine=engine
+        if render.engine!=engine:render.engine=engine
     except (TypeError,ValueError):
         # Never silently replace the user's renderer with a different engine.
         # A different shading backend can change pixels even with identical
         # samples, so prefer an explicit, recoverable unsupported-engine error.
         raise ValueError('REQUESTED_RENDER_ENGINE_UNAVAILABLE')
-    render.resolution_x=spec['width'];render.resolution_y=spec['height'];render.resolution_percentage=100
-    render.fps=spec['fps']
-    render.fps_base=spec.get('fps_base',render.fps_base)
-    if render.engine=='CYCLES':scene.cycles.samples=spec['samples']
-    elif hasattr(scene,'eevee') and hasattr(scene.eevee,'taa_render_samples'):scene.eevee.taa_render_samples=spec['samples']
-    render.image_settings.file_format='PNG';render.image_settings.color_mode='RGBA'
+    for key,value in (('resolution_x',spec['width']),('resolution_y',spec['height']),
+                      ('resolution_percentage',100),('fps',spec['fps']),('fps_base',spec.get('fps_base',render.fps_base))):
+        if getattr(render,key)!=value:setattr(render,key,value)
+        if abs(getattr(render,key)-value)>1e-5:raise ValueError('NATIVE_RENDER_SETTING_WAS_CLAMPED')
+    import render_execution_settings
+    owner, field=render_execution_settings._samples(scene)
+    if owner is not None:
+        if getattr(owner,field)!=spec['samples']:setattr(owner,field,spec['samples'])
+        if getattr(owner,field)!=spec['samples']:raise ValueError('NATIVE_RENDER_SETTING_WAS_CLAMPED')
+    elif render.engine!='BLENDER_WORKBENCH':raise ValueError('REQUESTED_SAMPLE_CONTROL_UNAVAILABLE')
+    if render.image_settings.file_format!='PNG':render.image_settings.file_format='PNG'
+    if render.image_settings.color_mode!='RGBA':render.image_settings.color_mode='RGBA'
     tmp=folder/('frame_%06d.partial.png'%frame);final=folder/('frame_%06d.png'%frame)
-    render.filepath=str(tmp);scene.frame_set(frame)
+    render.filepath=str(tmp)
     manifest['state']='rendering';_write(path,manifest)
     try:
-        result=bpy.ops.render.render(write_still=True,scene=scene.name)
+        frame_started=time.monotonic()
+        result=_render_exact(scene,frame)
         if 'FINISHED' not in result or not tmp.is_file():
             raise RuntimeError('FRAME_RENDER_FAILED')
         # CRC and expected dimensions are checked BEFORE making the PNG
         # immutable. Sidecar -> fsynced rename -> manifest prevents false
         # completion after a crash between filesystem operations.
+        duration=max(1,round((time.monotonic()-frame_started)*1000))
+        timing=manifest.setdefault('timing',{})
+        timing['rendered_frames']=timing.get('rendered_frames',0)+1
+        timing['render_active_ms']=timing.get('render_active_ms',0)+duration
+        timing['last_frame_ms']=duration
+        timing['estimated_frame_ms']=round(.25*duration+.75*timing.get('estimated_frame_ms',duration))
+        timing['estimate_scope']='remaining native frames; excludes encoding, pauses and exports'
         _phase2().commit_png(folder,manifest,frame,tmp)
     except Exception:
         manifest['state']='paused_error';_write(path,manifest);raise
@@ -265,13 +304,33 @@ def execute(args, spool, command_id):
     operation,p=C.validate_envelope(args);root=_root(spool)
     scene=bpy.context.scene
     if scene is None:raise RuntimeError('NO_ACTIVE_SCENE')
-    if operation in ('asset.search','asset.download','asset.download.status','asset.download.pause','asset.import'):
+    import render_artist_ops
+    if operation in render_artist_ops.SCHEMAS:
+        return render_artist_ops.execute(operation,scene,root,p)
+    if operation in ('operator.execute','asset.import','project.restore','rig.bind','mesh.edit'):
+        render_artist_ops.checkpoint(scene,root,operation)
+
+    if operation in ('asset.search','asset.details','asset.preview','asset.download','asset.download.status','asset.download.pause','asset.import'):
         import render_asset_library
         return render_asset_library.execute(operation,scene,root,p)
-    if operation in ('render.quality.inspect','render.quality.configure',
+    if operation in ('render.profile.inspect','render.profile.configure','render.quality.inspect','render.quality.configure',
                      'render.performance.inspect','render.performance.configure'):
         import render_execution_settings
         return render_execution_settings.execute(operation,scene,p)
+    if operation in ('project.list','project.restore','mesh.edit','curve.create','shape.create','shape.keys','rig.create','rig.bind','rig.keys'):
+        detail_path=Path(__file__).with_name('render_production_detail.py')
+        detail_spec=importlib.util.spec_from_file_location('render_production_detail',detail_path)
+        detail_module=importlib.util.module_from_spec(detail_spec)
+        detail_spec.loader.exec_module(detail_module)
+        return detail_module.execute(operation,p,root,scene,C)
+    if operation in ('reference.bind','reference.landmarks','viewport.inspect',
+                     'viewport.configure','viewport.focus','object.geometry',
+                     'operator.describe','operator.execute'):
+        studio_path=Path(__file__).with_name('render_studio_ops.py')
+        studio_spec=importlib.util.spec_from_file_location('render_studio_ops',studio_path)
+        studio_module=importlib.util.module_from_spec(studio_spec)
+        studio_spec.loader.exec_module(studio_module)
+        return studio_module.execute(operation,p,root,scene)
     if operation=='scene.inspect':
         C.fields(p,('offset','limit'))
         offset=C.integer(p.get('offset',0),0,10000000);limit=C.integer(p.get('limit',32),1,64)
@@ -305,7 +364,7 @@ def execute(args, spool, command_id):
         folder=root/'Projects';folder.mkdir(exist_ok=True);file=C.owned_path(folder,name)
         result=bpy.ops.wm.save_as_mainfile(filepath=str(file),copy=True,compress=True,check_existing=False)
         if 'FINISHED' not in result or not file.is_file():raise RuntimeError('CHECKPOINT_FAILED')
-        return dict(C.file_receipt(file),category='Projects',source_unchanged=True)
+        return dict(C.file_receipt(file),category='Projects',scene=scene.name,source_unchanged=True)
     if operation=='mesh.create':return _mesh(scene,p)
     if operation=='material.assign':return _material(scene,p,root)
     if operation=='animation.keys':return _keys(scene,p)

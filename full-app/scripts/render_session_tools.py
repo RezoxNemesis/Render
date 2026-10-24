@@ -226,7 +226,9 @@ def render_progress():
     done = len(manifest.get("frames", {}))
     return {"job_id": manifest["job_id"], "completed": done,
             "total": total, "next_frame": manifest.get("next_frame"),
-            "state": manifest.get("state"), "fraction": min(1.0, done / total)}
+            "state": manifest.get("state"), "fraction": min(1.0, done / total),
+            "render_active_ms": manifest.get("timing", {}).get("render_active_ms", 0),
+            "estimated_remaining_ms": (total-done)*manifest.get("timing", {}).get("estimated_frame_ms", 0)}
 
 def _render_spec(scene, output_kind='ANIMATION'):
     render = scene.render
@@ -276,6 +278,10 @@ def queue_manual_render(resume=False, still=False):
     else:
         import render_production
         spec = _render_spec(bpy.context.scene, 'STILL' if still else 'ANIMATION')
+        profile = getattr(bpy.context.scene, 'render_studio_profile', 'final')
+        # Profile overrides apply only to this new immutable render job.
+        spec = {key: spec[key] for key in ('start','end','output_kind','bitrate')}
+        spec['profile'] = profile
         result = render_production.execute(
             {"operation": "render.plan", "payload": spec}, SPOOL, "local-editor-menu")
         ident = result["job_id"]

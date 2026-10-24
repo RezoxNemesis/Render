@@ -19,16 +19,25 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class ProductionBridge {
     public static final String ACTION="production.execute";
     private static final String[] OPS={"capabilities","device.profile","editor.open","screenshot.capture",
-        "artifact.read","artifact.export","reference.write","project.create","project.checkpoint",
+        "artifact.read","artifact.export","reference.write","project.create","project.checkpoint","project.list","project.restore","mesh.edit","curve.create","shape.create","shape.keys","rig.create","rig.bind","rig.keys",
         "scene.inspect","mesh.create","asset.create","material.assign","group.create","animation.keys","camera.aim",
         "world.configure","instances.plan","instances.create","reference.attach",
-        "render.plan","render.step","render.batch","render.status","render.encode","drive.status","drive.backup",
+        "reference.list","reference.metadata","reference.video_frame","reference.pick","ui.state","connection.diagnose","reference.bind","reference.landmarks","viewport.inspect","viewport.configure","viewport.focus","object.geometry","operator.describe","operator.execute","render.plan","render.step","render.batch","render.status","render.encode","drive.status","drive.backup",
         "render.storage.status","render.job.start","render.job.status","render.job.pause",
         "render.job.export","render.job.export_segment","project.checkpoint_export","native.command.status",
-        "asset.search","asset.download","asset.download.status","asset.download.pause","asset.import",
-        "render.quality.inspect","render.quality.configure","render.performance.inspect","render.performance.configure"};
+        "asset.search","asset.details","asset.preview","asset.download","asset.download.status","asset.download.pause","asset.import",
+        "render.quality.inspect","render.quality.configure","render.performance.inspect","render.performance.configure",
+        "ipc.command.status","ipc.command.cancel","render.job.cancel","render.job.resume","render.job.retry","render.queue.status",
+        "render.profile.inspect","render.profile.configure","render.scheduling.inspect","render.scheduling.configure",
+        "artist.capabilities","artist.inspect","object.duplicate","object.remove","sculpt.mask","sculpt.stroke","facial.expression","material.inspect","light.configure","camera.configure","media.import","project.export"};
     private static final Set<String> OPERATIONS=new HashSet<>(Arrays.asList(OPS));
     private ProductionBridge(){}
+    /** These controls must remain responsive while the serial native worker renders. */
+    static boolean outOfBand(JSONObject args){
+        return Arrays.asList("ipc.command.status","ipc.command.cancel","native.command.status",
+            "render.job.status","render.job.pause","render.job.cancel","render.queue.status",
+            "device.profile","capabilities").contains(args.optString("operation"));
+    }
     public static void fields(JSONObject p,String allowed)throws Exception {
         Set<String> names=new HashSet<>(Arrays.asList(allowed.split(",")));
         java.util.Iterator<String> it=p.keys();while(it.hasNext())if(!names.contains(it.next()))throw new IllegalArgumentException("UNKNOWN_PRODUCTION_ARGUMENT");
@@ -78,23 +87,42 @@ public final class ProductionBridge {
                 .put("android_h264_encoder_available",ProductionVideoEncoder.available()).put("cloud_rendering",false)
                 .put("automatic_image_to_3d_provider_installed",false).put("visual_quality_verified",false)
                 .put("render_protocol","plan_then_batch_up_to_12_frames_with_cooldown_then_encode_then_export")
-                .put("render_batch_max_frames",12).put("free_procedural_asset_presets",17).put("free_assets_native_editable",true)
+                .put("render_batch_max_frames",12)
+                .put("direct_owner_media_import","Android ACTION_SEND / ACTION_OPEN_DOCUMENT")
+                .put("reference_image_video_supported",true)
+                .put("geometry_projection_error_metric","normalized 2D landmark RMS, not likeness percent")
+                .put("supports_readonly_ui_state",true)
+                .put("viewport_precision_controls_available",true)
+                .put("native_operator_coverage","explicit allowlist, not arbitrary Python").put("free_procedural_asset_presets",17).put("free_assets_native_editable",true)
                 .put("thermal_severe_is_safely_paused",true)
                 .put("drive_backup_via","user-granted Android Storage Access Framework; cloud storage only")
                 .put("drive_folder_granted",ProductionDriveStorage.status(context).getBoolean("folder_granted"))
                 .put("user_project_quality_changed",false)
                 .put("native_frame_timeout_ms",NativeCommandBudget.FRAME_TIMEOUT_MS)
                 .put("background_render_entrypoint","render.job.start")
-                .put("asset_catalog","Poly Haven CC0 models, materials and HDRIs")
+                .put("asset_catalog","Poly Haven + AmbientCG CC0; discover supported formats using asset.details")
                 .put("asset_catalog_is_infinite",false)
                 .put("asset_downloads_keep_requested_resolution",true)
+                .put("separate_preview_final_profiles",true)
+                .put("durable_binder_queue_capacity",12)
+                .put("durable_render_queue_capacity",64)
                 .put("explicit_quality_configuration",true)
                 .put("read_only_native_receipt_recovery","native.command.status")
                 .put("omega_reserved_only_not_verified",new JSONArray(OmegaOperations.reserved()))
                 .put("omega_capabilities_operation","omega.integration.capabilities");
         }
         if(operation.equals("device.profile")){fields(p,"");return profile(context);}
+        if(operation.startsWith("render.scheduling."))return RenderScheduling.execute(context,p,operation.endsWith("configure"));
         if(operation.equals("native.command.status"))return BlenderSpool.inspect(context,p);
+        if(operation.equals("ipc.command.status")){
+            fields(p,"command_id");
+            try(AgentJournal journal=new AgentJournal(context)){return journal.inspect(p.getString("command_id"));}
+        }
+        if(operation.equals("ipc.command.cancel")){
+            fields(p,"command_id");String id=p.getString("command_id");
+            if(!id.matches("[A-Za-z0-9_-]{8,128}"))throw new IllegalArgumentException("INVALID_COMMAND_ID");
+            return VideoStudioNativeBridgeService.cancelCommand(context,id);
+        }
         // These operations remain authenticated/target-id scoped by the
         // existing Render/VideoStudio Binder checks above. No filesystem path
         // or arbitrary bpy operator is accepted from a remote command.
@@ -106,9 +134,13 @@ public final class ProductionBridge {
             fields(p,"");
             return RenderLongForegroundService.status(context);
         }
-        if(operation.equals("render.job.start")){
+        if(operation.equals("render.queue.status")){fields(p,"");return RenderJobQueue.status(context);}
+        if(operation.equals("render.job.start")||operation.equals("render.job.resume")||operation.equals("render.job.retry")){
             fields(p,"job_id");
             return RenderLongForegroundService.request(context,p.getString("job_id"));
+        }
+        if(operation.equals("render.job.cancel")){
+            fields(p,"job_id");return RenderLongForegroundService.requestCancel(context,p.getString("job_id"));
         }
         if(operation.equals("render.job.pause")){
             fields(p,"");
@@ -200,6 +232,32 @@ public final class ProductionBridge {
         if(operation.equals("artifact.read"))return ProductionFiles.read(context,p);
         if(operation.equals("artifact.export"))return ProductionFiles.export(context,p);
         if(operation.equals("reference.write"))return ProductionFiles.writeReference(context,p);
+        if(operation.equals("reference.list"))return StudioReferenceInbox.list(context,p);
+        if(operation.equals("reference.metadata"))return StudioReferenceInbox.details(context,p);
+        if(operation.equals("reference.video_frame"))return StudioReferenceInbox.sample(context,p);
+        if(operation.equals("ui.state")){fields(p,"");return StudioLiveHandOverlay.snapshot(context);}
+        if(operation.equals("connection.diagnose")){
+            fields(p,"");
+            JSONObject status=new JSONObject().put("app","Render Studio")
+                .put("render_public_id",publicId)
+                .put("target_package",context.getPackageName())
+                .put("editor_ready",editorReady(context))
+                .put("owner_bridge_enabled",new AgentSecrets(context).videoStudioBridgeEnabled())
+                .put("work",StudioLiveHandOverlay.snapshot(context))
+                .put("reference_inbox",StudioReferenceInbox.list(context,
+                    new JSONObject().put("offset",0).put("limit",1)))
+                .put("native_binder_verified_by_this_call",true);
+            return status;
+        }
+        if(operation.equals("reference.pick")){
+            fields(p,"");
+            Intent picker=new Intent(context,AgentActivity.class)
+                .setAction("com.rezox.render.agent.PICK_MEDIA")
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            context.startActivity(picker);
+            return new JSONObject().put("picker_launch_requested",true)
+                .put("owner_ui_needed",true).put("completed_import",false);
+        }
         if(operation.equals("drive.status")){fields(p,"");return ProductionDriveStorage.status(context);}
         if(operation.equals("drive.backup"))return ProductionDriveStorage.backup(context,p);
         if(operation.equals("render.batch"))return ProductionBatch.advance(context,p,cancelled);
@@ -210,6 +268,7 @@ public final class ProductionBridge {
             return new JSONObject().put("job_id",m.getString("job_id")).put("state",m.getString("state"))
                 .put("completed_frames",m.getJSONObject("frames").length()).put("spec",m.getJSONObject("spec"))
                 .put("next_frame",m.getInt("next_frame")).put("quality_reduced",false)
+                .put("timing",m.optJSONObject("timing"))
                 .put("video",m.optJSONObject("video"))
                 .put("thermal",ProductionThermalTelemetry.sample(context))
                 .put("supports_resume",true)
@@ -240,6 +299,13 @@ public final class ProductionBridge {
             }
         }
         JSONObject nativePayload=new JSONObject(p.toString());
+        if(operation.equals("media.import")){
+            JSONObject media=StudioReferenceInbox.details(context,new JSONObject().put("asset",p.getString("asset")));
+            long pixels=(long)media.optInt("width")*media.optInt("height");
+            long available=device.optLong("available_memory_bytes",-1);
+            if(!"mp4".equals(media.optString("extension"))&&available>=0&&pixels*16+RenderScheduling.reserve(context)>available)
+                throw new IllegalStateException("NATIVE_IMAGE_IMPORT_MEMORY_PRESSURE_KEEP_ORIGINAL_AND_RETRY");
+        }
         if(operation.equals("instances.plan")||operation.equals("instances.create")){
             if(p.has("available_memory_bytes"))throw new IllegalArgumentException("DEVICE_MEMORY_IS_NATIVE_ONLY");
             nativePayload.put("available_memory_bytes",device.getLong("available_memory_bytes"));
