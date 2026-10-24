@@ -55,10 +55,17 @@ policy, checkpoints, VideoStudio Binder connection and artist controls.
 
 ## Verification and limits
 
-Focused host checks cover file boundaries, changed-source recovery, duplicate
+**77 focused Python and 37 targeted JVM checks passed.** They cover file boundaries, changed-source recovery, duplicate
 requests, checksums, archives, image admission, render-setting preservation
 contracts and packaging. Android storage results and the exact APK identity are
 reported separately in [workspace evidence](WORKSPACE_TESTING_0320.md).
+The tested 0.32.0 native pipeline imported the original portrait into the body
+draft at full resolution, preserved its measured render settings and saved a
+verified editable checkpoint. That result is source-specific; final 0.32.1
+native rendering and the corrected native availability catalog remain unverified.
+The app's HTTPS file-reference test reached a workspace TLS handshake failure;
+certificate checks remain enabled. Local Android folder transfers and the
+separate connected-Drive upload/download were verified independently.
 
 Google Drive connector OAuth does **not** grant Android folder access. Drive's
 document provider must support the selected operation, or ChatGPT must transfer

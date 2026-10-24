@@ -78,9 +78,13 @@ These use host fixtures, not native image or sculpt acceptance.
 
 The delivered APK's exact source, signed CI run, SHA-256, certificate and runtime
 payload verification are recorded with its artifact evidence. Native results
-above belong to source **9ee39aee1b10c24de33919a73c9c68b012248d92**; later
-compatibility/diagnostic changes require their own Android verification. Full
-native sculpt and final-image success are not inferred from host checks or builds.
+above belong to source **9ee39aee1b10c24de33919a73c9c68b012248d92**. The final
+0.31.3 diagnostic build, source **1fa53bf81a4196965f4983dc117f739e380f4dd9**,
+was separately installed with the historical signer in the owned emulator. A
+local Android `connection.diagnose` call returned editor-not-ready and the
+observed F16C runtime-compatibility failure with automatic retry unsafe. That
+check did not verify remote Binder authentication or rerun the native render.
+Full native sculpt and final-image success are not inferred from host checks or builds.
 
 No physical phone was operated. Remote VideoStudio authentication/reconnection,
 realme/Dimensity performance and thermals, final-output comparisons and 24-hour
