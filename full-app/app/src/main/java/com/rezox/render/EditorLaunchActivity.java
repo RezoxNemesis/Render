@@ -20,9 +20,11 @@ import com.rezox.render.omega.engine.EngineRuntimeSeal;
 import com.rezox.render.omega.engine.EngineRuntimeCleanup;
 import com.rezox.render.omega.engine.EngineStartupLog;
 import com.rezox.render.omega.engine.EngineStartupRecovery;
+import com.rezox.render.omega.engine.EngineNativePaths;
 import com.rezox.render.agent.RenderRecoveryStatus;
 import org.json.JSONObject;
 import java.io.File;
+import java.io.BufferedInputStream;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
@@ -198,6 +200,8 @@ public final class EditorLaunchActivity extends Activity {
                 EngineEvidence.record(this,EngineEvidence.Stage.LIBRARY_VALIDATED);
                 report("Checking local Blender Python and factory assets…");
                 prepareRuntime();
+                report("Preparing private startup log and native output storage…");
+                EngineNativePaths.prepare(this);
                 report("Loading Blender native engine…");
                 try {
                     System.loadLibrary("blender");
@@ -272,10 +276,10 @@ public final class EditorLaunchActivity extends Activity {
         deleteOwnedTree(stage);
         if(!stage.mkdirs())throw new java.io.IOException("CANNOT_CREATE_RUNTIME_STAGE");
         String stageCanonical=stage.getCanonicalPath()+File.separator;
-        long total=0;int entries=0;
+        long total=0,nextStorageCheck=0,nextProgressReport=0;int entries=0;
         EngineEvidence.record(this,EngineEvidence.Stage.RUNTIME_EXTRACTION_STARTED);
         report("Unpacking Blender resources to app storage…");
-        try(InputStream stream=getAssets().open(RUNTIME);
+        try(InputStream stream=new BufferedInputStream(getAssets().open(RUNTIME),262144);
             ZipInputStream input=new ZipInputStream(stream)) {
             ZipEntry e;
             byte[] buffer=new byte[65536];
@@ -300,13 +304,28 @@ public final class EditorLaunchActivity extends Activity {
                     while((n=input.read(buffer))!=-1) {
                         output.write(buffer,0,n);
                         total+=n;
-                        if(total>4L*1024*1024*1024||target.getUsableSpace()<64L*1024*1024)
+                        if(total>4L*1024*1024*1024)
                             throw new java.io.IOException("BLENDER_RUNTIME_STORAGE_LIMIT");
+                        // Inflater reads may return tiny chunks. Avoid one
+                        // filesystem query per chunk while retaining a 64 MiB
+                        // reserve and the atomic, discardable staging tree.
+                        if(total>=nextStorageCheck){
+                            if(stage.getUsableSpace()<64L*1024*1024)
+                                throw new java.io.IOException("BLENDER_RUNTIME_STORAGE_LIMIT");
+                            nextStorageCheck=total+4L*1024*1024;
+                            long now=android.os.SystemClock.elapsedRealtime();
+                            if(now>=nextProgressReport){
+                                report("Installing Blender assets… "+entries+" files complete  •  "+(total/1024/1024)+" MiB");
+                                nextProgressReport=now+2000;
+                            }
+                        }
                     }
                 }
                 entries++;
-                if(entries%75==0)report("Installing Blender assets… "+entries+
-                    " files  •  "+(total/1024/1024)+" MiB");
+                if(entries%75==0&&android.os.SystemClock.elapsedRealtime()>=nextProgressReport){
+                    report("Installing Blender assets… "+entries+" files complete  •  "+(total/1024/1024)+" MiB");
+                    nextProgressReport=android.os.SystemClock.elapsedRealtime()+2000;
+                }
             }
         }catch(Exception e){deleteOwnedTree(stage);throw e;}
         if(entries<20)throw new java.io.IOException("INCOMPLETE_BLENDER_RUNTIME");
@@ -351,6 +370,8 @@ public final class EditorLaunchActivity extends Activity {
     }
     private String readLog() {
         List<File> candidates=new ArrayList<>();
+        candidates.add(new File(getFilesDir(),"blender-startup.log"));
+        candidates.add(new File(getFilesDir(),"blender-startup.previous.log"));
         candidates.add(new File(Environment.getExternalStoragePublicDirectory(
             Environment.DIRECTORY_DOWNLOADS),"blender-startup.log"));
         candidates.add(new File(Environment.getExternalStorageDirectory(),"blender-startup.log"));

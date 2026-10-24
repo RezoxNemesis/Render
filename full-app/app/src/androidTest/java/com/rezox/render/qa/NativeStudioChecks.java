@@ -270,7 +270,7 @@ public final class NativeStudioChecks extends Instrumentation {
             .put("strands",new JSONArray().put(handle)).put("radius",.0045).put("resolution",5)));
         surface("WS_MugHandle","WS_HandleGlaze",.67,.72,.68,0,.18);
         evidence.put("base",lathe("WS_MetalBase",new double[][]{
-            {.0001,0},{.075,0},{.083,.002},{.085,.004},{.085,.014},{.083,.017},{.078,.018},{.0001,.018}},false));
+            {.0001,0},{.075,0},{.083,.002},{.085,.004},{.085,.014},{.083,.020},{.078,.021},{.0001,.021}},false));
         artist("object.add_modifier","WS_MetalBase",new JSONObject().put("type","SUBSURF").put("name","BaseShoulderSubdivision").put("levels",2));
         surface("WS_MetalBase","WS_AnodizedMetal",.045,.055,.065,.85,.29);
         evidence.put("accent",lathe("WS_BrassAccent",new double[][]{{.083,.002},{.0851,.002},{.0851,.004},{.083,.004}},true));

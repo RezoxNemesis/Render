@@ -112,6 +112,10 @@ public class BlenderActivity extends NativeActivity {
         self.assertIn("BlenderMobileControls.applySafeInsets(this)",java.read_text())
         self.assertNotIn("    requestAllFilesAccess();",java.read_text())
         self.assertIn('.putString("native_log_path", logPath)',java.read_text())
+        log_method = java.read_text().split('private void chooseLogPath()', 1)[1].split('\n  private void', 1)[0]
+        self.assertIn('EngineNativePaths.logPath(this)', log_method)
+        self.assertNotIn('FileOutputStream', log_method)
+        self.assertNotIn('publishOutputDir(', log_method)
         self.assertTrue((self.output / "assets/licenses/Render-Full-Native-Sources.txt").exists())
         root = ET.parse(self.output / "AndroidManifest.xml").getroot()
         assert root.find("queries") is not None

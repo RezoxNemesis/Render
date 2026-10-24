@@ -294,6 +294,26 @@ def patch_native_activity(path):
     if java.count(storage_request) != 1:
         raise ValueError("PINNED_BLENDER_STORAGE_REQUEST_HOOK_CHANGED")
     java = java.replace(storage_request, "    // File browser access is requested explicitly from Render controls.", 1)
+    # Shared-storage probes on NativeActivity's main thread caused an actual
+    # input-dispatch ANR. The loader prepares log/output storage off the UI
+    # thread; the activity publishes only the already prepared private path.
+    method = "  private void chooseLogPath() {"
+    if java.count(method) != 1:
+        raise ValueError("PINNED_BLENDER_LOG_PREPARATION_HOOK_CHANGED")
+    start = java.index(method)
+    end = start + len(method)
+    depth = 1
+    while end < len(java) and depth:
+        depth += (java[end] == '{') - (java[end] == '}')
+        end += 1
+    if depth or "nativeSetLogPath(logPath);" not in java[start:end]:
+        raise ValueError("PINNED_BLENDER_LOG_PREPARATION_BODY_CHANGED")
+    java = java[:start] + '''  private void chooseLogPath() {
+    logPath = com.rezox.render.omega.engine.EngineNativePaths.logPath(this);
+    if (logPath != null) {
+      nativeSetLogPath(logPath);
+    }
+  }''' + java[end:]
     log_hook = "      nativeSetLogPath(logPath);"
     if java.count(log_hook) != 1:
         raise ValueError("PINNED_BLENDER_LOG_PATH_HOOK_CHANGED")
