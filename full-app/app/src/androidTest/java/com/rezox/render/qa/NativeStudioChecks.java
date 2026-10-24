@@ -38,7 +38,10 @@ public final class NativeStudioChecks extends Instrumentation {
         storageLocation=args==null?"workspace":args.getString("storage_location","workspace");
         storageSource=args==null?"":args.getString("source_filename","");storageSha=args==null?"":args.getString("expected_sha256","");
         storageCategory=args==null?"Projects":args.getString("source_category","Projects");
-        storageUrl=args==null?"":args.getString("source_url","");storageBytes=args==null?0:args.getLong("source_bytes",0);start();
+        storageUrl=args==null?"":args.getString("source_url","");
+        try{storageBytes=args==null?0:Long.parseLong(args.getString("source_bytes","0"));}
+        catch(NumberFormatException invalid){storageBytes=0;}
+        start();
     }
     private JSONObject transferComplete(JSONObject started)throws Exception{
         String id=started.getString("transfer_id");long deadline=System.nanoTime()+120_000_000_000L;JSONObject status;
