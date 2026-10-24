@@ -1,0 +1,276 @@
+{
+  "test_id": "75f463c3-28cd-42ae-8acf-ed9593333a99",
+  "phase": "core",
+  "workspace_emulator_only": true,
+  "physical_phone_evidence": false,
+  "passed": true,
+  "stage": "passed_native_core",
+  "render_public_id": "95480b0f-5435-45e7-916c-62e50b0a9118",
+  "checkpoint": {
+    "filename": "QA029BeforeChecks_2ec0529288ad454da42ac4c464df0fde.blend",
+    "bytes": 96613,
+    "sha256": "e8b8bac5a0f18a2c5940d94b4a5d152f5439fed207b76aacbf52aff5a51ff55c",
+    "category": "Projects",
+    "scene": "Scene",
+    "source_unchanged": true,
+    "bridge": "Render app-private bpy main-thread executor",
+    "native_execution_verified": true
+  },
+  "original_settings": {
+    "engine": "BLENDER_EEVEE",
+    "width": 1920,
+    "height": 1080,
+    "percentage": 100,
+    "fps": 24,
+    "fps_base": 1,
+    "samples": 64,
+    "film_transparent": false,
+    "persistent_data": false,
+    "threads_mode": "AUTO",
+    "threads": 1,
+    "denoising": null,
+    "silent_quality_changes": false,
+    "persistent_data_tradeoff": "Reuses render data between frames at the cost of retained memory",
+    "frame_checkpointing": true,
+    "bridge": "Render app-private bpy main-thread executor",
+    "native_execution_verified": true
+  },
+  "performance_roundtrip": {
+    "before": {
+      "engine": "BLENDER_EEVEE",
+      "width": 1920,
+      "height": 1080,
+      "percentage": 100,
+      "fps": 24,
+      "fps_base": 1,
+      "samples": 64,
+      "film_transparent": false,
+      "persistent_data": false,
+      "threads_mode": "AUTO",
+      "threads": 1,
+      "denoising": null,
+      "silent_quality_changes": false,
+      "persistent_data_tradeoff": "Reuses render data between frames at the cost of retained memory",
+      "frame_checkpointing": true
+    },
+    "after": {
+      "engine": "BLENDER_EEVEE",
+      "width": 1920,
+      "height": 1080,
+      "percentage": 100,
+      "fps": 24,
+      "fps_base": 1,
+      "samples": 64,
+      "film_transparent": false,
+      "persistent_data": true,
+      "threads_mode": "AUTO",
+      "threads": 1,
+      "denoising": null,
+      "silent_quality_changes": false,
+      "persistent_data_tradeoff": "Reuses render data between frames at the cost of retained memory",
+      "frame_checkpointing": true
+    },
+    "requested_fields": [
+      "persistent_data"
+    ],
+    "quality_settings_changed": false,
+    "existing_render_snapshots_changed": false,
+    "native_execution_verified": true,
+    "bridge": "Render app-private bpy main-thread executor"
+  },
+  "mesh": {
+    "name": "QA029Mesh_38f760ee",
+    "type": "MESH",
+    "location": [
+      0,
+      0,
+      0
+    ],
+    "rotation_euler": [
+      0,
+      0,
+      0
+    ],
+    "scale": [
+      1,
+      1,
+      1
+    ],
+    "parent": null,
+    "vertices": 8,
+    "polygons": 6,
+    "bridge": "Render app-private bpy main-thread executor",
+    "native_execution_verified": true
+  },
+  "subdivision": {
+    "object": "QA029Mesh_38f760ee",
+    "operator": "mesh.subdivide",
+    "executed_on_native_blender": true,
+    "performed_visible_pointer_click": false,
+    "vertices": 26,
+    "polygons": 24,
+    "modifiers": [],
+    "bridge": "Render app-private bpy main-thread executor",
+    "native_execution_verified": true
+  },
+  "normals": {
+    "object": "QA029Mesh_38f760ee",
+    "operator": "mesh.recalculate_normals",
+    "executed_on_native_blender": true,
+    "performed_visible_pointer_click": false,
+    "vertices": 26,
+    "polygons": 24,
+    "modifiers": [],
+    "bridge": "Render app-private bpy main-thread executor",
+    "native_execution_verified": true
+  },
+  "uv": {
+    "object": "QA029Mesh_38f760ee",
+    "operator": "uv.smart_project",
+    "executed_on_native_blender": true,
+    "performed_visible_pointer_click": false,
+    "vertices": 26,
+    "polygons": 24,
+    "modifiers": [],
+    "bridge": "Render app-private bpy main-thread executor",
+    "native_execution_verified": true
+  },
+  "modifier": {
+    "object": "QA029Mesh_38f760ee",
+    "operator": "object.add_modifier",
+    "executed_on_native_blender": true,
+    "performed_visible_pointer_click": false,
+    "vertices": 26,
+    "polygons": 24,
+    "modifiers": [
+      "QASubdivision"
+    ],
+    "bridge": "Render app-private bpy main-thread executor",
+    "native_execution_verified": true
+  },
+  "applied": {
+    "object": "QA029Mesh_38f760ee",
+    "operator": "object.modifier_apply",
+    "executed_on_native_blender": true,
+    "performed_visible_pointer_click": false,
+    "vertices": 98,
+    "polygons": 96,
+    "modifiers": [],
+    "bridge": "Render app-private bpy main-thread executor",
+    "native_execution_verified": true
+  },
+  "transforms": {
+    "object": "QA029Mesh_38f760ee",
+    "operator": "object.transform_apply",
+    "executed_on_native_blender": true,
+    "performed_visible_pointer_click": false,
+    "vertices": 98,
+    "polygons": 96,
+    "modifiers": [],
+    "bridge": "Render app-private bpy main-thread executor",
+    "native_execution_verified": true
+  },
+  "image_import": {
+    "filename": "505a3d436943237bb6b6d4c4219520476d7f70a936835311921e30e42b64b3b5.png",
+    "category": "Assets",
+    "bytes": 98,
+    "sha256": "505a3d436943237bb6b6d4c4219520476d7f70a936835311921e30e42b64b3b5",
+    "complete": true,
+    "metadata": {
+      "asset": "505a3d436943237bb6b6d4c4219520476d7f70a936835311921e30e42b64b3b5.png",
+      "sha256": "505a3d436943237bb6b6d4c4219520476d7f70a936835311921e30e42b64b3b5",
+      "bytes": 98,
+      "extension": "png",
+      "native_import_verified": true,
+      "gallery_browsed": false,
+      "original_bytes_preserved": true,
+      "kind": "image",
+      "width": 4,
+      "height": 4,
+      "exif_orientation": 1
+    }
+  },
+  "image_metadata": {
+    "asset": "505a3d436943237bb6b6d4c4219520476d7f70a936835311921e30e42b64b3b5.png",
+    "sha256": "505a3d436943237bb6b6d4c4219520476d7f70a936835311921e30e42b64b3b5",
+    "bytes": 98,
+    "extension": "png",
+    "native_import_verified": true,
+    "gallery_browsed": false,
+    "original_bytes_preserved": true,
+    "kind": "image",
+    "width": 4,
+    "height": 4,
+    "exif_orientation": 1
+  },
+  "viewport": {
+    "viewports": [
+      {
+        "width_pixels": 360,
+        "height_pixels": 578,
+        "clip_start": 0.009999999776482582,
+        "clip_end": 1000,
+        "clip_ratio": 100000.00223517422,
+        "view_distance": 18.38804817199707,
+        "view_location": [
+          -0.020693248137831688,
+          -0.04602546989917755,
+          0.0006694307667203248
+        ],
+        "perspective": "PERSP",
+        "viewport_render_engine_unchanged": true
+      }
+    ],
+    "total_mesh_polygons": 102,
+    "native_artist_ui": {
+      "installed_in_blender_viewport": true,
+      "surface": "Blender SpaceView3D POST_PIXEL",
+      "status": {
+        "state": "running",
+        "action": "viewport inspect",
+        "stage": "Native command received",
+        "fraction": null,
+        "progress_label": "Waiting for native progress",
+        "object": null
+      },
+      "viewport_draw_observed": true,
+      "last_viewport_draw_age_ms": 1130,
+      "last_draw_error": null,
+      "pointer": null,
+      "pointer_source": "completed_native_object_projection",
+      "pointer_is_ui_input": false,
+      "fabricated_ui_taps": false,
+      "in_frame_sample_progress_available": false
+    },
+    "active_object": "Cube",
+    "render_quality_modified": false,
+    "driver_jitter_measured": false,
+    "viewport_clip_precision_is_not_texture_fidelity": true,
+    "bridge": "Render app-private bpy main-thread executor",
+    "native_execution_verified": true
+  },
+  "screenshot": {
+    "filename": "Capture_6bc368a17fe340ddb6430f4e5f39545a.png",
+    "category": "Captures",
+    "bytes": 236356,
+    "sha256": "ed279335e32e6b298e3957edd7e24bbad3c95d07c41099ac4b717ae7ce234da2",
+    "width": 720,
+    "height": 1280,
+    "captured_surface": "Render native Android window",
+    "quality_reduced": false
+  },
+  "final_checkpoint": {
+    "filename": "QA029ArtistTools_6c261d4ea4f64dbfb9ae5e442b88c4f3.blend",
+    "bytes": 100741,
+    "sha256": "485f028c740580193a68a7706cd0c294810f407f1db0b3839ddd0733762f6e53",
+    "category": "Projects",
+    "scene": "Scene",
+    "source_unchanged": true,
+    "bridge": "Render app-private bpy main-thread executor",
+    "native_execution_verified": true
+  },
+  "artifact_tested": "0.29.0 initial workspace APK; follow-up native checks pending",
+  "film_created": false,
+  "physical_phone_installed": false,
+  "continuous_24_hour_render_verified": false
+}

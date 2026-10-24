@@ -21,7 +21,8 @@ public class AgentPolicyTest {
         }
     }
     @Test public void registryExposesOnlyRealHandlers(){
-        assertEquals(25,AgentPolicy.ACTIONS.size());
+        assertEquals(26,AgentPolicy.ACTIONS.size());
+        assertTrue(AgentPolicy.ACTIONS.containsKey("production.execute"));
         assertTrue(AgentPolicy.ACTIONS.containsKey("agent.diagnostics"));
         assertTrue(AgentPolicy.ACTIONS.containsKey("agent.capabilities"));
         assertTrue(AgentPolicy.ACTIONS.containsKey("blender.scene.batch_assembly"));
