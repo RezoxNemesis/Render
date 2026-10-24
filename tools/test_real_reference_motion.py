@@ -83,6 +83,30 @@ with tempfile.TemporaryDirectory() as tmp:
     moved=M.execute("reference.fit.landmarks",request,root,scene)
     assert moved["applied"] and moved["rms_predicted_after"]<moved["rms_before"],moved
     assert coordinates!=[tuple(v.co) for v in figure.data.vertices]
+    # Simulate a reference observed from two genuinely distinct cameras.
+    # Both views constrain the same 3D vertices; the solver must improve the
+    # joint projection without creating any new vertices or hidden geometry.
+    delta=Vector((.025,-.035,.020))
+    two_views=[]
+    for camera_obj in (cam,side):
+        target_points={}
+        for label,index in (("left_eye",0),("right_eye",1),("nose",2)):
+            world=figure.matrix_world @ figure.data.vertices[index].co
+            uv=world_to_camera_view(scene,camera_obj,world+delta)
+            target_points[label]=[float(uv.x),float(1-uv.y)]
+        two_views.append({"camera":camera_obj.name,"reference":target_points,
+                          "model":{"left_eye":0,"right_eye":1,"nose":2}})
+    joint={"object":"Figure","views":two_views,"expected_vertices":3,
+           "strength":.8,"max_displacement":.12,"regularization":.002}
+    previous=[tuple(v.co) for v in figure.data.vertices]
+    preview=M.execute("reference.fit.multiview",dict(joint,dry_run=True),root,scene)
+    assert preview["views"]==2 and preview["observations"]==6,preview
+    assert preview["rms_predicted_after"]<preview["rms_before"],preview
+    assert previous==[tuple(v.co) for v in figure.data.vertices]
+    joint_result=M.execute("reference.fit.multiview",joint,root,scene)
+    assert joint_result["applied"] and joint_result["updated_vertices"]==3,joint_result
+    assert previous!=[tuple(v.co) for v in figure.data.vertices]
+
     face.shape_key_add(name="Basis")
     face.shape_key_add(name="Blink")
 

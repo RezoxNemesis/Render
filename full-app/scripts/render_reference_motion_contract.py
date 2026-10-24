@@ -95,6 +95,38 @@ def fit(p):
     if type(p.get("dry_run",False)) is not bool:raise ValueError("FIT_DRY_RUN_INVALID")
     return p
 
+def multiview_fit(p):
+    """Require at least two observations of every touched vertex.
+
+    A multiview fit must not silently become an underconstrained single-view
+    projection edit; preserve topology, shape keys and original scene state.
+    """
+    fields(p,("object","views","expected_vertices","strength",
+              "max_displacement","regularization","dry_run"),
+           ("object","views","expected_vertices"))
+    integer(p["expected_vertices"],1,100000000)
+    multiview({"object":p["object"],"views":p["views"]})
+    if not 2<=len(p["views"])<=6:
+        raise ValueError("FIT_MULTIVIEW_REQUIRES_TWO_CAMERAS")
+    number(p.get("strength",.65),.01,1)
+    number(p.get("max_displacement",.10),.000001,10)
+    number(p.get("regularization",.005),.000001,.5)
+    if type(p.get("dry_run",False)) is not bool:
+        raise ValueError("FIT_DRY_RUN_INVALID")
+    observations={}
+    for view in p["views"]:
+        seen=set()
+        for label,index in view["model"].items():
+            integer(index,0,p["expected_vertices"]-1)
+            if index in seen:raise ValueError("FIT_MULTIVIEW_DUPLICATE_VERTEX_PER_VIEW")
+            seen.add(index)
+            observations[index]=observations.get(index,0)+1
+    if len(observations)>128:
+        raise ValueError("FIT_MULTIVIEW_VERTEX_BUDGET_EXCEEDED")
+    if any(count<2 for count in observations.values()):
+        raise ValueError("FIT_MULTIVIEW_VERTEX_NEEDS_TWO_CAMERAS")
+    return p
+
 def clip(p):
     fields(p,("rig","name","poses","interpolation","nla","track"),("rig","name","poses"))
     name(p["rig"]);name(p["name"])
@@ -180,6 +212,14 @@ def capabilities():
         "expected_vertices":{"type":"integer","minimum":1},
         "strength":{"type":"number","minimum":.01,"maximum":1},
         "max_displacement":{"type":"number","minimum":.000001,"maximum":10},
+        "dry_run":{"type":"boolean"}}),
+      ("reference.fit.multiview",False,["object","views","expected_vertices"],
+       {"object":{"type":"string","pattern":NAME.pattern},
+        "views":{"type":"array","minItems":2,"maxItems":6},
+        "expected_vertices":{"type":"integer","minimum":1},
+        "strength":{"type":"number","minimum":.01,"maximum":1},
+        "max_displacement":{"type":"number","minimum":.000001,"maximum":10},
+        "regularization":{"type":"number","minimum":.000001,"maximum":.5},
         "dry_run":{"type":"boolean"}}),
       ("animation.clip.create",False,["rig","name","poses"],
        {"rig":{"type":"string","pattern":NAME.pattern},

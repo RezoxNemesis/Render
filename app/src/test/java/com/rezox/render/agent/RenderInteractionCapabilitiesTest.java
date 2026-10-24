@@ -29,7 +29,7 @@ public class RenderInteractionCapabilitiesTest {
         for(int i=0;i<ops.length();i++)available.add(ops.getString(i));
         for(String op:new String[]{"ui.state","scene.inspect","viewport.inspect","viewport.focus",
             "operator.describe","operator.execute","screenshot.capture","project.checkpoint",
-            "reference.workspace.open","reference.workspace.inspect","reference.compare.multiview","reference.fit.landmarks",
+            "reference.workspace.open","reference.workspace.inspect","reference.compare.multiview","reference.fit.landmarks","reference.fit.multiview",
             "animation.clip.create","animation.clip.inspect","animation.motion.audit",
             "render.plan","render.batch","render.status","render.encode"})assertTrue(op,available.contains(op));
         assertTrue(report.getBoolean("requires_target_id"));assertFalse(report.getBoolean("cloud_rendering"));

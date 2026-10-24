@@ -13,7 +13,7 @@ from bpy_extras.object_utils import world_to_camera_view
 import render_reference_motion_contract as C
 
 OPS=frozenset(("reference.workspace.open","reference.workspace.inspect",
-               "reference.compare.multiview","reference.fit.landmarks","animation.clip.create",
+               "reference.compare.multiview","reference.fit.landmarks","reference.fit.multiview","animation.clip.create",
                "animation.clip.inspect","animation.motion.audit"))
 READ_ONLY=frozenset(("reference.workspace.inspect","reference.compare.multiview",
                      "animation.clip.inspect","animation.motion.audit"))
@@ -256,6 +256,122 @@ def _fit_landmarks(scene,p):
         "reference_metric":"normalized 2D projection error; not perceptual likeness",
         "final_render_quality_unchanged":True}
 
+def _linear_solve3(matrix,vector):
+    """Bounded 3x3 partial-pivoting Gauss-Jordan; no NumPy dependency."""
+    m=[[float(matrix[i][j]) for j in range(3)]+[float(vector[i])]
+       for i in range(3)]
+    for col in range(3):
+        best=max(range(col,3),key=lambda row:abs(m[row][col]))
+        if abs(m[best][col])<1e-12:
+            raise ValueError("FIT_MULTIVIEW_ILL_CONDITIONED")
+        m[col],m[best]=m[best],m[col]
+        factor=m[col][col]
+        m[col]=[v/factor for v in m[col]]
+        for row in range(3):
+            if row==col:continue
+            factor=m[row][col]
+            m[row]=[m[row][j]-factor*m[col][j] for j in range(4)]
+    return Vector((m[0][3],m[1][3],m[2][3]))
+
+
+def _fit_multiview(scene,p):
+    """Numerically solve coupled world-space edits against all cameras.
+
+    A reduction of camera-projected landmark RMS is a precise geometric
+    measurement, not an identity, beauty or photorealism score. Does not
+    create unseen body geometry or change renderer settings.
+    """
+    C.multiview_fit(p)
+    obj=_scene_object(scene,p["object"],"MESH")
+    if len(obj.data.vertices)!=p["expected_vertices"]:
+        raise ValueError("FIT_MESH_REVISION_CONFLICT")
+    if obj.data.shape_keys is not None:
+        raise ValueError("FIT_BASE_MESH_WITH_SHAPE_KEYS_UNSUPPORTED")
+    bpy.context.view_layer.update()
+    cameras={}
+    for view in p["views"]:
+        camera=_scene_object(scene,view["camera"],"CAMERA")
+        if camera.data.type not in ("PERSP","ORTHO"):
+            raise ValueError("FIT_CAMERA_TYPE_UNSUPPORTED")
+        cameras[view["camera"]]=camera
+    directions=[cam.matrix_world.to_quaternion()@Vector((0,0,-1))
+                for cam in cameras.values()]
+    if max((a-b).length for a in directions for b in directions)<.2:
+        raise ValueError("FIT_MULTIVIEW_CAMERA_BASELINE_INSUFFICIENT")
+    observations={}
+    old_squared=[]
+    for view in p["views"]:
+        camera=cameras[view["camera"]]
+        for label,vertex in view["model"].items():
+            old_world=obj.matrix_world @ obj.data.vertices[vertex].co
+            target=Vector(view["reference"][label])
+            def projection(world,camera=camera):
+                ndc=world_to_camera_view(scene,camera,world)
+                if ndc.z<=0:
+                    raise ValueError("FIT_MULTIVIEW_POINT_BEHIND_CAMERA")
+                return Vector((float(ndc.x),float(1.0-ndc.y)))
+            before=projection(old_world)
+            if not (0<=before.x<=1 and 0<=before.y<=1):
+                raise ValueError("FIT_MULTIVIEW_POINT_OUTSIDE_FRAME")
+            epsilon=max(.0001,.001*(camera.location-old_world).length)
+            basis=(Vector((1,0,0)),Vector((0,1,0)),Vector((0,0,1)))
+            jac=[(projection(old_world+epsilon*axis)-before)/epsilon
+                 for axis in basis]
+            residual=target-before
+            observations.setdefault(vertex,[]).append(
+                {"camera":camera,"label":label,"goal":target,"jac":jac,
+                 "residual":residual,"project":projection})
+            old_squared.append(residual.length_squared)
+    strength=p.get("strength",.65)
+    maximum=p.get("max_displacement",.1)
+    regularization=p.get("regularization",.005)
+    predicted_squared=[];proposed=[]
+    inv=obj.matrix_world.inverted_safe()
+    for vertex,values in observations.items():
+        world=obj.matrix_world @ obj.data.vertices[vertex].co
+        matrix=[[0.0]*3 for _ in range(3)]
+        right=[0.0]*3
+        for value in values:
+            jac=value["jac"]
+            residual=value["residual"]
+            for r,needed in enumerate((residual.x,residual.y)):
+                gradient=[jac[c][r] for c in range(3)]
+                for i in range(3):
+                    right[i]+=gradient[i]*needed
+                    for j in range(3):
+                        matrix[i][j]+=gradient[i]*gradient[j]
+        diag=(matrix[0][0]+matrix[1][1]+matrix[2][2])/3
+        penalty=max(1e-9,diag*regularization)
+        for i in range(3):matrix[i][i]+=penalty
+        delta=_linear_solve3(matrix,right)
+        if delta.length>maximum:delta=delta.normalized()*maximum
+        delta*=strength
+        future=world+delta
+        for value in values:
+            predicted=(value["goal"]-value["project"](future))
+            predicted_squared.append(predicted.length_squared)
+        proposed.append((vertex,inv@future,float(delta.length)))
+    rms_before=math.sqrt(sum(old_squared)/len(old_squared))
+    rms_predicted=math.sqrt(sum(predicted_squared)/len(predicted_squared))
+    if rms_predicted>rms_before+1e-9:
+        raise ValueError("FIT_MULTIVIEW_PROPOSED_STEP_WORSENS_ERROR")
+    applied=(not p.get("dry_run",False) and rms_predicted<rms_before-1e-12)
+    if applied:
+        if obj.data.users>1:obj.data=obj.data.copy()
+        for vertex,position,step in proposed:
+            obj.data.vertices[vertex].co=position
+        obj.data.update()
+        bpy.context.view_layer.update()
+    return {
+        "object":obj.name,"views":len(p["views"]),"updated_vertices":len(proposed),
+        "observations":len(old_squared),
+        "rms_before":rms_before,"rms_predicted_after":rms_predicted,
+        "maximum_vertex_world_displacement":max(step for _,_,step in proposed),
+        "applied":applied,"dry_run":p.get("dry_run",False),
+        "unmapped_vertices_unchanged":True,"topology_preserved":True,
+        "metric":"joint camera-projected 2D landmark distance, not identity likeness",
+        "photorealism_verified":False,"phone_hardware_tested":False}
+
 def _action_curves(action,slot):
     result=[]
     try:result=list(action.fcurves)
@@ -431,6 +547,7 @@ def execute(op,p,root,scene):
         C.fields(p,());return _workspace_inspect(scene)
     if op=="reference.compare.multiview":return _multi(scene,p)
     if op=="reference.fit.landmarks":return _fit_landmarks(scene,p)
+    if op=="reference.fit.multiview":return _fit_multiview(scene,p)
     if op=="animation.clip.create":return _clip_create(scene,p)
     if op=="animation.clip.inspect":return _clip_inspect(scene,p)
     if op=="animation.motion.audit":return _motion_audit(scene,p)
