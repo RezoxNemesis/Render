@@ -14,6 +14,13 @@ class ReferenceMotionContracts(unittest.TestCase):
         good="a"*64+".png"
         self.assertEqual(C.workspace({"asset":good})["mode"],"SPLIT")
         self.assertEqual(C.workspace({"asset":"b"*64+".mp4","mode":"CAMERA","frame":30})["frame"],30)
+        self.assertEqual(C.workspace({"asset":"b"*64+".mp4","preview_asset":good})["preview_asset"],good)
+        for invalid in [
+            {"asset":good,"preview_asset":"b"*64+".jpg"},
+            {"asset":"b"*64+".mp4","preview_asset":"a"*64+".mp4"},
+            {"asset":"b"*64+".mp4","preview_asset":"../outside.jpg"},
+        ]:
+            with self.assertRaises(ValueError):C.workspace(invalid)
         for asset in ("../../Gallery/picture.png","/storage/emulated/0/a.mp4","c"*64+".exe","a"*64+"xpng"):
             with self.assertRaises(ValueError):C.workspace({"asset":asset})
         for factor in (0.0,.15,.8,1.0,float("nan")):
