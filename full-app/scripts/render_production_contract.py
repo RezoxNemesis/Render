@@ -19,7 +19,7 @@ OPERATIONS = frozenset((
     'material.assign', 'group.create', 'animation.keys', 'camera.aim',
     'world.configure', 'instances.plan', 'instances.create', 'reference.attach',
     'reference.bind','reference.landmarks','viewport.inspect','viewport.configure','viewport.focus',
-    'reference.workspace.open','reference.workspace.inspect','reference.compare.multiview',
+    'reference.workspace.open','reference.workspace.inspect','reference.compare.multiview','reference.fit.landmarks',
     'animation.clip.create','animation.clip.inspect','animation.motion.audit',
     'object.geometry','operator.describe','operator.execute',
     'render.plan', 'render.step', 'render.status', 'render.encode',
