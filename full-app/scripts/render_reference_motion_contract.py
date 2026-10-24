@@ -74,6 +74,27 @@ def multiview(p):
             integer(indices[key],0,99999999)
     return p
 
+def fit(p):
+    fields(p,("object","camera","reference","model","expected_vertices",
+              "strength","max_displacement","dry_run"),
+           ("object","camera","reference","model","expected_vertices"))
+    name(p["object"]);name(p["camera"])
+    integer(p["expected_vertices"],1,100000000)
+    reference=p["reference"];indices=p["model"]
+    if (not isinstance(reference,dict) or not isinstance(indices,dict) or
+            not 2<=len(reference)<=64 or set(reference)!=set(indices)):
+        raise ValueError("FIT_CORRESPONDENCE_INVALID")
+    seen=set()
+    for key,coords in reference.items():
+        name(key);vec(coords,2,0,1)
+        index=integer(indices[key],0,p["expected_vertices"]-1)
+        if index in seen:raise ValueError("FIT_VERTEX_REUSED")
+        seen.add(index)
+    number(p.get("strength",.5),.01,1)
+    number(p.get("max_displacement",.15),.000001,10)
+    if type(p.get("dry_run",False)) is not bool:raise ValueError("FIT_DRY_RUN_INVALID")
+    return p
+
 def clip(p):
     fields(p,("rig","name","poses","interpolation","nla","track"),("rig","name","poses"))
     name(p["rig"]);name(p["name"])
