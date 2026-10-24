@@ -272,6 +272,11 @@ def _tool_search(p):
         ref={entry["operation"]:entry.get("input_schema")
              for entry in render_reference_motion_contract.capabilities()}
     except ImportError:ref={}
+    try:
+        import render_unified_curves
+        ref.update({entry["operation"]:entry["input_schema"]
+                    for entry in render_unified_curves.capabilities()})
+    except ImportError:pass
     result=[]
     for op in sorted(native | set(C.PROGRAM_OPS)):
         group=C.PROGRAM_OPS.get(op)
