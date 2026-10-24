@@ -352,7 +352,8 @@ def execute(args, spool, command_id):
     import render_artist_ops
     if operation in render_artist_ops.SCHEMAS:
         return render_artist_ops.execute(operation,scene,root,p)
-    if operation in ('operator.execute','asset.import','project.restore','rig.bind','mesh.edit'):
+    if operation in ('operator.execute','asset.import','project.restore','rig.bind','mesh.edit',
+                     'animation.clip.create','reference.workspace.open'):
         render_artist_ops.checkpoint(scene,root,operation)
 
     if operation in ('asset.search','asset.details','asset.preview','asset.download','asset.download.status','asset.download.pause','asset.import'):
@@ -365,6 +366,11 @@ def execute(args, spool, command_id):
     if operation in ('project.list','project.restore','mesh.edit','curve.create','shape.create','shape.keys','rig.create','rig.bind','rig.keys'):
         import render_production_detail
         return render_production_detail.execute(operation,p,root,scene,C)
+    if operation in ('reference.workspace.open','reference.workspace.inspect',
+                     'reference.compare.multiview','animation.clip.create',
+                     'animation.clip.inspect','animation.motion.audit'):
+        import render_reference_motion
+        return render_reference_motion.execute(operation,p,root,scene)
     if operation in ('reference.bind','reference.landmarks','viewport.inspect',
                      'viewport.configure','viewport.focus','object.geometry',
                      'operator.describe','operator.execute'):
