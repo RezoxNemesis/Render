@@ -39,6 +39,8 @@ PROGRAM_OPS={
  "animation.clip.create":"animation",
  "animation.clip.inspect":"animation",
  "animation.motion.audit":"animation",
+ "studio.curve.inspect":"animation",
+ "studio.curve.adjust":"animation",
  "reference.workspace.open":"assets",
  "reference.workspace.inspect":"assets",
  "reference.compare.multiview":"characters",
