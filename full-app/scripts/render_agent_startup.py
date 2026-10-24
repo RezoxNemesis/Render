@@ -737,6 +737,13 @@ def _write_result(path, report):
             pass
 
 def _native_ui_event(method, value):
+    # Keep a private, bounded history of actual native actions even if the
+    # optional on-screen hand HUD is unavailable on this GPU/Blender version.
+    try:
+        import render_unified_workspace
+        render_unified_workspace.observe_native(method,value)
+    except Exception:
+        pass  # Never block scene work because diagnostic telemetry failed.
     if _render_session is None:
         return
     try:
@@ -849,6 +856,13 @@ if ROOT:
     # The command executor must remain available even if optional UI addon
     # registration fails on a particular Blender startup ordering.
     bpy.app.timers.register(_poll, first_interval=0.5, persistent=True)
+    # Timer executes at most one durable studio-plan action per tick. Scene
+    # edits never run from a Java worker thread or a separate Python thread.
+    try:
+        import render_unified_workspace
+        render_unified_workspace.install_timer()
+    except Exception as error:
+        print("Render native plan queue unavailable:",type(error).__name__,flush=True)
     if _render_session is not None:
         bpy.app.timers.register(_install_render_ui_when_ready,
                                 first_interval=3.0, persistent=False)
