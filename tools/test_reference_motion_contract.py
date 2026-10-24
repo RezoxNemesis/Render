@@ -77,10 +77,32 @@ class ReferenceMotionContracts(unittest.TestCase):
         self.assertEqual(C.audit(good)["frames"],[1,5,10])
         for frames in ([1,1],[10,8],[],[1,2.5],[1,100001]):
             with self.assertRaises(ValueError):C.audit(dict(good,frames=frames))
+    def test_joint_fit_requires_two_distinct_views_for_every_vertex(self):
+        front={"camera":"Front","reference":{"nose":[.5,.3],"chin":[.5,.7]},
+               "model":{"nose":2,"chin":3}}
+        side={"camera":"Side","reference":{"nose":[.6,.3],"chin":[.6,.7]},
+              "model":{"nose":2,"chin":3}}
+        valid={"object":"Character","views":[front,side],"expected_vertices":40,
+               "strength":.55,"max_displacement":.12,"regularization":.01,
+               "dry_run":True}
+        self.assertEqual(len(C.multiview_fit(valid)["views"]),2)
+        for invalid in (
+            dict(valid,views=[front]),
+            dict(valid,views=[front,front]),
+            dict(valid,views=[front,dict(side,model={"nose":2,"chin":4})]),
+            dict(valid,views=[front,dict(side,model={"nose":2,"chin":2})]),
+            dict(valid,expected_vertices=3),
+            dict(valid,max_displacement=-.1),
+            dict(valid,regularization=float("nan")),
+            dict(valid,dry_run="yes"),
+        ):
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(ValueError):C.multiview_fit(invalid)
+
     def test_agent_discovers_recovery_safe_typed_operations(self):
         schemas={entry["operation"]:entry for entry in C.capabilities()}
-        self.assertEqual(len(schemas),7)
-        for operation in ("reference.workspace.open","reference.compare.multiview",
+        self.assertEqual(len(schemas),8)
+        for operation in ("reference.workspace.open","reference.compare.multiview","reference.fit.multiview",
                           "reference.fit.landmarks","animation.clip.create",
                           "animation.motion.audit"):
             self.assertIn(operation,schemas)
@@ -98,7 +120,7 @@ class ReferenceMotionContracts(unittest.TestCase):
         android=(ROOT/"app/src/main/java/com/rezox/render/agent/ProductionBridge.java").read_text()
         pack=(ROOT/"tools/assemble_full_native.py").read_text()
         for action in ("reference.workspace.open","reference.workspace.inspect","reference.fit.landmarks",
-                       "reference.compare.multiview","animation.clip.create",
+                       "reference.compare.multiview","reference.fit.multiview","animation.clip.create",
                        "animation.clip.inspect","animation.motion.audit"):
             self.assertIn(action,py);self.assertIn(action,dispatch);self.assertIn(action,android)
         self.assertIn('"render_reference_motion.py"',pack)
