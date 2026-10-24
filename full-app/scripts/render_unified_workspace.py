@@ -199,7 +199,7 @@ def _execute_step(op,payload,plan_id):
             "studio.workspace.activate","studio.view.orbit",
             "body.blockout","reference.workspace.open",
             "reference.fit.landmarks","reference.fit.multiview",
-            "animation.clip.create","project.checkpoint"):
+            "animation.clip.create","project.checkpoint","studio.curve.adjust"):
         import render_artist_ops
         render_artist_ops.checkpoint(bpy.context.scene,_root(),"studio.plan."+op)
     import render_production
