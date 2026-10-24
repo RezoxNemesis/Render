@@ -58,6 +58,14 @@ class NativeHudTests(unittest.TestCase):
     def test_background_mode_does_not_register_editor_ui(self):
         self.bpy.app.background=True;self.hud.install(lambda:None)
         self.assertEqual([],self.handlers)
+    def test_current_native_edit_replaces_stale_interruption_without_old_render_progress(self):
+        self.hud._worker=dict(state='recovery_required',action='Rendering image',stage='Inspect interrupted native command')
+        self.hud._progress=dict(completed=0,total=1,job_id='a'*32)
+        self.hud.command_started(dict(action='blender.production.execute',args={'operation':'body.blockout'}))
+        value=self.hud.model()
+        self.assertEqual('running',value['state'])
+        self.assertEqual('body blockout',value['action'])
+        self.assertIsNone(value['fraction'])
     def test_native_frame_fraction_drives_bar_without_changing_scene(self):
         self.hud.install(lambda:dict(completed=3,total=5,job_id='a'*32))
         self.hud._refresh();value=self.hud.model();rects=[]

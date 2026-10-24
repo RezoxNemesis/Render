@@ -100,11 +100,16 @@ def _frame_progress(value):
 def model():
     recent = time.monotonic() - _event["at"] < 5.0
     native = _event if _event["state"] == "running" or recent else None
-    status = _worker if _worker is not None else native
+    # A retained interruption belongs to an older command. The actual bpy
+    # command now executing must remain visible during explicit recovery work.
+    current_native = native is not None and (_worker is None or _worker.get('state') != 'running')
+    status = native if current_native else _worker
     if status is None and _progress is None:
         return None
     status = status or {"state": "rendering", "action": "Rendering in Blender"}
-    progress = _frame_progress(_progress)
+    action = status.get('action', '')
+    native_render = action.startswith('render.') or 'render_still' in action or 'render_video' in action
+    progress = _frame_progress(_progress) if not current_native or native_render else None
     percent = status.get("progress", -1)
     fraction = progress["fraction"] if progress else percent / 100 if type(percent) is int and 0 <= percent <= 100 else None
     return {"state": status["state"], "action": status.get("action", "Native Blender action").replace(".", " ").replace("_", " "),
