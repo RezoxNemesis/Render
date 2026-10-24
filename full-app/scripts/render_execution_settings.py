@@ -46,6 +46,29 @@ def sample_target(scene, value):
     return owner, field, native
 
 
+def snapshot_overrides(spec):
+    settings = dict(spec.get('quality_overrides', {}))
+    if spec['engine'] == 'BLENDER_WORKBENCH' and 'sample_control' not in spec:
+        # Older jobs recorded an EEVEE count which Workbench never consumed.
+        # Preserve the actual Workbench mode saved in their immutable snapshot.
+        settings.pop('samples', None)
+    return settings
+
+
+def apply_job_samples(scene, spec):
+    if spec['engine'] == 'BLENDER_WORKBENCH' and 'sample_control' not in spec:
+        return {'legacy_workbench_snapshot_antialiasing_preserved': True}
+    validate({'samples': spec['samples']})
+    owner, field, native = sample_target(scene, spec['samples'])
+    if spec.get('sample_control', field) != field:
+        raise ValueError('RENDER_JOB_SAMPLE_CONTROL_CONFLICT')
+    if getattr(owner, field) != native:
+        setattr(owner, field, native)
+    if getattr(owner, field) != native:
+        raise ValueError('NATIVE_RENDER_SETTING_WAS_CLAMPED')
+    return {'sample_control': field, 'native_samples': spec['samples']}
+
+
 def inspect(scene):
     render = scene.render
     owner, field = _samples(scene)

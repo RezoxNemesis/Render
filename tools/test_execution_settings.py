@@ -18,6 +18,24 @@ class Scene(dict):
         self.eevee=types.SimpleNamespace(taa_render_samples=128)
 
 class ExecutionSettingsTests(unittest.TestCase):
+    def test_legacy_workbench_job_preserves_snapshot_aa_and_foreign_samples(self):
+        scene=Scene();scene.render.engine='BLENDER_WORKBENCH'
+        scene.display=types.SimpleNamespace(render_aa='FXAA')
+        spec={'engine':'BLENDER_WORKBENCH','samples':64,
+              'quality_overrides':{'engine':'BLENDER_WORKBENCH','samples':64,'width':960}}
+        E.configure(scene,E.snapshot_overrides(spec))
+        E.apply_job_samples(scene,spec)
+        self.assertEqual('FXAA',scene.display.render_aa)
+        self.assertEqual(128,scene.eevee.taa_render_samples)
+        self.assertEqual(960,scene.render.resolution_x)
+
+    def test_new_workbench_job_applies_declared_aa_control(self):
+        scene=Scene();scene.render.engine='BLENDER_WORKBENCH'
+        scene.display=types.SimpleNamespace(render_aa='8')
+        E.apply_job_samples(scene,{'engine':'BLENDER_WORKBENCH','samples':32,'sample_control':'render_aa'})
+        self.assertEqual('32',scene.display.render_aa)
+        self.assertEqual(128,scene.eevee.taa_render_samples)
+
     def test_workbench_changes_its_own_antialiasing_without_touching_eevee(self):
         scene=Scene();scene.render.engine='BLENDER_WORKBENCH'
         scene.display=types.SimpleNamespace(render_aa='8')

@@ -192,6 +192,7 @@ def _plan_render(scene,p,root):
     import render_execution_settings
     plan, profile, quality = render_execution_settings.profile_plan(scene,p)
     spec=C.render_spec(plan)
+    spec['sample_control']=render_execution_settings._samples(scene,spec['engine'])[1]
     spec['profile']=profile
     spec['quality_overrides']=quality
     image_settings=scene.render.image_settings
@@ -223,7 +224,8 @@ def _status(manifest):
             'total_frames':manifest['spec']['frame_count'],'next_frame':manifest['next_frame'],
             'spec':manifest['spec'],'fingerprint':manifest['fingerprint'],'quality_reduced':False,
             'video_created':manifest['state']=='encoded','native_execution_verified':True,
-            'timing':manifest.get('timing',{})}
+            'timing':manifest.get('timing',{}),
+            'render_settings_compatibility':manifest.get('render_settings_compatibility',{})}
 
 def _render_exact(scene, frame):
     # A render operator can inherit the active window frame despite scene=.
@@ -292,7 +294,7 @@ def _step(root,p):
             dst.scenes=[manifest['source_scene']]
         scene=dst.scenes[0]
         import render_execution_settings
-        render_execution_settings.configure(scene,spec.get('quality_overrides',{}))
+        render_execution_settings.configure(scene,render_execution_settings.snapshot_overrides(spec))
         scene['production_frozen_job']=manifest['job_id']
     render=scene.render
     engine=spec['engine']
@@ -308,9 +310,9 @@ def _step(root,p):
         if getattr(render,key)!=value:setattr(render,key,value)
         if abs(getattr(render,key)-value)>1e-5:raise ValueError('NATIVE_RENDER_SETTING_WAS_CLAMPED')
     import render_execution_settings
-    owner, field, native_samples=render_execution_settings.sample_target(scene,spec['samples'])
-    if getattr(owner,field)!=native_samples:setattr(owner,field,native_samples)
-    if getattr(owner,field)!=native_samples:raise ValueError('NATIVE_RENDER_SETTING_WAS_CLAMPED')
+    sample_compatibility=render_execution_settings.apply_job_samples(scene,spec)
+    if sample_compatibility.get('legacy_workbench_snapshot_antialiasing_preserved'):
+        manifest['render_settings_compatibility']=sample_compatibility
     if render.image_settings.file_format!='PNG':render.image_settings.file_format='PNG'
     for key, value in (('color_depth',spec.get('image_color_depth',render.image_settings.color_depth)),
                        ('color_mode',spec.get('image_color_mode',render.image_settings.color_mode))):

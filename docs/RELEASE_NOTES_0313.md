@@ -7,6 +7,8 @@ native engine. Existing private VideoStudio credentials/Binder transport remain.
 - Fixes a concrete engine-settings bug: Workbench antialiasing no longer reads
   or changes EEVEE samples. Preview engine overrides inherit the selected engine's
   samples. Unsupported counts fail; final artist settings are not reduced.
+  Older Workbench jobs retain the actual antialiasing saved in their immutable
+  snapshot; their previously unused foreign sample counts are not reinterpreted.
 - Adds checkpointed `camera.frame` for front/back/side/three-quarter orthographic
   review, evaluated world bounds, explicit aspect and margins. Existing cameras
   and geometry remain available.
@@ -18,7 +20,8 @@ native engine. Existing private VideoStudio credentials/Binder transport remain.
   Voxel/memory budgets fail explicitly instead of coarsening the surface. It is
   sculpt preparation, not a completed anatomical sculpt or facial reconstruction.
 
-The first host verification recorded **66 passing focused checks**. Workbench
+Host verification recorded **68 passing focused checks**, including legacy
+Workbench snapshot compatibility. The initial run recorded 66 checks. Workbench
 regressions were observed failing before the settings fix. Host admission checks
 do not execute Blender or verify an image. Build/native evidence is tracked
 separately; no native render or sculpt result is established by these changes.

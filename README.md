@@ -16,11 +16,14 @@ including the existing VideoStudio native Binder connection. The `app/` project
 also supplies the JNI bridge and project inspector; building only that module
 emits the smaller foundation APK, not the full editor.
 
-The 0.31.1 candidate retains the latest native-control and storage improvements.
-See [release notes and limitations](docs/V031_RELEASE_NOTES.md). Following the user's
-workspace-testing request, 149 Android/JVM tests and 118 Python checks passed.
-Host tests and APK builds do not establish native success, phone compatibility,
-performance or 24-hour endurance; emulator results are separate evidence.
+The 0.31.3 candidate retains the native-control and storage improvements and adds
+orthographic character review, checkpointed sculpt preparation and engine-specific
+Workbench antialiasing. See [release notes](docs/RELEASE_NOTES_0313.md),
+[native character controls](docs/NATIVE_CHARACTER_REVIEW.md) and the
+[build-specific workspace evidence](docs/WORKSPACE_TESTING_0312.md).
+Host tests and APK builds do not establish native output quality, phone
+compatibility, performance or 24-hour endurance; native results are reported
+separately for their exact source builds.
 
 ## Repository layout
 
