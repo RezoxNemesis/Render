@@ -98,4 +98,21 @@ public class FileTransfersTest {
         assertTrue(refreshed.getBoolean("digest_and_size_unchanged"));assertFalse(refreshed.toString().contains("token="));
         assertTrue(FileTransfers.enqueue(c,"fetch",payload).getBoolean("already_requested"));
     }
+    @Test public void resumingAnUncommittedExportRefusesAnArtistEditedDestination()throws Exception{
+        Context c=RuntimeEnvironment.getApplication();File source=ProductionFiles.file(c,"Exports","resumable.txt");
+        Files.write(source.toPath(),"artist output".getBytes(StandardCharsets.UTF_8));String sha=ProductionFiles.sha(source);
+        JSONObject payload=new JSONObject().put("request_id","export-edited-partial-01").put("category","Exports").put("filename",source.getName())
+            .put("expected_sha256",sha).put("location_id","workspace").put("parent_id","root").put("name","partial.txt");
+        String id=FileTransfers.enqueue(c,"export",payload).getString("transfer_id");FileTransfers.run(c,id,new AtomicBoolean(false));
+        StorageDocuments.Node document=StorageDocuments.find(c,"workspace","root","partial.txt");
+        try(OutputStream out=StorageDocuments.write(c,document)){out.write("artist edit".getBytes(StandardCharsets.UTF_8));}
+        // Simulate a process that copied bytes but never committed completion.
+        File state=new File(c.getFilesDir(),"FileTransfers/"+id+".json");
+        JSONObject manifest=new JSONObject(new String(Files.readAllBytes(state.toPath()),StandardCharsets.UTF_8));
+        manifest.put("state","interrupted");manifest.remove("result");Files.write(state.toPath(),manifest.toString().getBytes(StandardCharsets.UTF_8));
+        FileTransfers.control(c,id,"resume");FileTransfers.run(c,id,new AtomicBoolean(false));
+        assertEquals("DESTINATION_CHANGED_ORIGINALS_PRESERVED",FileTransfers.status(c,id).getString("error_code"));
+        assertEquals("artist edit",new String(Files.readAllBytes(document.file.toPath()),StandardCharsets.UTF_8));
+        assertEquals(sha,ProductionFiles.sha(source));
+    }
 }

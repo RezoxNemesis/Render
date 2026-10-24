@@ -274,8 +274,11 @@ public final class FileTransfers {
     private static JSONObject export(Context c,String id,JSONObject p,AtomicBoolean stop)throws Exception{
         File source=ProductionFiles.file(c,p.getString("category"),p.getString("filename"));
         String sha=p.getString("expected_sha256");
+        if(source.length()>MAX_BYTES)throw new IOException("TRANSFER_FILE_TOO_LARGE");
         if(!source.isFile()||source.getName().contains(".partial")||!sha.equals(hash(id,Files.newInputStream(source.toPath()),stop)))throw new IOException("ARTIFACT_CHECKSUM_MISMATCH");
         String location=p.getString("location_id"),parent=p.getString("parent_id"),name=p.getString("name");
+        if(location.equals("workspace")&&StorageDocuments.workspace(c).getUsableSpace()<source.length()+128L*1024*1024)
+            throw new IOException("TRANSFER_NEEDS_MORE_STORAGE");
         JSONObject row;StorageDocuments.Node destination;
         synchronized(LOCK){row=load(c,id);}
             if(row.has("destination_id")){
@@ -283,6 +286,10 @@ public final class FileTransfers {
                 if(destination.bytes==source.length()&&sha.equals(hash(id,StorageDocuments.read(c,destination),stop)))
                     return destination.json().put("sha256",sha).put("provider_readback_sha256_verified",true)
                         .put("already_exported",true).put("source_project_unchanged",true).put("remote_sync_verified",false);
+                // A visible partial document may have been edited by the artist
+                // after interruption. Only rewrite an unchanged prefix of this
+                // source; never treat a retained handle as permission to clobber edits.
+                verifyDestinationPrefix(c,id,source,destination,stop);
                 synchronized(LOCK){row=load(c,id);row.put("resume_mode","rewrite_only_this_transfer_uncommitted_document");save(c,row);}
             }else{
                 destination=StorageDocuments.find(c,location,parent,name);
@@ -302,6 +309,16 @@ public final class FileTransfers {
         if(!sha.equals(hash(id,StorageDocuments.read(c,destination),stop)))throw new IOException("PROVIDER_READBACK_SHA256_MISMATCH");
         return destination.json().put("sha256",sha).put("bytes",source.length()).put("provider_readback_sha256_verified",true)
             .put("provider_write_completed",true).put("source_project_unchanged",true).put("remote_sync_verified",false);
+    }
+    private static void verifyDestinationPrefix(Context c,String id,File source,StorageDocuments.Node destination,AtomicBoolean stop)throws Exception{
+        try(InputStream saved=StorageDocuments.read(c,destination);InputStream original=Files.newInputStream(source.toPath())){
+            byte[] left=new byte[65536],right=new byte[65536];int n;
+            while((n=saved.read(left))!=-1){
+                check(id,stop);int count=0;
+                while(count<n){int got=original.read(right,count,n-count);if(got<0)throw new IOException("DESTINATION_CHANGED_ORIGINALS_PRESERVED");count+=got;}
+                for(int i=0;i<n;i++)if(left[i]!=right[i])throw new IOException("DESTINATION_CHANGED_ORIGINALS_PRESERVED");
+            }
+        }
     }
     static String hash(String id,InputStream stream,AtomicBoolean stop)throws Exception{
         try(InputStream input=stream){java.security.MessageDigest digest=java.security.MessageDigest.getInstance("SHA-256");

@@ -28,6 +28,8 @@ public final class NativeStudioChecks extends Instrumentation {
     private Context target;
     private String phase,publicId;
     private String storageLocation,storageSource,storageSha,storageCategory;
+    private String storageUrl;
+    private long storageBytes;
     private JSONObject evidence;
     private AtomicFile output;
 
@@ -35,7 +37,8 @@ public final class NativeStudioChecks extends Instrumentation {
         super.onCreate(args);phase=args==null?"":args.getString("phase","");
         storageLocation=args==null?"workspace":args.getString("storage_location","workspace");
         storageSource=args==null?"":args.getString("source_filename","");storageSha=args==null?"":args.getString("expected_sha256","");
-        storageCategory=args==null?"Projects":args.getString("source_category","Projects");start();
+        storageCategory=args==null?"Projects":args.getString("source_category","Projects");
+        storageUrl=args==null?"":args.getString("source_url","");storageBytes=args==null?0:args.getLong("source_bytes",0);start();
     }
     private JSONObject transferComplete(JSONObject started)throws Exception{
         String id=started.getString("transfer_id");long deadline=System.nanoTime()+120_000_000_000L;JSONObject status;
@@ -68,6 +71,15 @@ public final class NativeStudioChecks extends Instrumentation {
         require(!imported.getJSONObject("result").optBoolean("native_import_completed"),"TRANSFER_MISREPORTED_AS_BLENDER_IMPORT");
         evidence.put("import",imported).put("native_android_storage_io_verified",true).put("blender_import_executed",false)
             .put("render_executed",false).put("remote_drive_sync_verified",false);
+    }
+    private void storageFetch()throws Exception{
+        require(storageSha.matches("[a-f0-9]{64}")&&storageBytes>0,"EXPECTED_ORIGINAL_SIZE_AND_SHA_REQUIRED");
+        JSONObject result=transferComplete(operation("storage.fetch",new JSONObject().put("request_id","workspace-file-ref-"+UUID.randomUUID())
+            .put("url",storageUrl).put("name",storageSource).put("expected_sha256",storageSha).put("expected_bytes",storageBytes)));
+        require(storageSha.equals(result.getJSONObject("result").getString("sha256")),"FILE_REFERENCE_BYTES_CHANGED");
+        require(!result.getJSONObject("result").optBoolean("native_import_completed"),"TRANSFER_MISREPORTED_AS_BLENDER_IMPORT");
+        evidence.put("fetch",result).put("native_android_https_file_ingestion_verified",true)
+            .put("blender_import_executed",false).put("render_executed",false);
     }
     private JSONObject call(String operation,JSONObject payload)throws Exception {
         Class<?> cls=Class.forName("com.rezox.render.agent.ProductionBridge",true,target.getClassLoader());
@@ -375,7 +387,7 @@ public final class NativeStudioChecks extends Instrumentation {
             target=getTargetContext();
             require((target.getApplicationInfo().flags&ApplicationInfo.FLAG_DEBUGGABLE)!=0,"DEBUG_APPLICATION_REQUIRED");
             require("ranchu".equals(Build.HARDWARE)||"goldfish".equals(Build.HARDWARE),"ISOLATED_WORKSPACE_EMULATOR_REQUIRED");
-            require(phase.equals("storage_provider_roundtrip")||phase.equals("storage_roundtrip")||phase.equals("core")||phase.equals("assets")||phase.equals("render")||phase.equals("status")||phase.equals("configuration")||phase.equals("launch")||phase.equals("diagnostics")||phase.equals("artist_model")||phase.equals("artist_animate")||phase.equals("artist_preview")||phase.equals("artist_animation")||phase.equals("artist_status")||phase.equals("artist_encode"),"UNKNOWN_FIXED_TEST_PHASE");
+            require(phase.equals("storage_fetch")||phase.equals("storage_provider_roundtrip")||phase.equals("storage_roundtrip")||phase.equals("core")||phase.equals("assets")||phase.equals("render")||phase.equals("status")||phase.equals("configuration")||phase.equals("launch")||phase.equals("diagnostics")||phase.equals("artist_model")||phase.equals("artist_animate")||phase.equals("artist_preview")||phase.equals("artist_animation")||phase.equals("artist_status")||phase.equals("artist_encode"),"UNKNOWN_FIXED_TEST_PHASE");
             File folder=new File(target.getFilesDir(),"StudioValidation");folder.mkdirs();
             File path=new File(folder,"029_"+phase+".json");
             require(phase.equals("status")||phase.equals("artist_status")||!path.exists(),"EXISTING_NATIVE_TEST_RECEIPT_INSPECT_BEFORE_REPLAY");
@@ -387,7 +399,7 @@ public final class NativeStudioChecks extends Instrumentation {
             require("Render Studio".equals(caps.getString("target_app"))&&"com.rezox.render".equals(caps.getString("target_package")),"WRONG_NATIVE_TARGET");
             publicId=caps.getString("render_public_id");evidence.put("render_public_id",publicId).put("capabilities",caps);
             require(target.getPackageManager().getPackageInfo(target.getPackageName(),0).getLongVersionCode()>=35,"UPGRADED_APK_REQUIRED");
-            if(phase.equals("storage_roundtrip")||phase.equals("storage_provider_roundtrip"))storageRoundTrip();else if(phase.equals("core"))core();else if(phase.equals("assets"))assets();else if(phase.equals("render"))render();else if(phase.equals("configuration"))configuration();else if(phase.equals("launch"))launch();else if(phase.equals("diagnostics"))diagnostics();else if(phase.equals("artist_model"))artistModel();else if(phase.equals("artist_animate"))artistAnimate();else if(phase.equals("artist_preview"))artistRender(false);else if(phase.equals("artist_animation"))artistRender(true);else if(phase.equals("artist_status"))artistStatus();else if(phase.equals("artist_encode"))artistEncode();else status();
+            if(phase.equals("storage_fetch"))storageFetch();else if(phase.equals("storage_roundtrip")||phase.equals("storage_provider_roundtrip"))storageRoundTrip();else if(phase.equals("core"))core();else if(phase.equals("assets"))assets();else if(phase.equals("render"))render();else if(phase.equals("configuration"))configuration();else if(phase.equals("launch"))launch();else if(phase.equals("diagnostics"))diagnostics();else if(phase.equals("artist_model"))artistModel();else if(phase.equals("artist_animate"))artistAnimate();else if(phase.equals("artist_preview"))artistRender(false);else if(phase.equals("artist_animation"))artistRender(true);else if(phase.equals("artist_status"))artistStatus();else if(phase.equals("artist_encode"))artistEncode();else status();
             evidence.put("passed",true);save("passed_native_"+phase);code=Activity.RESULT_OK;
         }catch(Throwable error){
             try{if(evidence!=null){evidence.put("error",error.toString()).put("cause",String.valueOf(error.getCause()));save("failed_native_"+phase);}}catch(Exception ignored){}
