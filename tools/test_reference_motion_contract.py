@@ -64,7 +64,7 @@ class ReferenceMotionContracts(unittest.TestCase):
         dispatch=(ROOT/"full-app/scripts/render_production.py").read_text()
         android=(ROOT/"app/src/main/java/com/rezox/render/agent/ProductionBridge.java").read_text()
         pack=(ROOT/"tools/assemble_full_native.py").read_text()
-        for action in ("reference.workspace.open","reference.workspace.inspect",
+        for action in ("reference.workspace.open","reference.workspace.inspect","reference.fit.landmarks",
                        "reference.compare.multiview","animation.clip.create",
                        "animation.clip.inspect","animation.motion.audit"):
             self.assertIn(action,py);self.assertIn(action,dispatch);self.assertIn(action,android)
