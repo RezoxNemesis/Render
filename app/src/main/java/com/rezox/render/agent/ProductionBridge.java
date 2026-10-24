@@ -26,7 +26,7 @@ public final class ProductionBridge {
         "reference.workspace.open","reference.workspace.inspect","reference.compare.multiview","reference.fit.landmarks","reference.fit.multiview",
         "animation.clip.create","animation.clip.inspect","animation.motion.audit",
         "studio.capabilities","studio.tool.search","studio.workspace.activate","studio.workspace.inspect",
-        "studio.view.orbit","studio.editor.open","studio.plan.submit","studio.plan.status",
+        "studio.view.orbit","studio.editor.open","studio.curve.inspect","studio.curve.adjust","studio.plan.submit","studio.plan.status",
         "studio.plan.list","studio.plan.pause","studio.plan.resume","studio.plan.cancel","studio.activity",
         "viewport.inspect","viewport.configure","viewport.focus","object.geometry","operator.describe","operator.execute","render.plan","render.step","render.batch","render.status","render.encode","drive.status","drive.backup",
         "render.storage.status","render.job.start","render.job.status","render.job.pause",
