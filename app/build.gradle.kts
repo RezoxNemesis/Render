@@ -8,8 +8,8 @@ android {
         applicationId = "com.rezox.render"
         minSdk = 28
         targetSdk = 35
-        versionCode = 44
-        versionName = "0.35.0-joint-multiview-fit"
+        versionCode = 45
+        versionName = "0.36.0-unified-blender-workspaces"
         ndk { abiFilters += listOf("arm64-v8a") }
         externalNativeBuild {
             cmake { cppFlags += listOf("-std=c++20", "-Wall", "-Wextra", "-Werror") }
