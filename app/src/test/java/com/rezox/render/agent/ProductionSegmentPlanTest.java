@@ -178,6 +178,21 @@ public class ProductionSegmentPlanTest {
             }finally{output.delete();}
         }
     }
+    @Test public void exportChecksPlanIndexBeforeReadingFiles()throws Exception{
+        Context c=RuntimeEnvironment.getApplication();
+        String id="a".repeat(32);
+        File manifest=ProductionFiles.file(c,id,"manifest.json");
+        JSONObject spec=spec(101,124,24,16000000);
+        JSONObject job=new JSONObject().put("spec",spec)
+            .put("encoded_segments",new JSONObject().put("1",new JSONObject()));
+        try{
+            Files.write(manifest.toPath(),job.toString().getBytes(StandardCharsets.UTF_8));
+            try{RenderManualJobs.exportSegment(c,id,1);fail();}
+            catch(IllegalArgumentException expected){
+                assertEquals("SEGMENT_OUTSIDE_RENDER_PLAN",expected.getMessage());
+            }
+        }finally{manifest.delete();}
+    }
     @Test public void unsupportedFrameRatesAreRejectedExplicitly()throws Exception{
         JSONObject request=spec(1,1000,24,32000000).put("fps_base",100);
         try{ProductionSegmentPlan.plan(request);fail();}
