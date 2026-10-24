@@ -194,6 +194,11 @@ def _plan_render(scene,p,root):
     spec=C.render_spec(plan)
     spec['profile']=profile
     spec['quality_overrides']=quality
+    image_settings=scene.render.image_settings
+    if image_settings.file_format in ('OPEN_EXR','OPEN_EXR_MULTILAYER','HDR') or image_settings.color_depth=='32':
+        raise ValueError('HDR_OUTPUT_REQUIRES_NATIVE_BLENDER_RENDER_MENU')
+    spec['image_color_depth']=image_settings.color_depth
+    spec['image_color_mode']=image_settings.color_mode
     unpacked=[image for image in bpy.data.images if image.source=='FILE' and not image.packed_file]
     if unpacked:raise ValueError('PACK_EXTERNAL_IMAGES_BEFORE_CHECKPOINT')
     if scene.camera is None:raise ValueError('CAMERA_REQUIRED')
@@ -206,7 +211,7 @@ def _plan_render(scene,p,root):
     receipt=C.file_receipt(checkpoint)
     # Fractional frame time belongs to the real scene, not a guessed Android
     # integer fps. Existing typed render.plan payload stays backward compatible.
-    spec['fps_base']=float(scene.render.fps_base)
+    spec['fps_base']=float(quality.get('fps_base',scene.render.fps_base))
     manifest={'version':1,'job_id':ident,'source_scene':scene.name,'spec':spec,'snapshot':receipt,
               'fingerprint':C.fingerprint({'spec':spec,'snapshot':receipt}),'state':'ready',
               'frames':{},'next_frame':spec['start'],'quality_reduced':False}
@@ -235,6 +240,36 @@ def _render_exact(scene, frame):
     finally:
         if window and original is not None:window.scene=original
 
+
+def _release_snapshot(scene):
+    """Release only unreferenced data belonging to a finished cached snapshot."""
+    if not scene.get('production_frozen_job') or scene==bpy.context.scene:
+        return
+    if any(window.scene==scene for window in bpy.context.window_manager.windows):
+        return
+    objects=[ob for ob in scene.objects if len(ob.users_scene)==1]
+    collections=list(scene.collection.children_recursive)
+    data={ob.data for ob in objects if ob.data is not None}
+    materials={m for item in data for m in getattr(item,'materials',()) if m is not None}
+    images={n.image for m in materials if m.use_nodes for n in m.node_tree.nodes
+            if hasattr(n,'image') and n.image is not None}
+    bpy.data.scenes.remove(scene)
+    # Parent collections precede their children; preserve anything still linked
+    # elsewhere and never run a global orphan purge on an artist's project.
+    for collection in collections:
+        if collection.users==0 and not collection.use_fake_user:bpy.data.collections.remove(collection)
+    for ob in objects:
+        if ob.users==0 and not ob.use_fake_user:bpy.data.objects.remove(ob)
+    for item in data:
+        if item.users==0 and not item.use_fake_user:
+            if isinstance(item,bpy.types.Mesh):bpy.data.meshes.remove(item)
+            elif isinstance(item,bpy.types.Curve):bpy.data.curves.remove(item)
+            elif isinstance(item,bpy.types.Armature):bpy.data.armatures.remove(item)
+    for material in materials:
+        if material.users==0 and not material.use_fake_user:bpy.data.materials.remove(material)
+    for image in images:
+        if image.users==0 and not image.use_fake_user:bpy.data.images.remove(image)
+
 def _step(root,p):
     C.fields(p,('job_id',),('job_id',));folder=_job(root,p['job_id']);path=folder/'manifest.json'
     manifest=json.loads(path.read_text());spec=manifest['spec']
@@ -249,6 +284,9 @@ def _step(root,p):
     if frame>spec['end']:return _status(manifest)
     scene=next((s for s in bpy.data.scenes if s.get('production_frozen_job')==manifest['job_id']),None)
     if scene is None:
+        for prior in list(bpy.data.scenes):
+            if prior.get('production_frozen_job') and prior.get('production_frozen_job')!=manifest['job_id']:
+                _release_snapshot(prior)
         with bpy.data.libraries.load(str(folder/'snapshot.blend'),link=False) as (src,dst):
             if manifest['source_scene'] not in src.scenes:raise ValueError('CHECKPOINT_SCENE_MISSING')
             dst.scenes=[manifest['source_scene']]
@@ -276,7 +314,10 @@ def _step(root,p):
         if getattr(owner,field)!=spec['samples']:raise ValueError('NATIVE_RENDER_SETTING_WAS_CLAMPED')
     elif render.engine!='BLENDER_WORKBENCH':raise ValueError('REQUESTED_SAMPLE_CONTROL_UNAVAILABLE')
     if render.image_settings.file_format!='PNG':render.image_settings.file_format='PNG'
-    if render.image_settings.color_mode!='RGBA':render.image_settings.color_mode='RGBA'
+    for key, value in (('color_depth',spec.get('image_color_depth',render.image_settings.color_depth)),
+                       ('color_mode',spec.get('image_color_mode',render.image_settings.color_mode))):
+        if getattr(render.image_settings,key)!=value:setattr(render.image_settings,key,value)
+        if getattr(render.image_settings,key)!=value:raise ValueError('NATIVE_OUTPUT_PRECISION_UNAVAILABLE')
     tmp=folder/('frame_%06d.partial.png'%frame);final=folder/('frame_%06d.png'%frame)
     render.filepath=str(tmp)
     manifest['state']='rendering';_write(path,manifest)
@@ -298,6 +339,7 @@ def _step(root,p):
         _phase2().commit_png(folder,manifest,frame,tmp)
     except Exception:
         manifest['state']='paused_error';_write(path,manifest);raise
+    if manifest['next_frame']>spec['end']:_release_snapshot(scene)
     return _status(manifest)
 
 def execute(args, spool, command_id):
@@ -318,19 +360,13 @@ def execute(args, spool, command_id):
         import render_execution_settings
         return render_execution_settings.execute(operation,scene,p)
     if operation in ('project.list','project.restore','mesh.edit','curve.create','shape.create','shape.keys','rig.create','rig.bind','rig.keys'):
-        detail_path=Path(__file__).with_name('render_production_detail.py')
-        detail_spec=importlib.util.spec_from_file_location('render_production_detail',detail_path)
-        detail_module=importlib.util.module_from_spec(detail_spec)
-        detail_spec.loader.exec_module(detail_module)
-        return detail_module.execute(operation,p,root,scene,C)
+        import render_production_detail
+        return render_production_detail.execute(operation,p,root,scene,C)
     if operation in ('reference.bind','reference.landmarks','viewport.inspect',
                      'viewport.configure','viewport.focus','object.geometry',
                      'operator.describe','operator.execute'):
-        studio_path=Path(__file__).with_name('render_studio_ops.py')
-        studio_spec=importlib.util.spec_from_file_location('render_studio_ops',studio_path)
-        studio_module=importlib.util.module_from_spec(studio_spec)
-        studio_spec.loader.exec_module(studio_module)
-        return studio_module.execute(operation,p,root,scene)
+        import render_studio_ops
+        return render_studio_ops.execute(operation,p,root,scene)
     if operation=='scene.inspect':
         C.fields(p,('offset','limit'))
         offset=C.integer(p.get('offset',0),0,10000000);limit=C.integer(p.get('limit',32),1,64)

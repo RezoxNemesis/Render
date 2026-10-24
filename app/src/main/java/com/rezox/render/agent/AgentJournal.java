@@ -78,6 +78,14 @@ public final class AgentJournal extends SQLiteOpenHelper {
     public synchronized void finish(String id,String state,JSONObject result)throws Exception{
         if(!("succeeded".equals(state)||"failed".equals(state)||"cancelled".equals(state)||"recovery_required".equals(state)))
             throw new IllegalArgumentException("INVALID_TERMINAL_STATE");
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT result FROM jobs WHERE id=?",new String[]{id})){
+            if(c.moveToFirst()&&!c.isNull(0)){
+                JSONObject prior=new JSONObject(c.getString(0));
+                if(prior.has("native_command_id")&&!result.has("native_command_id"))
+                    result.put("native_command_id",prior.getString("native_command_id"))
+                        .put("recovery_operation","native.command.status");
+            }
+        }
         ContentValues v=new ContentValues();v.put("state",state);v.put("result",result.toString());
         v.put("acked",0);v.put("updated",System.currentTimeMillis());
         getWritableDatabase().update("jobs",v,"id=? AND state='running_on_device'",new String[]{id});

@@ -23,6 +23,33 @@ SCHEMAS = {
     'project.export': ['format'],
 }
 READ_ONLY = {'artist.capabilities', 'artist.inspect', 'material.inspect'}
+_FIELDS = {
+    'object': {'type':'string','minLength':1,'maxLength':255},
+    'material': {'type':'string','minLength':1,'maxLength':255},
+    'name': {'type':'string','pattern':'^[A-Za-z][A-Za-z0-9_-]{0,63}$'},
+    'linked': {'type':'boolean'},
+    'vertices': {'type':'array','minItems':1,'maxItems':50000,'items':{'type':'integer','minimum':0}},
+    'weights': {'type':'object','additionalProperties':{'type':'number'},'maxProperties':64},
+    'points': {'type':'array','minItems':1,'maxItems':128,'items':{'type':'object',
+        'required':['x','y'],'additionalProperties':False,'properties':{
+            'x':{'type':'number','minimum':0},'y':{'type':'number','minimum':0},
+            'pressure':{'type':'number','minimum':0,'maximum':1},'size':{'type':'number','minimum':1,'maximum':2048}}}},
+    'energy': {'type':'number','minimum':0,'maximum':1e9},
+    'color': {'type':'array','minItems':3,'maxItems':3,'items':{'type':'number','minimum':0,'maximum':1}},
+    'size': {'type':'number','minimum':.0001,'maximum':1e6},
+    'lens': {'type':'number','minimum':1,'maximum':5000},
+    'clip_start': {'type':'number','minimum':.000001,'maximum':1e6},
+    'clip_end': {'type':'number','minimum':.001,'maximum':1e9},
+    'asset': {'type':'string','pattern':'^[a-f0-9]{64}\\.(png|jpg|jpeg|webp|mp4)$'},
+    'mode': {'enum':['IMAGE_REFERENCE','VIDEO_SEQUENCE']},
+    'start_frame': {'type':'integer','minimum':1,'maximum':1000000},
+    'channel': {'type':'integer','minimum':1,'maximum':128},
+    'format': {'enum':['BLEND','GLB']},
+}
+_REQUIRED = {'object.duplicate':['object','name'],'object.remove':['object'],
+             'sculpt.mask':['object','vertices','weights'],'sculpt.stroke':['object','points'],
+             'facial.expression':['object','weights'],'material.inspect':['material'],
+             'light.configure':['object'],'camera.configure':['object'],'media.import':['asset']}
 
 
 def _fields(p, operation):
@@ -121,8 +148,13 @@ def execute(operation, scene, root, p):
                     _operator(native)
                 except (AttributeError, RuntimeError):
                     available, reason = False, 'NATIVE_OPERATOR_NOT_BUNDLED'
+            properties={field:_FIELDS[field] for field in fields}
+            if op=='sculpt.mask':properties['weights']={'type':'array','minItems':1,'maxItems':50000,
+                'items':{'type':'number','minimum':0,'maximum':1}}
             operations.append({'operation': op, 'fields': fields, 'read_only': op in READ_ONLY,
                                'available': available, 'reason': reason,
+                               'input_schema':{'type':'object','properties':properties,
+                                               'additionalProperties':False,'required':_REQUIRED.get(op,[])},
                                'checkpoint_before_change': op not in READ_ONLY})
         try:
             _operator('export_scene.gltf')
@@ -234,6 +266,8 @@ def _mutate(operation, scene, root, p):
         weights = p.get('weights')
         if keys is None or not isinstance(weights, dict) or not 1 <= len(weights) <= 64:
             raise ValueError('FACIAL_SHAPE_KEYS_REQUIRED')
+        if ob.data.users>1:
+            raise ValueError('FACIAL_KEYS_SHARED_DUPLICATE_MESH_FIRST')
         checked = []
         for name, value in weights.items():
             key = keys.key_blocks.get(name)
@@ -244,7 +278,9 @@ def _mutate(operation, scene, root, p):
             key.value = value
         return {'object': ob.name, 'expression_weights': weights, 'rig_and_shape_keys_preserved': True}
     if operation in ('light.configure', 'camera.configure'):
+        if set(p)=={'object'}:raise ValueError('ARTIST_SETTING_REQUIRED')
         ob = _object(scene, p.get('object'), 'LIGHT' if operation.startswith('light') else 'CAMERA')
+        if ob.data.users>1:raise ValueError('TARGET_DATA_SHARED_DUPLICATE_DATA_FIRST')
         ranges = {'energy': (0,1e9), 'size': (.0001,1e6), 'lens': (1,5000),
                   'clip_start': (.000001,1e6), 'clip_end': (.001,1e9)}
         changes = []
@@ -271,6 +307,9 @@ def _mutate(operation, scene, root, p):
         from render_studio_ops import _asset
         path = _asset(Path(root), p.get('asset'))
         mode = p.get('mode', 'IMAGE_REFERENCE')
+        name=p.get('name','ImportedMedia_'+uuid.uuid4().hex[:8])
+        if not isinstance(name,str) or not re.fullmatch(r'[A-Za-z][A-Za-z0-9_-]{0,63}',name) or name in bpy.data.objects:
+            raise ValueError('INVALID_OR_EXISTING_MEDIA_NAME')
         if mode == 'VIDEO_SEQUENCE':
             if path.suffix != '.mp4':
                 raise ValueError('VIDEO_SEQUENCE_REQUIRES_ORIGINAL_MP4')
@@ -281,14 +320,16 @@ def _mutate(operation, scene, root, p):
             strips=getattr(editor,'strips',None)
             if strips is None:strips=getattr(editor,'sequences',None)
             if strips is None:raise ValueError('NATIVE_VIDEO_SEQUENCER_UNAVAILABLE')
-            strip=strips.new_movie('ImportedVideo_'+uuid.uuid4().hex[:8],str(path),channel,start)
-            return {'strip':strip.name,'source_asset':path.name,'audio_imported':False,'original_preserved':True}
+            if strips.get(name):raise ValueError('MEDIA_STRIP_NAME_EXISTS')
+            strip=strips.new_movie(name,str(path),channel,start)
+            return {'strip':strip.name,'source_asset':path.name,'audio_imported':False,'original_preserved':True,
+                    'start_frame':strip.frame_start,'channel':strip.channel}
         if mode != 'IMAGE_REFERENCE' or path.suffix == '.mp4':
             raise ValueError('UNSUPPORTED_NATIVE_MEDIA_IMPORT_MODE')
         image=bpy.data.images.load(str(path),check_existing=True)
         if image.size[0]<1 or image.size[1]<1:raise ValueError('NATIVE_IMAGE_DECODER_UNSUPPORTED')
         image.pack()
-        ob=bpy.data.objects.new('ImportedImage_'+uuid.uuid4().hex[:8],None)
+        ob=bpy.data.objects.new(name,None)
         ob.empty_display_type='IMAGE';ob.data=image;ob.empty_display_size=5
         ob.hide_render=True;scene.collection.objects.link(ob)
         return {'object':ob.name,'source_asset':path.name,'original_resolution':list(image.size),

@@ -45,6 +45,7 @@ public final class RenderLongForegroundService extends Service {
     private final ScheduledExecutorService monitor=Executors.newSingleThreadScheduledExecutor();
     private volatile boolean destroyed;
     private volatile boolean ownerPause;
+    private volatile boolean resumeAfterFrame;
     private boolean monitorScheduled;
     private volatile boolean startPending;
     private int startAttempts;
@@ -61,7 +62,7 @@ public final class RenderLongForegroundService extends Service {
             .putLong("last_change_ms",System.currentTimeMillis()).commit();
     }
     /** From an owner-visible editor, or an authenticated production command. */
-    public static JSONObject request(Context context,String job)throws Exception{
+    public static synchronized JSONObject request(Context context,String job)throws Exception{
         if(!valid(job))throw new IllegalArgumentException("INVALID_RENDER_JOB_ID");
         ProductionBatch.jobStatus(context,job); // Strictly app-owned manifest.
         Context c=context.getApplicationContext();
@@ -101,7 +102,7 @@ public final class RenderLongForegroundService extends Service {
     }
 
     /** Explicit pause is recorded even if Android has already killed the UI. */
-    public static JSONObject requestPause(Context context)throws Exception{
+    public static synchronized JSONObject requestPause(Context context)throws Exception{
         Context c=context.getApplicationContext();
         String job=c.getSharedPreferences(PREFS,MODE_PRIVATE).getString(JOB,"");
         if(!valid(job))throw new IllegalStateException("NO_LONG_RENDER_JOB");
@@ -112,7 +113,7 @@ public final class RenderLongForegroundService extends Service {
             .put("will_stop_after_current_native_frame",true)
             .put("quality_reduced",false);
     }
-    public static JSONObject requestCancel(Context context,String job)throws Exception{
+    public static synchronized JSONObject requestCancel(Context context,String job)throws Exception{
         if(!valid(job))throw new IllegalArgumentException("INVALID_RENDER_JOB_ID");
         ProductionBatch.jobStatus(context,job);
         RenderJobQueue.state(context,job,"cancelled");
@@ -182,7 +183,18 @@ public final class RenderLongForegroundService extends Service {
         android.content.SharedPreferences prefs=c.getSharedPreferences(PREFS,MODE_PRIVATE);
         boolean wanted=prefs.getBoolean(WANTED,false);
         String job=prefs.getString(JOB,"");
-        if(!wanted||RenderManualJobs.active()||!valid(job))return;
+        if(RenderManualJobs.active())return;
+        if(!wanted){
+            if("COMPLETED_EXPORTED".equals(prefs.getString(STATE,""))){
+                try{
+                    if(valid(job))RenderJobQueue.state(c,job,"completed");
+                    String next=RenderJobQueue.next(c);
+                    if(valid(next))request(c,next);
+                }catch(Exception ignored){}
+            }
+            return;
+        }
+        if(!valid(job))return;
         try{
             JSONObject snapshot=ProductionBatch.jobStatus(c,job);
             String stage=snapshot.optString("state");
@@ -283,10 +295,27 @@ public final class RenderLongForegroundService extends Service {
         }
 
         boolean wanted=getSharedPreferences(PREFS,MODE_PRIVATE).getBoolean(WANTED,false);
+        if(!wanted&&"COMPLETED_EXPORTED".equals(getSharedPreferences(PREFS,MODE_PRIVATE).getString(STATE,""))){
+            try{
+                RenderJobQueue.state(this,jobId,"completed");
+                String next=RenderJobQueue.next(this);
+                if(valid(next)){
+                    jobId=next;state(this,next,"LAUNCH_REQUESTED",true);
+                    RenderJobQueue.state(this,next,"starting");wanted=true;
+                }
+            }catch(Exception ignored){}
+        }
         if(!wanted){
             state(this,jobId,"PAUSED_OWNER",false);
             stopSelf();return START_NOT_STICKY;
         }
+        if(RenderManualJobs.active()&&RenderManualJobs.status(this).optBoolean("pausing")){
+            resumeAfterFrame=true;
+            state(this,jobId,"RESUME_AFTER_FRAME",true);
+            if(!monitorScheduled){monitorScheduled=true;monitor.scheduleWithFixedDelay(this::tick,2,5,TimeUnit.SECONDS);}
+            return START_STICKY;
+        }
+        ownerPause=false;resumeAfterFrame=false;idlePolls=0;
         boolean needsEditor=true;
         try{
             JSONObject current=ProductionBatch.jobStatus(this,jobId);
@@ -408,6 +437,16 @@ public final class RenderLongForegroundService extends Service {
     }
     private void tick(){
         if(destroyed)return;
+        if(resumeAfterFrame){
+            if(!getSharedPreferences(PREFS,MODE_PRIVATE).getBoolean(WANTED,false)){
+                resumeAfterFrame=false;ownerPause=true;
+            }else if(RenderManualJobs.active()){
+                update("Finishing current frame, then resuming saved work");return;
+            }else{
+                resumeAfterFrame=false;ownerPause=false;startPending=true;startAttempts=0;
+                attemptStart();return;
+            }
+        }
         // Pause wins over an in-flight deferred executor start; otherwise a
         // startPending flag could strand an idle FGS after user clicked Stop.
         if(ownerPause){

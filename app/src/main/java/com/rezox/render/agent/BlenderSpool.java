@@ -15,6 +15,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /** App-private native bpy main-thread command spool. Never executes Python text. */
 public final class BlenderSpool {
+    public static final class NativeActionFailure extends Exception {
+        public final String commandId;
+        public final JSONObject receipt;
+        NativeActionFailure(String id,JSONObject reply){
+            super(reply.optString("error","BLENDER_NATIVE_ACTION_FAILED"));commandId=id;receipt=reply;
+        }
+    }
     private static final ThreadLocal<String> CARRIER=new ThreadLocal<>();
     static void carrier(String id){if(id==null)CARRIER.remove();else CARRIER.set(id);}
     public static final class RecoveryRequired extends Exception {
@@ -318,10 +325,11 @@ public final class BlenderSpool {
                 JSONObject reply=new JSONObject(new String(bytes,StandardCharsets.UTF_8));
                 if(!id.equals(reply.optString("id")))throw new RecoveryRequired("BLENDER_RESULT_ID_MISMATCH",id);
                 if(!"succeeded".equals(reply.optString("state")))
-                    throw new IllegalStateException(reply.optString("error","BLENDER_NATIVE_ACTION_FAILED"));
+                    throw new NativeActionFailure(id,reply);
                 JSONObject result=reply.getJSONObject("result");
                 result.put("bridge","Render app-private bpy main-thread executor");
                 result.put("native_execution_verified",true);
+                result.put("native_command_id",id);
                 return result;
             }
             if(cancelled.get()){

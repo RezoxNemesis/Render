@@ -211,7 +211,8 @@ public final class VideoStudioNativeBridgeService extends Service {
             JSONObject nativeResult=new AgentActions(this).execute(command,cancel);
             if(cancel.get() || !secrets.videoStudioBridgeEnabled()) {
                 state="cancelled";
-                outcome.put("ok",false).put("error","NATIVE_COMMAND_CANCELLED");
+                outcome=new JSONObject().put("ok",false).put("error","NATIVE_COMMAND_CANCELLED")
+                    .put("native_result",nativeResult).put("native_call_completed_after_cancel",true);
             } else {
                 state="succeeded";
                 // Never return the default failure marker alongside ok=true.
@@ -226,6 +227,11 @@ public final class VideoStudioNativeBridgeService extends Service {
             state=error instanceof BlenderSpool.RecoveryRequired?"recovery_required":
                   cancel.get()?"cancelled":"failed";
             try { outcome.put("ok",false).put("error",code).put("state",state);
+                if(error instanceof BlenderSpool.NativeActionFailure){
+                    BlenderSpool.NativeActionFailure failure=(BlenderSpool.NativeActionFailure)error;
+                    outcome.put("native_command_id",failure.commandId).put("native_failure",failure.receipt)
+                        .put("recovery_operation","native.command.status").put("safe_to_replay",false);
+                }
                 if(error instanceof BlenderSpool.RecoveryRequired)
                     outcome.put("native_command_id",((BlenderSpool.RecoveryRequired)error).commandId)
                         .put("recovery_operation","native.command.status"); }

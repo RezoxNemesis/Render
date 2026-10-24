@@ -816,6 +816,7 @@ def _poll():
             if not re.fullmatch(r"[A-Z_]{3,96}", code):
                 code = type(error).__name__
             report = {"id": name, "state": "failed", "error": code}
+            report["error_detail"] = str(error)[:240]
             if getattr(error,"render_checkpoint",None):
                 report["checkpoint"]=error.render_checkpoint
         try:

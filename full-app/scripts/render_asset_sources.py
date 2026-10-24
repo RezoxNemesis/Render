@@ -13,6 +13,8 @@ import threading
 import time
 from urllib.parse import urlencode
 import zipfile
+import os
+import tempfile
 
 _TASKS = {}
 _ERRORS = {}
@@ -147,7 +149,11 @@ def preview(root,p):
             data=response.read(2*1024*1024+1)
             if len(data)>2*1024*1024:raise ValueError('ASSET_PREVIEW_TOO_LARGE')
             if not data.startswith(b'\x89PNG\r\n\x1a\n'):raise ValueError('ASSET_PREVIEW_FORMAT_UNSUPPORTED')
-        temp=path.with_suffix('.part');temp.write_bytes(data);temp.replace(path)
+        fd,name=tempfile.mkstemp(prefix='.render-preview-',dir=folder)
+        temp=Path(name)
+        with os.fdopen(fd,'wb') as output:
+            output.write(data);output.flush();os.fsync(output.fileno())
+        temp.replace(path)
     key='preview:'+ident
     with _LOCK:
         task=_TASKS.get(key)
@@ -184,6 +190,7 @@ def download(root,p):
         running=L._JOBS.get(job)
         if running and running[0].is_alive():return L.status(root,{'download_id':job})
         receipt=folder/'download.json'
+        previous={}
         if receipt.is_file() and not receipt.is_symlink() and receipt.stat().st_size<131072:
             previous=json.loads(receipt.read_text())
             if previous.get('state')=='downloaded':return L.status(root,{'download_id':job})
@@ -192,10 +199,12 @@ def download(root,p):
                 'license':'CC0-1.0','source_url':'https://ambientcg.com/a/'+ident,
                 'resolution':resolution,'format':form,'state':'preparing','downloaded_bytes':0,
                 'total_bytes':item['size'],'publisher_digest_available':False,'originals_preserved':True}
+        report['_retained_files']=previous.get('files',[])
         stop=threading.Event()
         def work():
             try:
                 _archive(folder,item,report,stop)
+                report.pop('_retained_files',None)
                 report.update(state='downloaded',error='')
             except Exception as error:
                 report.update(state='paused' if isinstance(error,InterruptedError) else 'failed',
@@ -214,29 +223,37 @@ def _archive(folder,item,report,stop):
     previous=json.loads(validator.read_text()) if validator.is_file() and not validator.is_symlink() else {}
     offset=part.stat().st_size if part.is_file() and previous.get('etag') else 0
     headers={'Range':'bytes=%d-'%offset,'If-Range':previous['etag']} if offset else {}
-    with L._request(item['downloadLink'],headers) as response:
-        etag=response.headers.get('ETag','')
-        if offset and (response.status!=206 or etag!=previous.get('etag') or not response.headers.get('Content-Range','').startswith('bytes %d-'%offset)):
-            if response.status!=200:raise ValueError('INVALID_ASSET_RESUME_RESPONSE')
-            offset=0
-        L._atomic(validator,{'etag':etag,'size':size})
-        with part.open('ab' if offset else 'wb') as output:
-            done=offset;last=0
-            while True:
-                if stop.is_set():raise InterruptedError('ASSET_DOWNLOAD_PAUSED')
-                data=response.read(256*1024)
-                if not data:break
-                done+=len(data)
-                if done>size:raise ValueError('ASSET_DOWNLOAD_SIZE_MISMATCH')
-                if shutil.disk_usage(folder).free<len(data)+128*1024**2:raise ValueError('ASSET_DOWNLOAD_STORAGE_PRESSURE')
-                output.write(data);report['downloaded_bytes']=done
-                if time.monotonic()-last>.5:L._atomic(folder/'download.json',report);last=time.monotonic()
-            output.flush()
-            import os
-            os.fsync(output.fileno())
-    if part.stat().st_size!=size:raise ValueError('ASSET_DOWNLOAD_SIZE_MISMATCH')
-    archive=folder/'original.zip';part.replace(archive)
+    archive=L._relative(folder,'original.zip')
+    retained=next((f for f in report.get('_retained_files',[]) if f.get('filename')=='original.zip'),{})
+    reuse=(archive.is_file() and archive.stat().st_size==size and retained.get('bytes')==size
+           and retained.get('sha256')==L._digest(archive))
+    if not reuse:
+        if not part.is_file() or part.stat().st_size!=size:
+            if offset>=size:offset=0;headers={}
+            with L._request(item['downloadLink'],headers) as response:
+                etag=response.headers.get('ETag','')
+                if offset and (response.status!=206 or etag!=previous.get('etag') or not response.headers.get('Content-Range','').startswith('bytes %d-'%offset)):
+                    if response.status!=200:raise ValueError('INVALID_ASSET_RESUME_RESPONSE')
+                    offset=0
+                L._atomic(validator,{'etag':etag,'size':size})
+                with os.fdopen(os.open(part,os.O_WRONLY|os.O_CREAT|(os.O_APPEND if offset else os.O_TRUNC)|getattr(os,'O_NOFOLLOW',0),0o600),'ab' if offset else 'wb') as output:
+                    done=offset;last=0
+                    while True:
+                        if stop.is_set():raise InterruptedError('ASSET_DOWNLOAD_PAUSED')
+                        data=response.read(256*1024)
+                        if not data:break
+                        done+=len(data)
+                        if done>size:raise ValueError('ASSET_DOWNLOAD_SIZE_MISMATCH')
+                        if shutil.disk_usage(folder).free<len(data)+128*1024**2:raise ValueError('ASSET_DOWNLOAD_STORAGE_PRESSURE')
+                        output.write(data);report['downloaded_bytes']=done
+                        if time.monotonic()-last>.5:L._atomic(folder/'download.json',report);last=time.monotonic()
+                    output.flush()
+                    os.fsync(output.fileno())
+        if part.stat().st_size!=size:raise ValueError('ASSET_DOWNLOAD_SIZE_MISMATCH')
+        part.replace(archive)
     report['files']=[{'filename':'original.zip','bytes':size,'sha256':L._digest(archive)}]
+    report['state']='extracting'
+    L._atomic(folder/'download.json',report)
     with zipfile.ZipFile(archive) as z:
         entries=z.infolist()
         total=sum(e.file_size for e in entries)
@@ -249,12 +266,14 @@ def _archive(folder,item,report,stop):
             path=L._relative(folder,'Originals/'+entry.filename)
             if path.suffix.lower() not in ('.png','.jpg','.jpeg','.txt','.json','.usda'):raise ValueError('ASSET_ARCHIVE_FORMAT_UNSUPPORTED')
             path.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
-            temporary=path.with_name(path.name+'.part')
-            with z.open(entry) as src,temporary.open('wb') as dst:
+            fd,name=tempfile.mkstemp(prefix='.render-unpack-',dir=path.parent)
+            temporary=Path(name)
+            with z.open(entry) as src,os.fdopen(fd,'wb') as dst:
                 shutil.copyfileobj(src,dst,256*1024)
             temporary.replace(path)
             report['files'].append({'filename':str(path.relative_to(folder)),
                                     'bytes':path.stat().st_size,'sha256':L._digest(path)})
+            L._atomic(folder/'download.json',report)
     report.update(integrity='HTTPS + provider size + ZIP CRC + local SHA-256; no publisher digest supplied')
 
 

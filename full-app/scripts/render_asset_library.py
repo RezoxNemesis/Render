@@ -14,6 +14,7 @@ import shutil
 import ssl
 import threading
 import time
+import tempfile
 from urllib.parse import urlsplit
 import urllib.request
 
@@ -96,8 +97,9 @@ def _json_url(url):
 
 def _atomic(path, data):
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    temporary = path.with_name(path.name + ".tmp")
-    with temporary.open("w", encoding="utf8") as output:
+    fd, name = tempfile.mkstemp(prefix=".render-meta-", dir=path.parent)
+    temporary = Path(name)
+    with os.fdopen(fd,"w", encoding="utf8") as output:
         json.dump(data, output, sort_keys=True, allow_nan=False)
         output.flush()
         os.fsync(output.fileno())
@@ -187,27 +189,37 @@ def search(root, p):
     if provider not in ("all", "polyhaven", "ambientcg"):
         raise ValueError("ASSET_PROVIDER_UNAVAILABLE")
     query={key:value for key,value in p.items() if key!="provider"}
-    # The existing catalog validates search bounds, also for federated requests.
-    if provider=="all":
-        query["limit"]=max(1,p.get("limit",20)//2)
-        query["offset"]=p.get("offset",0)//2
+    if provider=="ambientcg":
+        # Validate without starting an unrelated provider request.
+        q,k=query.get("query",""),query.get("kind","all")
+        if (not isinstance(q,str) or len(q)>120 or k not in (*_KINDS,"all")
+                or type(query.get("offset",0)) is not int or not 0<=query.get("offset",0)<=100000
+                or type(query.get("limit",20)) is not int or not 1<=query.get("limit",20)<=40
+                or type(query.get("refresh",False)) is not bool):
+            raise ValueError("INVALID_ASSET_SEARCH")
+        import render_asset_sources
+        return render_asset_sources.ambient_search(root,query)
+    # Concatenate provider pages: Poly Haven first, then AmbientCG. This keeps
+    # offset/limit exact even for limit=1 and when only one source has results.
     poly=_poly_search(root,query)
     for item in poly["results"]:
         item["preview_url"]="https://cdn.polyhaven.com/asset_img/thumbs/"+item["id"]+".png?width=256"
         item["license_url"]="https://polyhaven.com/license"
         item["formats_metadata_operation"]="asset.details"
-        item["download_bytes"]=None  # Unknown until exact format/resolution is selected.
+        item["download_bytes"]=None
     if provider=="polyhaven":return poly
     import render_asset_sources
-    ambient=render_asset_sources.ambient_search(root,query)
-    if provider=="ambientcg":return ambient
-    return {"state":"loading" if "loading" in (poly["state"],ambient["state"]) else "ready",
-            "results":poly["results"]+ambient["results"],
-            "total_matches":poly["total_matches"]+ambient["total_matches"],
+    ambient_query=dict(query,offset=max(0,p.get("offset",0)-poly["total_matches"]))
+    ambient=render_asset_sources.ambient_search(root,ambient_query)
+    results=(poly["results"]+ambient["results"])[:p.get("limit",20)]
+    total=poly["total_matches"]+ambient["total_matches"]
+    states=(poly["state"],ambient["state"])
+    state="loading" if "loading" in states else "unavailable" if all(v=="unavailable" for v in states) else "partial" if "unavailable" in states else "ready"
+    return {"state":state,"results":results,"total_matches":total,
             "providers":[{"provider":v["provider"],"state":v["state"],"network_error":v.get("network_error","")}
                          for v in (poly,ambient)],
-            "next_offset":p.get("offset",0)+p.get("limit",20),"license":"CC0-1.0",
-            "provider_pagination_independent":True,"original_asset_quality_changed":False}
+            "next_offset":p.get("offset",0)+len(results) if p.get("offset",0)+len(results)<total else None,
+            "license":"CC0-1.0","original_asset_quality_changed":False}
 
 
 def _relative(folder, name):
@@ -393,7 +405,7 @@ def status(root, p, cancel=False):
         if cancel and active:
             active[1].set()
         report = json.loads(path.read_text())
-        if report.get("state") in ("preparing", "downloading") and not (active and active[0].is_alive()):
+        if report.get("state") in ("preparing", "downloading", "extracting") and not (active and active[0].is_alive()):
             report["state"] = "interrupted"
         report["pause_requested"] = cancel
         # Poll receipts stay bounded even when the model has many textures.
@@ -670,7 +682,7 @@ if bpy is not None and getattr(getattr(bpy, "types", None), "Operator", None):
                         layout.label(text=state["state"])
                     if state.get("error"):
                         layout.label(text=state["error"], icon="ERROR")
-                    if state["state"] in ("preparing","downloading"):
+                    if state["state"] in ("preparing","downloading","extracting"):
                         layout.operator("renderstudio.asset_pause",icon="PAUSE")
                     if state["state"] in ("paused","interrupted","failed"):
                         layout.label(text="Download again to resume the same original files")

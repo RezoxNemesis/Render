@@ -121,7 +121,7 @@ def draw_card(value, width, height, rectangle, text, hand, inset_left=0, inset_r
     x, y, w, h = inset_left + 14, 18, min(360, available - 28), 90
     rectangle(x, y, w, h, (0.055, 0.07, 0.095, 0.92))
     hand(x + 17, y + 49)
-    title = "ChatGPT artist" if value["state"] != "paused" else "Render paused"
+    title = "Native Blender work" if value["state"] != "paused" else "Render paused"
     text(x + 39, y + 67, (title + " - " + value["action"])[:max(1, int((w-54)/7))], 12)
     text(x + 15, y + 45, value["stage"][:max(1, int((w-30)/6))], 11)
     text(x + 15, y + 12, value["progress_label"][:max(1, int((w-30)/6))], 10)

@@ -153,6 +153,7 @@ public final class AgentService extends Service {
             }else{
                 AgentWorkPresence.begin(this,work.envelope.command.getString("action"),
                         "Render native session");
+                BlenderSpool.carrier(work.envelope.id);
                 result=actions.execute(work.envelope.command,work.cancelled);
                 if(work.cancelled.get()||!secrets.enabled()||destroyed){
                     state="cancelled";result.put("native_call_completed_after_cancel",true);
@@ -165,6 +166,11 @@ public final class AgentService extends Service {
                 String code=e.getMessage();
                 if(code==null||!code.matches("[A-Z_]{3,96}"))code=e.getClass().getSimpleName();
                 result=new JSONObject().put("error",code).put("executed_by","android-agent");
+                if(e instanceof BlenderSpool.NativeActionFailure){
+                    BlenderSpool.NativeActionFailure failure=(BlenderSpool.NativeActionFailure)e;
+                    result.put("native_command_id",failure.commandId).put("native_failure",failure.receipt)
+                        .put("recovery_operation","native.command.status").put("safe_to_replay",false);
+                }
                 if(e instanceof BlenderSpool.RecoveryRequired)
                     result.put("native_command_id",((BlenderSpool.RecoveryRequired)e).commandId)
                         .put("recovery_operation","native.command.status");
@@ -180,6 +186,7 @@ public final class AgentService extends Service {
             }
             AgentWorkPresence.finish(this,receiptStored?state:"recovery_required",result);
             active=null;PROCESS_BUSY.set(false);
+            BlenderSpool.carrier(null);
         }
     }
     @Override public void onDestroy(){

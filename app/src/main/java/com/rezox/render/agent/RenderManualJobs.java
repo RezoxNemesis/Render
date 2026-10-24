@@ -231,9 +231,9 @@ public final class RenderManualJobs {
             if(ticker!=null)ticker.cancel(false);
             pulse=null;
             AgentWorkPresence.finish(app,ending);
-            ACTIVE.set(false);
             runningJob="";
             STOP.set(false);
+            ACTIVE.set(false);
         }
     }
     /** File-menu bpy operator writes a bounded local request, not a web call. */
