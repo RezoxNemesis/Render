@@ -219,7 +219,7 @@ def search(root, p):
             "providers":[{"provider":v["provider"],"state":v["state"],"network_error":v.get("network_error","")}
                          for v in (poly,ambient)],
             "next_offset":p.get("offset",0)+len(results) if p.get("offset",0)+len(results)<total else None,
-            "license":"CC0-1.0","original_asset_quality_changed":False}
+            "license":"CC0-1.0","catalog_is_finite":True,"original_asset_quality_changed":False}
 
 
 def _relative(folder, name):

@@ -1,3 +1,22 @@
+# Render Studio 0.31.1 follow-up (versionCode 37)
+
+The user subsequently authorized workspace testing. **149 Android/JVM tests and
+118 Python checks passed** (45 contracts, 68 behavior checks and 5 archive/catalog
+recovery checks). These include SQLite migration, exact-ID interrupted command
+recovery, render queue cancellation, safety-preserving scheduling, launch identity,
+preview/final isolation, download finalization and temporary-path safety.
+
+Testing found and fixed a missing `catalog_is_finite` field in federated metadata
+and a HUD that showed a measured zero when timing was unavailable. Test fixtures
+now publish the complete process-and-launch readiness handshake, retain fractional
+profile settings, and expect queued work/pause-aware pacing rather than old behavior.
+An emulator-only, read-only native diagnostics phase was added; it creates no model,
+render job, animation or benchmark scene. Actual runtime outcomes are recorded in
+the workspace test evidence separately. Host passes do not establish native success,
+phone compatibility, speed or endurance. The historical signing identity is retained.
+
+The following records the original 0.31.0 engineering candidate and its limits.
+
 # Render Studio 0.31.0 — native engineering candidate
 
 Package: `com.rezox.render`; versionCode **36**; versionName

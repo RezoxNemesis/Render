@@ -27,8 +27,10 @@ public class RenderLongForegroundServiceTest {
         try{
             Files.write(path.toPath(),manifest.toString().getBytes(StandardCharsets.UTF_8));
             prefs.edit().putString(RenderLongForegroundService.JOB,first).putBoolean(RenderLongForegroundService.WANTED,true).commit();
-            try{RenderLongForegroundService.request(app,second);fail();}
-            catch(IllegalStateException expected){assertEquals("ANOTHER_LONG_RENDER_JOB_PENDING_OR_RUNNING",expected.getMessage());}
+            JSONObject accepted=RenderLongForegroundService.request(app,second);
+            assertTrue(accepted.getBoolean("durably_queued"));
+            assertFalse(accepted.getBoolean("native_render_started"));
+            assertEquals(second,RenderJobQueue.next(app));
             assertEquals(first,prefs.getString(RenderLongForegroundService.JOB,""));
             assertTrue(prefs.getBoolean(RenderLongForegroundService.WANTED,false));
         }finally{prefs.edit().clear().commit();path.delete();}

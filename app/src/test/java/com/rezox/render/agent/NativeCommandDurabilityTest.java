@@ -32,6 +32,7 @@ public class NativeCommandDurabilityTest {
         File root=new File(app.getFilesDir(),"render_bpy_jobs");
         File pending=new File(root,"pending"),working=new File(root,"working"),results=new File(root,"results");
         pending.mkdirs();working.mkdirs();results.mkdirs();new File(root,"ready").createNewFile();
+        NativeHeartbeatFixture.ready(app);
         Files.write(new File(root,"ready").toPath(),Integer.toString(android.os.Process.myPid()).getBytes(StandardCharsets.US_ASCII));
         new File(root,"ready").setLastModified(System.currentTimeMillis());
         AtomicBoolean cancelled=new AtomicBoolean();ExecutorService executor=Executors.newSingleThreadExecutor();
@@ -74,6 +75,7 @@ public class NativeCommandDurabilityTest {
         Context app=RuntimeEnvironment.getApplication();File root=new File(app.getFilesDir(),"render_bpy_jobs");
         File pending=new File(root,"pending"),results=new File(root,"results");
         pending.mkdirs();results.mkdirs();File ready=new File(root,"ready");
+        NativeHeartbeatFixture.ready(app);
         Files.write(ready.toPath(),Integer.toString(android.os.Process.myPid()).getBytes(StandardCharsets.US_ASCII));
         ready.setLastModified(System.currentTimeMillis()-60000);
         assertFalse(NativeHeartbeat.ready(app));

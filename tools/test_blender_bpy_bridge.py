@@ -98,7 +98,8 @@ class BlenderBridgeTests(unittest.TestCase):
         script.parent.mkdir(parents=True, exist_ok=True)
         script.touch()
         config = {"schema_version": 1, "target_package": "com.rezox.render",
-                  "command_spool_enabled": True, "mobile_mode": "landscape"}
+                  "command_spool_enabled": True, "mobile_mode": "landscape",
+                  "native_activity_launch_id": "12345678-1234-1234-1234-123456789abc"}
         config.update(settings)
         (files / "render_native_launch.json").write_text(json.dumps(config))
         return files, script
@@ -109,6 +110,11 @@ class BlenderBridgeTests(unittest.TestCase):
         self.assertEqual(str(files / "render_bpy_jobs"), root)
         self.assertEqual("landscape", mode)
         self.assertFalse((files / "render_bpy_jobs/ready").exists())
+    def test_handoff_must_bind_readiness_to_a_real_launch_identity(self):
+        for ident in ('', 'invalid', 'a'*35):
+            _,script=self.launch_fixture(native_activity_launch_id=ident)
+            with self.assertRaisesRegex(ValueError,'INVALID_NATIVE_LAUNCH_ID'):
+                self.module._launch_settings({},script)
 
     def test_native_thumbnail_cache_uses_writable_android_cache_without_changing_home(self):
         files, script = self.launch_fixture()

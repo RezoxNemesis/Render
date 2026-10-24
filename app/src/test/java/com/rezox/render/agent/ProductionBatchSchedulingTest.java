@@ -127,7 +127,8 @@ public class ProductionBatchSchedulingTest {
     @Test public void moderatePacingIsOutsideWakeLock()throws Exception{
         runtime.statuses=new int[]{2};run(0,2);
         assertEquals(2,runtime.renders);assertEquals(2,runtime.wakes);
-        assertEquals(2,runtime.sleeps);assertFalse(runtime.held);
+        // Three cancellable 500ms slices per admission interval, outside the guard.
+        assertEquals(6,runtime.sleeps);assertFalse(runtime.held);
     }
     @Test public void uncertainNativeFailureReleasesLockAndIsNotReplayed()throws Exception{
         runtime.failRender=true;

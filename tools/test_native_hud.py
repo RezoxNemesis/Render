@@ -72,6 +72,11 @@ class NativeHudTests(unittest.TestCase):
             model=self.hud.model();rects=[]
             self.hud.draw_card(model,640,360,lambda *p:rects.append(p),lambda *p:None,lambda *p:None)
             self.assertIsNone(model['fraction']);self.assertEqual(1,len(rects))
+    def test_missing_timing_is_not_presented_as_a_measured_zero(self):
+        value=self.hud._frame_progress(dict(completed=3,total=5))
+        self.assertNotIn('rendered',value['label'])
+        value=self.hud._frame_progress(dict(completed=3,total=5,render_active_ms=120000,estimated_remaining_ms=60000))
+        self.assertIn('rendered 2m',value['label']);self.assertIn('~1m frames left',value['label'])
     def test_portrait_card_avoids_blender_overlay_toolbar_and_sidebar(self):
         self.hud.command_started(dict(action='operator.execute',args={}))
         rects=[];hands=[];labels=[]

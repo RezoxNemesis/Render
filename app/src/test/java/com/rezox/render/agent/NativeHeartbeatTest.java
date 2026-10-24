@@ -17,6 +17,7 @@ public class NativeHeartbeatTest {
     @Test public void freshFileFromPreviousProcessCannotClaimEditorReadiness()throws Exception{
         Context app=RuntimeEnvironment.getApplication();File file=new File(app.getFilesDir(),"render_bpy_jobs/ready");
         file.getParentFile().mkdirs();
+        NativeHeartbeatFixture.ready(app);
         try{
             for(String invalid:new String[]{"",Integer.toString(Process.myPid()+1),"invalid"}){
                 Files.write(file.toPath(),invalid.getBytes(StandardCharsets.US_ASCII));
@@ -28,5 +29,15 @@ public class NativeHeartbeatTest {
             file.setLastModified(System.currentTimeMillis()-20000);assertFalse(NativeHeartbeat.ready(app));
             assertTrue(NativeHeartbeat.observedCurrentProcess(app));
         }finally{Files.deleteIfExists(file.toPath());}
+    }
+    @Test public void heartbeatRequiresBothCurrentProcessAndCurrentLaunch()throws Exception{
+        Context app=RuntimeEnvironment.getApplication();File ready=NativeHeartbeatFixture.ready(app);
+        File state=new File(ready.getParentFile(),"ready-state.json");
+        assertTrue(NativeHeartbeat.ready(app));
+        Files.delete(state.toPath());assertFalse(NativeHeartbeat.ready(app));
+        ready=NativeHeartbeatFixture.ready(app);
+        com.rezox.render.NativeEditorConfiguration.publish(app);
+        Files.write(ready.toPath(),Integer.toString(Process.myPid()).getBytes(StandardCharsets.US_ASCII));
+        assertFalse("A prior activity launch cannot attest the new launch",NativeHeartbeat.ready(app));
     }
 }

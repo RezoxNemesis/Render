@@ -90,7 +90,8 @@ def _frame_progress(value):
         return None
     eta=value.get("estimated_remaining_ms",0)
     elapsed=value.get("render_active_ms",0)
-    label=f"{done}/{total} frames • rendered {elapsed//60000}m"
+    label=f"{done}/{total} checkpointed frames"
+    if type(elapsed) is int and elapsed>0:label+=f" • rendered {elapsed//60000}m"
     if type(eta) is int and eta>0:label+=f" • ~{eta//60000}m frames left"
     return {"completed": done, "total": total, "fraction": done / total,
             "label": label, "job_id": value.get("job_id")}

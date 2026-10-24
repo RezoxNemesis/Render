@@ -83,7 +83,7 @@ def ambient_search(root,p):
                         'unavailable_reason':None if kind=='textures' else 'USE_POLY_HAVEN_OR_EXPLICIT_NATIVE_FILE_IMPORT'})
     return {'state':'loading' if loading else 'ready' if data else 'unavailable',
             'results':results,'total_matches':(data or {}).get('numberOfResults',0),
-            'network_error':error,'provider':'AmbientCG'}
+            'network_error':error,'provider':'AmbientCG','catalog_is_finite':True}
 
 
 def _asset_details(root,ident):

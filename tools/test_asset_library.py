@@ -104,7 +104,7 @@ class AssetLibraryTests(unittest.TestCase):
         catalog={'grass_01':{'name':'Grass','type':2,'tags':['grass'],'categories':['nature'],'authors':{'Artist':'All'}},
                  'studio':{'name':'Studio','type':0,'tags':[],'categories':[]}}
         with patch.object(A,'_CATALOG',catalog),patch.object(A,'_CATALOG_THREAD',None),patch.object(A,'_request') as request:
-            result=A.search(self.root,{'query':'grass','kind':'models'})
+            result=A.search(self.root,{'query':'grass','kind':'models','provider':'polyhaven'})
             request.assert_not_called();self.assertEqual(1,result['total_matches'])
             self.assertEqual('CC0-1.0',result['results'][0]['license']);self.assertTrue(result['catalog_is_finite'])
 

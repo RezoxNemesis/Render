@@ -16,10 +16,11 @@ including the existing VideoStudio native Binder connection. The `app/` project
 also supplies the JNI bridge and project inspector; building only that module
 emits the smaller foundation APK, not the full editor.
 
-The 0.31 engineering candidate retains the latest native-control and storage
-improvements. See [release notes and limitations](docs/V031_RELEASE_NOTES.md).
-Runtime testing and test suites were explicitly skipped for this task. A built
-APK does not establish device compatibility, performance or 24-hour endurance.
+The 0.31.1 candidate retains the latest native-control and storage improvements.
+See [release notes and limitations](docs/V031_RELEASE_NOTES.md). Following the user's
+workspace-testing request, 149 Android/JVM tests and 118 Python checks passed.
+Host tests and APK builds do not establish native success, phone compatibility,
+performance or 24-hour endurance; emulator results are separate evidence.
 
 ## Repository layout
 

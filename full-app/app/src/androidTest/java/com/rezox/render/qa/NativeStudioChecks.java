@@ -173,13 +173,25 @@ public final class NativeStudioChecks extends Instrumentation {
         evidence.put("viewport",call("viewport.inspect"));
         evidence.put("screenshot",operation("screenshot.capture",new JSONObject()));
     }
+    private void diagnostics()throws Exception {
+        // Engineering acceptance only: inspect the real on-device bpy process.
+        // No model, benchmark scene, render job or encoding is created.
+        require(call("capabilities").optBoolean("native_editor_ready"),"NATIVE_EDITOR_NOT_READY_NO_RELAUNCH");
+        for(String operation:new String[]{"device.profile","artist.capabilities","artist.inspect",
+                "render.quality.inspect","render.performance.inspect","render.profile.inspect","viewport.inspect"}){
+            evidence.put(operation,operation(operation,new JSONObject()));
+        }
+        evidence.put("screenshot",operation("screenshot.capture",new JSONObject()));
+        evidence.put("native_blender_readonly_confirmed",true)
+            .put("production_render_created",false).put("model_created",false);
+    }
     @Override public void onStart(){
         Bundle result=new Bundle();int code=Activity.RESULT_CANCELED;
         try{
             target=getTargetContext();
             require((target.getApplicationInfo().flags&ApplicationInfo.FLAG_DEBUGGABLE)!=0,"DEBUG_APPLICATION_REQUIRED");
             require("ranchu".equals(Build.HARDWARE)||"goldfish".equals(Build.HARDWARE),"ISOLATED_WORKSPACE_EMULATOR_REQUIRED");
-            require(phase.equals("core")||phase.equals("assets")||phase.equals("render")||phase.equals("status")||phase.equals("configuration")||phase.equals("launch"),"UNKNOWN_FIXED_TEST_PHASE");
+            require(phase.equals("core")||phase.equals("assets")||phase.equals("render")||phase.equals("status")||phase.equals("configuration")||phase.equals("launch")||phase.equals("diagnostics"),"UNKNOWN_FIXED_TEST_PHASE");
             File folder=new File(target.getFilesDir(),"StudioValidation");folder.mkdirs();
             File path=new File(folder,"029_"+phase+".json");
             require(phase.equals("status")||!path.exists(),"EXISTING_NATIVE_TEST_RECEIPT_INSPECT_BEFORE_REPLAY");
@@ -191,7 +203,7 @@ public final class NativeStudioChecks extends Instrumentation {
             require("Render Studio".equals(caps.getString("target_app"))&&"com.rezox.render".equals(caps.getString("target_package")),"WRONG_NATIVE_TARGET");
             publicId=caps.getString("render_public_id");evidence.put("render_public_id",publicId).put("capabilities",caps);
             require(target.getPackageManager().getPackageInfo(target.getPackageName(),0).getLongVersionCode()>=35,"UPGRADED_APK_REQUIRED");
-            if(phase.equals("core"))core();else if(phase.equals("assets"))assets();else if(phase.equals("render"))render();else if(phase.equals("configuration"))configuration();else if(phase.equals("launch"))launch();else status();
+            if(phase.equals("core"))core();else if(phase.equals("assets"))assets();else if(phase.equals("render"))render();else if(phase.equals("configuration"))configuration();else if(phase.equals("launch"))launch();else if(phase.equals("diagnostics"))diagnostics();else status();
             evidence.put("passed",true);save("passed_native_"+phase);code=Activity.RESULT_OK;
         }catch(Throwable error){
             try{if(evidence!=null){evidence.put("error",error.toString()).put("cause",String.valueOf(error.getCause()));save("failed_native_"+phase);}}catch(Exception ignored){}

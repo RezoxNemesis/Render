@@ -37,6 +37,7 @@ public class RenderInteractionCapabilitiesTest {
         Context c=RuntimeEnvironment.getApplication();File ready=new File(c.getFilesDir(),"render_bpy_jobs/ready");
         ready.getParentFile().mkdirs();Files.deleteIfExists(ready.toPath());
         assertFalse(capabilities(c).getBoolean("native_editor_ready"));
+        NativeHeartbeatFixture.ready(c);
         Files.write(ready.toPath(),Integer.toString(android.os.Process.myPid()).getBytes(java.nio.charset.StandardCharsets.US_ASCII));
         assertTrue(capabilities(c).getBoolean("native_editor_ready"));
         assertTrue(ready.setLastModified(System.currentTimeMillis()-20000));

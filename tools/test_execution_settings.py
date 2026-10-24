@@ -18,6 +18,25 @@ class Scene(dict):
         self.eevee=types.SimpleNamespace(taa_render_samples=128)
 
 class ExecutionSettingsTests(unittest.TestCase):
+    def test_preview_profile_cannot_change_final_or_active_scene_settings(self):
+        scene=Scene();before=E.inspect(scene)
+        E.profiles(scene,{'profile':'preview','settings':{'percentage':50,'samples':32,'fps_base':1.25}},True)
+        preview,name,overrides=E.profile_plan(scene,{'profile':'preview'})
+        final,final_name,final_overrides=E.profile_plan(scene,{})
+        self.assertEqual((1920,1080,32),(preview['width'],preview['height'],preview['samples']))
+        self.assertEqual(1.25,overrides['fps_base'])
+        self.assertEqual((3840,2160,512),(final['width'],final['height'],final['samples']))
+        self.assertEqual('final',final_name);self.assertEqual({},final_overrides)
+        self.assertEqual(before,E.inspect(scene))
+
+    def test_profile_updates_preserve_unspecified_artist_overrides(self):
+        scene=Scene()
+        E.profiles(scene,{'profile':'final','settings':{'samples':1024,'fps_base':1.001}},True)
+        E.profiles(scene,{'profile':'final','settings':{'width':4096}},True)
+        profile=E.profiles(scene,{})['profiles']['final']
+        self.assertEqual({'samples':1024,'fps_base':1.001,'width':4096},profile)
+        self.assertEqual(512,scene.cycles.samples)
+
     def test_performance_controls_preserve_every_quality_field(self):
         scene=Scene();before=E.inspect(scene)
         result=E.configure(scene,{'persistent_data':True,'threads_mode':'FIXED','threads':4},True)
