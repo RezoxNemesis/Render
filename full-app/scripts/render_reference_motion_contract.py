@@ -42,8 +42,8 @@ def workspace(p):
         raise ValueError("REFERENCE_ASSET_ID_INVALID")
     if "preview_asset" in p:
         preview=p["preview_asset"]
-        if not isinstance(preview,str) or not ASSET.fullmatch(preview) or
-            preview.endswith(".mp4") or not p["asset"].endswith(".mp4"):
+        if (not isinstance(preview,str) or not ASSET.fullmatch(preview) or
+                preview.endswith(".mp4") or not p["asset"].endswith(".mp4")):
             raise ValueError("VIDEO_REFERENCE_PREVIEW_INVALID")
     mode=p.get("mode","SPLIT")
     if mode not in ("SPLIT","REUSE","CAMERA"):raise ValueError("REFERENCE_MODE_INVALID")
