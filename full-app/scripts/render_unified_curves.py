@@ -149,3 +149,28 @@ def execute(op,p):
     if op=="studio.curve.inspect":return inspect(p)
     if op=="studio.curve.adjust":return adjust(p)
     raise ValueError("STUDIO_CURVE_OPERATION_UNAVAILABLE")
+
+def capabilities():
+    scalar={"type":"number"}
+    text={"type":"string"}
+    ref={"type":"string","pattern":"^[a-f0-9]{64}$"}
+    return [
+        {"operation":"studio.curve.inspect","workspace":"animation",
+         "input_schema":{"type":"object","additionalProperties":False,
+                         "properties":{"action":text,"limit":{"type":"integer","minimum":1,"maximum":64}},
+                         "required":[]},
+         "actual_blender_fcurve":True,"native_bpy_required":True},
+        {"operation":"studio.curve.adjust","workspace":"animation",
+         "input_schema":{"type":"object","additionalProperties":False,
+             "properties":{"action":text,"data_path":text,"array_index":{"type":"integer"},
+                 "key_frame":scalar,"expected_sha256":ref,
+                 "new_frame":scalar,"new_value":scalar,
+                 "interpolation":{"enum":["BEZIER","LINEAR","CONSTANT"]},
+                 "handle_type":{"enum":["AUTO","AUTO_CLAMPED","FREE","ALIGNED","VECTOR"]},
+                 "handle_left":{"type":"array","minItems":2,"maxItems":2},
+                 "handle_right":{"type":"array","minItems":2,"maxItems":2},
+                 "allow_shared_action":{"type":"boolean"}},
+             "required":["action","data_path","array_index","key_frame","expected_sha256"]},
+         "requires_revision_proof":True,"checkpoint_before_change":True,
+         "native_bpy_required":True}
+    ]
