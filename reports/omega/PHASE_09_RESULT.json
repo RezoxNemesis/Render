@@ -1,0 +1,63 @@
+{
+  "contract": "RENDER-OMEGA-13P-20261022",
+  "phase": 9,
+  "title": "Native look development, RAW/FINAL compositing and cache inspection",
+  "status": "Partial",
+  "seed_sha": "ed7ef34fa85d9e361bc9c92d554d8ec937755cc2",
+  "head_branch": "feature/omega-P09-lookdev-vfx-20261022",
+  "head_sha": "3a1f1819a42399951584223daaf88547a985b630",
+  "head_sha_note": "Code+tests commit tip before this report commit; self-referential report SHA cannot be embedded in the same Git commit",
+  "pr_url": "https://github.com/RezoxNemesis/Render/pull/14",
+  "owned_paths_changed": [
+    "full-app/scripts/omega/phase09_vfx.py",
+    "tools/omega/test_phase09_contract.py",
+    "native-tests/omega/phase09/test_native_grade.py",
+    "reports/omega/PHASE_09_RESULT.json"
+  ],
+  "real_bpy_tests": {
+    "state": "NOT_RUN",
+    "commands": [
+      "blender -b -noaudio --python-exit-code 1 --python native-tests/omega/phase09/test_native_grade.py"
+    ],
+    "results": [],
+    "reason": "No Blender executable or bpy package in the available local runtime; fixture committed, no fabricated native render"
+  },
+  "android_tests": {
+    "state": "NOT_RUN",
+    "reason": "No attached Android ARM64 device or signed in-place test artifact; phase P10 owns packaging and registry"
+  },
+  "host_tests": {
+    "state": "PASS",
+    "commands": [
+      "python -m compileall -q full-app/scripts/omega/phase09_vfx.py tools/omega/test_phase09_contract.py native-tests/omega/phase09/test_native_grade.py",
+      "python -m unittest discover -s tools/omega -p 'test_phase09_*.py' -v"
+    ],
+    "results": [
+      "10 unit tests passed in ~0.02 seconds against locally authored module with equivalent remote implementation",
+      "Pure cache frame/manifests hashed and symlink/traversal/corruption rejected"
+    ]
+  },
+  "native_receipts": [],
+  "artifacts": [
+    "full-app/scripts/omega/phase09_vfx.py",
+    "native-tests/omega/phase09/test_native_grade.py",
+    "tools/omega/test_phase09_contract.py"
+  ],
+  "quality_reduced": false,
+  "residual_blockers": [
+    "Run committed fixture on a real Blender/bpy runner; verify actual Principled and compositing RNA compatibility, 64x64 RAW-vs-FINAL native PNG pixel difference and .blend reopen",
+    "P10 must register only tested operations; Phase 09 may not modify shared startup/registry",
+    "Native Android ABI/driver and on-device compositor/render settings are unverified",
+    "Full WIP/RAW/FINAL output separation, EXR pass export, volumetric atmosphere, cache import/export and rollback of partial node-graph failures are not yet implemented"
+  ],
+  "unexpected_errors": [
+    "blender: executable unavailable in local container (command -v blender returned not found)"
+  ],
+  "unverified_claims": [
+    "Actual Blender Android shader compatibility",
+    "Actual render pixel difference",
+    "Real .blend file save/reopen",
+    "Visual/aesthetic film-quality assessment",
+    "On-device thermal/render endurance"
+  ]
+}

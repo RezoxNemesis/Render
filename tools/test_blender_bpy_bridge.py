@@ -71,6 +71,92 @@ class BlenderBridgeTests(unittest.TestCase):
         self.assertEqual("Starter", report["result"]["sample_objects"][0]["name"])
         self.assertEqual(1, report["result"]["total_objects"])
 
+    def test_long_command_refreshes_native_liveness_before_receipt_publication(self):
+        ready=Path(self.tmp.name)/"ready"
+        writer=self.module._write_result
+        def long_command(command):
+            old=time.time()-1800
+            os.utime(ready,(old,old))
+            return {"frame":101}
+        def publish(path,result):
+            self.assertLess(time.time()-ready.stat().st_mtime,5)
+            writer(path,result)
+        self.module._dispatch=long_command
+        self.module._write_result=publish
+        self.assertEqual("succeeded",self.job("blender.scene.summary",{})["state"])
+
+    def test_native_heartbeat_replaces_corrupt_or_previous_process_identity(self):
+        ready=Path(self.tmp.name)/"ready"
+        for content in (b"",b"999999999",b"\xff\xfe"):
+            ready.write_bytes(content)
+            self.module._heartbeat(Path(self.tmp.name))
+            self.assertEqual(str(os.getpid()),ready.read_text())
+
+    def launch_fixture(self, **settings):
+        files = Path(self.tmp.name) / "files"
+        script = files / "blender/5.3/scripts/startup/render_agent_startup.py"
+        script.parent.mkdir(parents=True, exist_ok=True)
+        script.touch()
+        config = {"schema_version": 1, "target_package": "com.rezox.render",
+                  "command_spool_enabled": True, "mobile_mode": "landscape",
+                  "native_activity_launch_id": "12345678-1234-1234-1234-123456789abc"}
+        config.update(settings)
+        (files / "render_native_launch.json").write_text(json.dumps(config))
+        return files, script
+
+    def test_native_bridge_without_environment_uses_private_launch_handoff(self):
+        files, script = self.launch_fixture()
+        root, mode = self.module._launch_settings({}, script)
+        self.assertEqual(str(files / "render_bpy_jobs"), root)
+        self.assertEqual("landscape", mode)
+        self.assertFalse((files / "render_bpy_jobs/ready").exists())
+    def test_handoff_must_bind_readiness_to_a_real_launch_identity(self):
+        for ident in ('', 'invalid', 'a'*35):
+            _,script=self.launch_fixture(native_activity_launch_id=ident)
+            with self.assertRaisesRegex(ValueError,'INVALID_NATIVE_LAUNCH_ID'):
+                self.module._launch_settings({},script)
+
+    def test_native_thumbnail_cache_uses_writable_android_cache_without_changing_home(self):
+        files, script = self.launch_fixture()
+        env = {"HOME": "/data"}
+        cache = self.module._native_cache_settings(env, script, str(files / "render_bpy_jobs"))
+        self.assertEqual(str(files.parent / "cache/blender"), cache)
+        self.assertTrue(Path(cache).is_dir());self.assertEqual("/data",env["HOME"])
+        self.assertEqual(cache,env["XDG_CACHE_HOME"])
+        explicit={"XDG_CACHE_HOME":"/owner/explicit/cache"}
+        self.assertEqual(explicit["XDG_CACHE_HOME"],self.module._native_cache_settings(explicit,script,str(files / "render_bpy_jobs")))
+
+    def test_native_cache_rejects_symlinks_and_does_not_configure_host_checkout(self):
+        files, script = self.launch_fixture()
+        (files.parent / "cache").symlink_to(files, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError,"NATIVE_CACHE_SYMLINK"):
+            self.module._native_cache_settings({},script,str(files / "render_bpy_jobs"))
+        env={}
+        self.assertIsNone(self.module._native_cache_settings(env,MODULE,self.tmp.name))
+        self.assertEqual({},env)
+
+    def test_private_handoff_replaces_stale_environment_without_accepting_paths(self):
+        files, script = self.launch_fixture(spool="/some/foreign/path")
+        root, mode = self.module._launch_settings({"RENDER_AGENT_SPOOL": "/stale"}, script)
+        self.assertEqual(str(files / "render_bpy_jobs"), root)
+
+    def test_native_launch_rejects_wrong_package_and_bad_schema(self):
+        for values in ({"target_package": "other.app"}, {"schema_version": 2},
+                       {"command_spool_enabled": False}, {"mobile_mode": "invalid"}):
+            with self.subTest(values=values):
+                _, script = self.launch_fixture(**values)
+                with self.assertRaisesRegex(ValueError, "INVALID_NATIVE_LAUNCH_CONFIGURATION"):
+                    self.module._launch_settings({}, script)
+
+    def test_native_launch_rejects_spool_symlink(self):
+        files, script = self.launch_fixture()
+        (files / "render_bpy_jobs").symlink_to(Path(self.tmp.name), target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, "NATIVE_LAUNCH_SPOOL_SYMLINK"):
+            self.module._launch_settings({}, script)
+
+    def test_no_private_handoff_does_not_enable_host_command_executor(self):
+        self.assertEqual(("", ""), self.module._launch_settings({}, MODULE))
+
     def test_native_bpy_cube_operation_and_postcondition(self):
         report = self.job("blender.object.add_cube",
                           {"name":"HeroCube", "size":2.0, "location":[3,1,5]})
@@ -92,6 +178,28 @@ class BlenderBridgeTests(unittest.TestCase):
         self.assertEqual("failed", report["state"])
         self.assertEqual("NATIVE_BLENDER_ACTION_UNAVAILABLE", report["error"])
         self.assertEqual(1, len(self.objects))
+
+    def test_blender_hud_completion_follows_durable_native_result(self):
+        events=[]
+        self.module._native_ui_event=lambda method,value:events.append((method,value))
+        report=self.job("blender.object.add_cube",{"name":"HudCube"})
+        self.assertEqual("succeeded",report["state"])
+        self.assertEqual(["command_started","command_finished"],[method for method,value in events])
+        result_path=Path(self.tmp.name)/"results"/(self.request_id+".json")
+        self.assertTrue(result_path.is_file())
+        self.assertEqual(report,events[-1][1])
+
+    def test_unwritten_native_result_cannot_confirm_blender_arrow(self):
+        events=[]
+        self.module._native_ui_event=lambda method,value:events.append((method,value))
+        def no_write(*args):raise OSError("test unavailable disk")
+        self.module._write_result=no_write
+        pending=Path(self.tmp.name)/"pending";pending.mkdir()
+        (pending/(self.request_id+".json")).write_text(json.dumps(dict(
+            id=self.request_id,action="blender.object.add_cube",args={"name":"Unconfirmed"},deadline=time.time()+60)))
+        self.module._poll()
+        self.assertEqual("recovery_required",events[-1][1]["state"])
+        self.assertTrue((Path(self.tmp.name)/"working"/(self.request_id+".json")).is_file())
 
     def test_expired_mutation_never_executes(self):
         report = self.job("blender.object.add_cube", {"name":"TooLate"}, time.time()-5)
