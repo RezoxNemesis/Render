@@ -1,0 +1,73 @@
+name: Render Reference and Motion Native Verification
+on:
+  pull_request:
+    branches: [upgrade/render-studio-033-output-integrity-20261024]
+    paths:
+      - "full-app/scripts/**"
+      - "tools/**"
+      - "app/**"
+      - ".github/workflows/render-034-reference-motion.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  host-contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Parse new runtime and reject unsafe payloads
+        run: |
+          python -m compileall -q full-app/scripts/render_reference_motion.py full-app/scripts/render_reference_motion_contract.py
+          python -m unittest tools.test_reference_motion_contract -v
+      - name: Validate packaging adapter
+        run: python3 tools/prepare_production_toolkit.py
+  real-blender:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install genuine Blender bpy, not a mocked animation library
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends blender
+          blender --version | head -3
+      - name: Key and sample true Blender armature/face/NLA animation
+        env:
+          PYTHONPATH: full-app/scripts
+          LIBGL_ALWAYS_SOFTWARE: "1"
+        run: |
+          blender -b -noaudio --python-exit-code 1 --python tools/test_real_reference_motion.py
+  android-bridge:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+      - name: SDK and NDK prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -path '*/bin/sdkmanager' -type f | sort -V | tail -1)"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" --install "platforms;android-35" "build-tools;35.0.0" "cmake;3.22.1" "ndk;27.2.12479018"
+      - name: Compile typed production bridge and execute JVM regressions
+        run: |
+          python3 tools/prepare_production_toolkit.py
+          gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: render-reference-motion-android-jvm-evidence
+          path: app/build/test-results/testDebugUnitTest/
+          if-no-files-found: ignore
