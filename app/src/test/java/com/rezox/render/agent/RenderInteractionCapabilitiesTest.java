@@ -31,6 +31,9 @@ public class RenderInteractionCapabilitiesTest {
             "operator.describe","operator.execute","screenshot.capture","project.checkpoint",
             "reference.workspace.open","reference.workspace.inspect","reference.compare.multiview","reference.fit.landmarks","reference.fit.multiview",
             "animation.clip.create","animation.clip.inspect","animation.motion.audit",
+            "studio.capabilities","studio.tool.search","studio.workspace.activate","studio.workspace.inspect",
+            "studio.view.orbit","studio.editor.open","studio.plan.submit","studio.plan.status",
+            "studio.plan.list","studio.plan.pause","studio.plan.resume","studio.plan.cancel","studio.activity",
             "render.plan","render.batch","render.status","render.encode"})assertTrue(op,available.contains(op));
         assertTrue(report.getBoolean("requires_target_id"));assertFalse(report.getBoolean("cloud_rendering"));
         assertFalse(report.getBoolean("visual_quality_verified"));
