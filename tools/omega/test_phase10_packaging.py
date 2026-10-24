@@ -21,7 +21,14 @@ class OmegaPackagingTests(unittest.TestCase):
                      "render_v25_recovery.py", "render_assets.py", "render_native_hud.py",
                      "render_production.py", "render_production_contract.py",
                      "render_production_detail.py", "render_studio_ops.py",
-                     "render_studio_contract.py", "omega_registry.py"):
+                     "render_studio_contract.py", "omega_registry.py",
+                     "render_file_contract.py", "render_file_ops.py",
+                     "render_artist_ops.py", "render_body_blockout.py",
+                     "render_character_tools.py", "render_asset_sources.py",
+                     "render_reference_motion.py", "render_reference_motion_contract.py",
+                     "render_unified_contract.py", "render_unified_queue.py",
+                     "render_unified_workspace.py", "render_unified_curves.py",
+                     "render_asset_library.py", "render_execution_settings.py"):
             (self.root / name).write_text("# test-only synthetic module\n")
         (self.root / "omega").mkdir()
         (self.root / "omega/__init__.py").write_text("# init\n")
