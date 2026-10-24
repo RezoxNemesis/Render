@@ -8,9 +8,13 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 import java.io.File;
+import java.io.IOException;
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.List;
+import java.util.Arrays;
 import static org.junit.Assert.*;
 
 @RunWith(RobolectricTestRunner.class)
@@ -21,6 +25,24 @@ public class ProductionSegmentPlanTest {
             .put("fps",fps).put("fps_base",1.0).put("bitrate",bitrate)
             .put("width",1920).put("height",1080)
             .put("frame_count",last-first+1);
+    }
+    // A lightweight box-layout fixture, deliberately NOT a claimed playable
+    // video. Android MediaMetadataRetriever checks actual encoder output.
+    private static byte[] atom(String fourcc,byte[] payload)throws Exception{
+        ByteArrayOutputStream bytes=new ByteArrayOutputStream();
+        DataOutputStream out=new DataOutputStream(bytes);
+        out.writeInt(payload.length+8);
+        out.writeBytes(fourcc);
+        out.write(payload);
+        out.flush();
+        return bytes.toByteArray();
+    }
+    private static byte[] mp4ContainerFixture()throws Exception{
+        ByteArrayOutputStream bytes=new ByteArrayOutputStream();
+        bytes.write(atom("ftyp",new byte[]{'i','s','o','m',0,0,0,0,'i','s','o','m'}));
+        bytes.write(atom("mdat",new byte[64]));
+        bytes.write(atom("moov",atom("trak",new byte[16])));
+        return bytes.toByteArray();
     }
     @Test public void tenGigabyteVideoHasExactGaplessSegments()throws Exception{
         JSONObject request=spec(101,100000,24,32000000);
@@ -65,14 +87,130 @@ public class ProductionSegmentPlanTest {
         Context c=RuntimeEnvironment.getApplication(),app=c;
         String job="7".repeat(32);
         File output=ProductionFiles.file(app,job,ProductionSegmentedEncoder.partName(job,0));
-        byte[] original="bounded encoder output bytes".getBytes(StandardCharsets.UTF_8);
+        byte[] original=mp4ContainerFixture();
         try{
             Files.write(output.toPath(),original);
-            JSONObject receipt=ProductionFiles.receipt(output,job);
-            assertNotNull(ProductionSegmentedEncoder.readVerified(app,job,receipt));
+            JSONObject receipt=ProductionFiles.receipt(output,job)
+                .put("frames",24).put("start_frame",101).put("end_frame",124);
+            ProductionSegmentPlan.Span span=new ProductionSegmentPlan.Span(101,124,0);
+            assertTrue(ProductionSegmentedEncoder.hasCompleteMp4Container(output));
+            assertNotNull(ProductionSegmentedEncoder.readVerified(app,job,receipt,span));
+            receipt.put("end_frame",125);
+            assertNull("matching bytes are not proof of the same frame range",
+                ProductionSegmentedEncoder.readVerified(app,job,receipt,span));
+            receipt.put("end_frame",124);
+            assertNull("a different part index must not adopt these frames",
+                ProductionSegmentedEncoder.readVerified(app,job,receipt,
+                    new ProductionSegmentPlan.Span(101,124,1)));
+            Files.write(output.toPath(),Arrays.copyOf(original,original.length-3));
+            assertFalse("truncated moov must not be accepted",
+                ProductionSegmentedEncoder.hasCompleteMp4Container(output));
+            assertNull(ProductionSegmentedEncoder.readVerified(app,job,receipt,span));
             Files.write(output.toPath(),"tampered bytes".getBytes(StandardCharsets.UTF_8));
-            assertNull(ProductionSegmentedEncoder.readVerified(app,job,receipt));
+            assertNull(ProductionSegmentedEncoder.readVerified(app,job,receipt,span));
         }finally{output.delete();}
+    }
+    @Test public void noTrakAndCorruptAtomSizesCannotBePublished()throws Exception{
+        Context app=RuntimeEnvironment.getApplication();
+        String job="e".repeat(32);
+        File output=ProductionFiles.file(app,job,ProductionSegmentedEncoder.partName(job,0));
+        try{
+            byte[] good=mp4ContainerFixture();
+            Files.write(output.toPath(),good);
+            assertTrue(ProductionSegmentedEncoder.hasCompleteMp4Container(output));
+            byte[] corrupted=good.clone();
+            // "moov" is the last box: a length larger than the file is invalid.
+            int moov=20+72;
+            corrupted[moov+0]=(byte)0x7f;
+            Files.write(output.toPath(),corrupted);
+            assertFalse(ProductionSegmentedEncoder.hasCompleteMp4Container(output));
+            ByteArrayOutputStream missingTrack=new ByteArrayOutputStream();
+            missingTrack.write(atom("ftyp",new byte[]{'i','s','o','m',0,0,0,0}));
+            missingTrack.write(atom("mdat",new byte[64]));
+            missingTrack.write(atom("moov",atom("free",new byte[16])));
+            Files.write(output.toPath(),missingTrack.toByteArray());
+            assertFalse(ProductionSegmentedEncoder.hasCompleteMp4Container(output));
+        }finally{output.delete();}
+    }
+    @Test public void badMonolithicVideoIsPreservedBeforeRetry()throws Exception{
+        Context app=RuntimeEnvironment.getApplication();
+        String job="b".repeat(32),filename="Production_"+job+".mp4";
+        File output=ProductionFiles.file(app,job,filename);
+        File preserved=ProductionFiles.file(app,job,
+            "Production_"+job+".unverified.mp4");
+        byte[] original="do not overwrite artist bytes".getBytes(StandardCharsets.UTF_8);
+        try{
+            Files.write(output.toPath(),original);
+            ProductionVideoEncoder.quarantineUnverifiedOutput(app,job,filename);
+            assertFalse(output.exists());
+            assertArrayEquals(original,Files.readAllBytes(preserved.toPath()));
+            Files.write(output.toPath(),"second video".getBytes(StandardCharsets.UTF_8));
+            try{
+                ProductionVideoEncoder.quarantineUnverifiedOutput(app,job,filename);
+                fail("must not overwrite existing quarantined output");
+            }catch(IllegalStateException expected){
+                assertEquals("UNVERIFIED_VIDEO_NEEDS_MANUAL_INSPECTION",
+                    expected.getMessage());
+            }
+            assertEquals("second video",new String(Files.readAllBytes(output.toPath()),
+                StandardCharsets.UTF_8));
+            assertArrayEquals(original,Files.readAllBytes(preserved.toPath()));
+        }finally{output.delete();preserved.delete();}
+    }
+    @Test public void downloadsRejectQuarantinedOrIncompleteRenderMp4()throws Exception{
+        Context app=RuntimeEnvironment.getApplication();
+        String job="c".repeat(32);
+        for(String filename:new String[]{
+            "Production_"+job+".unverified.mp4",
+            "Production_"+job+".mp4"}){
+            File output=ProductionFiles.file(app,job,filename);
+            try{
+                Files.write(output.toPath(),"bad MP4".getBytes(StandardCharsets.UTF_8));
+                JSONObject request=new JSONObject().put("category",job)
+                    .put("filename",filename)
+                    .put("expected_sha256",ProductionFiles.sha(output));
+                try{ProductionFiles.export(app,request);fail("invalid MP4 exported");}
+                catch(IOException expected){
+                    assertEquals(filename.endsWith(".unverified.mp4")?
+                        "ARTIFACT_INCOMPLETE":"VIDEO_CONTAINER_INCOMPLETE",
+                        expected.getMessage());
+                }
+            }finally{output.delete();}
+        }
+    }
+    @Test public void exportChecksPlanIndexBeforeReadingFiles()throws Exception{
+        Context c=RuntimeEnvironment.getApplication();
+        String id="a".repeat(32);
+        File manifest=ProductionFiles.file(c,id,"manifest.json");
+        JSONObject spec=spec(101,124,24,16000000);
+        JSONObject job=new JSONObject().put("spec",spec)
+            .put("encoded_segments",new JSONObject().put("1",new JSONObject()));
+        try{
+            Files.write(manifest.toPath(),job.toString().getBytes(StandardCharsets.UTF_8));
+            try{RenderManualJobs.exportSegment(c,id,1);fail();}
+            catch(IllegalArgumentException expected){
+                assertEquals("SEGMENT_OUTSIDE_RENDER_PLAN",expected.getMessage());
+            }
+        }finally{manifest.delete();}
+    }
+    @Test public void exportRejectsHashedButMislabelledPart()throws Exception{
+        Context c=RuntimeEnvironment.getApplication();
+        String id="1".repeat(32);
+        File mp4=ProductionFiles.file(c,id,ProductionSegmentedEncoder.partName(id,0));
+        File manifest=ProductionFiles.file(c,id,"manifest.json");
+        try{
+            Files.write(mp4.toPath(),mp4ContainerFixture());
+            JSONObject receipt=ProductionFiles.receipt(mp4,id)
+                .put("frames",24).put("start_frame",101).put("end_frame",125);
+            JSONObject data=new JSONObject().put("spec",spec(101,124,24,16000000))
+                .put("encoded_segments",new JSONObject().put("0",receipt));
+            Files.write(manifest.toPath(),data.toString().getBytes(StandardCharsets.UTF_8));
+            assertNotNull(ProductionSegmentedEncoder.readVerified(c,id,receipt));
+            try{RenderManualJobs.exportSegment(c,id,0);fail();}
+            catch(IllegalStateException expected){
+                assertEquals("VIDEO_PART_CHECKSUM_MISMATCH",expected.getMessage());
+            }
+        }finally{manifest.delete();mp4.delete();}
     }
     @Test public void unsupportedFrameRatesAreRejectedExplicitly()throws Exception{
         JSONObject request=spec(1,1000,24,32000000).put("fps_base",100);

@@ -34,6 +34,21 @@ public final class ProductionVideoEncoder {
         try(FileOutputStream out=new FileOutputStream(tmp)){out.write(data.toString().getBytes(StandardCharsets.UTF_8));out.getFD().sync();}
         Files.move(tmp.toPath(),file.toPath(),StandardCopyOption.REPLACE_EXISTING,StandardCopyOption.ATOMIC_MOVE);
     }
+    /** Preserve an invalid previous output, rather than blocking every
+     * subsequent recovery or deleting the artist's original bytes. */
+    static void quarantineUnverifiedOutput(Context context,String jobId,String filename)throws Exception{
+        if(filename==null||!filename.endsWith(".mp4"))
+            throw new IllegalArgumentException("INVALID_VIDEO_NAME");
+        File output=ProductionFiles.file(context,jobId,filename);
+        if(!output.exists())return;
+        if(!output.isFile())throw new IllegalStateException("VIDEO_OUTPUT_CONFLICT");
+        File preserved=ProductionFiles.file(context,jobId,
+            filename.substring(0,filename.length()-4)+".unverified.mp4");
+        if(preserved.exists())throw new IllegalStateException(
+            "UNVERIFIED_VIDEO_NEEDS_MANUAL_INSPECTION");
+        Files.move(output.toPath(),preserved.toPath(),StandardCopyOption.ATOMIC_MOVE);
+    }
+
     /** MP4 sample timestamps use Blender fps/fps_base, not rounded fps.
      * MediaCodec KEY_FRAME_RATE is only a rate-control hint; muxed PTS
      * determines actual display timing, which still needs a device test. */
@@ -98,10 +113,23 @@ public final class ProductionVideoEncoder {
         String filename=targetName==null?"Production_"+jobId+".mp4":targetName;
         File output=ProductionFiles.file(context,jobId,filename);
         JSONObject prior=manifest.optJSONObject("video");
+        // Hash equality alone is insufficient after a crash: require an
+        // intact MP4 container and an exact receipt for the frozen frame span.
         if(finalizeJob&&"encoded".equals(manifest.optString("state"))&&prior!=null&&
-           output.isFile()&&ProductionFiles.sha(output).equals(prior.optString("sha256")))
+           output.isFile()&&prior.optInt("frames",-1)==count&&
+           prior.optInt("start_frame",-1)==rangeStart&&
+           prior.optInt("end_frame",-1)==rangeEnd&&
+           filename.equals(prior.optString("filename"))&&
+           ProductionSegmentedEncoder.hasCompleteMp4Container(output)&&
+           ProductionFiles.sha(output).equals(prior.optString("sha256")))
             return prior;
-        if(output.exists())throw new IllegalStateException("VIDEO_OUTPUT_CONFLICT");
+        if(output.exists()){
+            // Exact prior result failed integrity/revision checks. Keep it
+            // under a non-exportable name, then regenerate from PNG masters.
+            if(finalizeJob&&"encoded".equals(manifest.optString("state"))&&prior!=null)
+                quarantineUnverifiedOutput(context,jobId,filename);
+            else throw new IllegalStateException("VIDEO_OUTPUT_CONFLICT");
+        }
         MediaFormat format=MediaFormat.createVideoFormat("video/avc",width,height);
         format.setInteger(MediaFormat.KEY_BIT_RATE,bitrate);
         // Integer codec rate is a configuration hint. Fractional cadence is
@@ -170,13 +198,16 @@ public final class ProductionVideoEncoder {
                 verify.setDataSource(partial.getAbsolutePath());
                 if(Integer.parseInt(verify.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH))!=width||Integer.parseInt(verify.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT))!=height)throw new IllegalStateException("VIDEO_DIMENSIONS_MISMATCH");
             }finally{verify.release();}
-            if(partial.length()<512)throw new IllegalStateException("VIDEO_OUTPUT_INCOMPLETE");
+            if(partial.length()<512||
+               !ProductionSegmentedEncoder.hasCompleteMp4Container(partial))
+                throw new IllegalStateException("VIDEO_CONTAINER_INCOMPLETE");
             Files.move(partial.toPath(),output.toPath(),StandardCopyOption.ATOMIC_MOVE);
             JSONObject result=ProductionFiles.receipt(output,jobId).put("mime_type","video/mp4").put("frames",count).put("fps",fps).put("width",width).put("height",height).put("bitrate",bitrate)
                 .put("fps_base",fpsBase).put("requested_effective_fps",requestedFps)
                 .put("device_fractional_fps_verified",false)
                 .put("encoder",codecName).put("executed_by","Android MediaCodec from native Blender PNG masters")
                 .put("png_masters_retained",true).put("resolution_reduced",false)
+                .put("mp4_container_verified",true)
                 .put("start_frame",rangeStart).put("end_frame",rangeEnd);
             if(finalizeJob){
                 manifest.put("video",result).put("state","encoded");

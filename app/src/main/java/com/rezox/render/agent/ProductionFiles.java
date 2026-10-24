@@ -101,8 +101,17 @@ public final class ProductionFiles {
         ProductionBridge.fields(p,"category,filename,expected_sha256");
         String category=p.getString("category");
         File source=file(context,category,p.getString("filename"));
-        if(!source.isFile()||source.getName().contains("partial")||source.getName().endsWith(".tmp"))
+        if(!source.isFile()||source.getName().contains("partial")||
+            source.getName().endsWith(".tmp")||
+            source.getName().endsWith(".unverified.mp4"))
             throw new IOException("ARTIFACT_INCOMPLETE");
+        // Check the complete native output itself before publishing it in
+        // Downloads; a matching caller-provided hash alone cannot prove MP4.
+        if(category.matches("[a-f0-9]{32}")&&
+            source.getName().matches("Production_"+category+
+                "(?:_part_[0-9]{5})?\\.mp4")&&
+            !ProductionSegmentedEncoder.hasCompleteMp4Container(source))
+            throw new IOException("VIDEO_CONTAINER_INCOMPLETE");
         String expected=p.getString("expected_sha256");
         if(!expected.matches("[a-f0-9]{64}")||!sha(source).equals(expected))
             throw new IOException("ARTIFACT_REVISION_CONFLICT");

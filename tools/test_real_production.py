@@ -67,7 +67,8 @@ with tempfile.TemporaryDirectory() as tmp:
         if hasattr(layer,'cycles') and hasattr(layer.cycles,'use_denoising'):layer.cycles.use_denoising=False
     checkpoint=run('project.checkpoint',{'name':'ProductionFixture'})
     assert checkpoint['bytes']>256
-    projects=run('project.list',{});assert projects['total']==1
+    projects=run('project.list',{})
+    assert any(item['filename']==checkpoint['filename'] for item in projects['projects']),projects
     page=run('scene.inspect',{'limit':1});assert len(page['objects'])==1 and page['next_offset']==1
     original=bpy.context.scene;original_frame=original.frame_current;seen=[]
     def record(scene,*unused):seen.append((scene.frame_current,scene.name))
