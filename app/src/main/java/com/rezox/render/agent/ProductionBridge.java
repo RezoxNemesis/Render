@@ -24,7 +24,11 @@ public final class ProductionBridge {
         "world.configure","instances.plan","instances.create","reference.attach",
         "reference.list","reference.metadata","reference.video_frame","reference.pick","ui.state","connection.diagnose","reference.bind","reference.landmarks",
         "reference.workspace.open","reference.workspace.inspect","reference.compare.multiview","reference.fit.landmarks","reference.fit.multiview",
-        "animation.clip.create","animation.clip.inspect","animation.motion.audit","viewport.inspect","viewport.configure","viewport.focus","object.geometry","operator.describe","operator.execute","render.plan","render.step","render.batch","render.status","render.encode","drive.status","drive.backup",
+        "animation.clip.create","animation.clip.inspect","animation.motion.audit",
+        "studio.capabilities","studio.tool.search","studio.workspace.activate","studio.workspace.inspect",
+        "studio.view.orbit","studio.editor.open","studio.curve.inspect","studio.curve.adjust","studio.plan.submit","studio.plan.status",
+        "studio.plan.list","studio.plan.pause","studio.plan.resume","studio.plan.cancel","studio.activity",
+        "viewport.inspect","viewport.configure","viewport.focus","object.geometry","operator.describe","operator.execute","render.plan","render.step","render.batch","render.status","render.encode","drive.status","drive.backup",
         "render.storage.status","render.job.start","render.job.status","render.job.pause",
         "render.job.export","render.job.export_segment","project.checkpoint_export","native.command.status",
         "asset.search","asset.details","asset.preview","asset.download","asset.download.status","asset.download.pause","asset.import",
@@ -39,6 +43,7 @@ public final class ProductionBridge {
     static boolean outOfBand(JSONObject args){
         return StorageOperations.supports(args.optString("operation"))||Arrays.asList("ipc.command.status","ipc.command.cancel","native.command.status",
             "render.job.status","render.job.pause","render.job.cancel","render.queue.status",
+            "studio.plan.status","studio.plan.list",
             "device.profile","capabilities","connection.diagnose").contains(args.optString("operation"));
     }
     public static void fields(JSONObject p,String allowed)throws Exception {
@@ -116,6 +121,10 @@ public final class ProductionBridge {
                 .put("omega_capabilities_operation","omega.integration.capabilities");
         }
         if(operation.equals("device.profile")){fields(p,"");return profile(context);}
+        // Authenticated read-only plan receipts bypass the busy bpy engine.
+        // Only the native timer may execute/modify work; no forced resume.
+        if(operation.equals("studio.plan.status"))return NativeStudioPlanStatus.status(context,p);
+        if(operation.equals("studio.plan.list"))return NativeStudioPlanStatus.list(context,p);
         if(StorageOperations.supports(operation))return StorageOperations.execute(context,operation,p);
         if(operation.startsWith("render.scheduling."))return RenderScheduling.execute(context,p,operation.endsWith("configure"));
         if(operation.equals("native.command.status"))return BlenderSpool.inspect(context,p);

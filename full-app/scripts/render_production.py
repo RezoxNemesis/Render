@@ -346,6 +346,14 @@ def execute(args, spool, command_id):
     operation,p=C.validate_envelope(args);root=_root(spool)
     scene=bpy.context.scene
     if scene is None:raise RuntimeError('NO_ACTIVE_SCENE')
+    if operation.startswith('studio.'):
+        # Direct curve edits receive the same atomic native BLEND checkpoint
+        # as queued edits; no action can mutate another scene without review.
+        if operation=='studio.curve.adjust':
+            import render_artist_ops
+            render_artist_ops.checkpoint(scene,root,operation)
+        import render_unified_workspace
+        return render_unified_workspace.execute(operation,p,root,scene)
     if operation in ('file.importers','file.inspect','file.import'):
         import render_file_ops
         return render_file_ops.execute(operation,scene,root,p)

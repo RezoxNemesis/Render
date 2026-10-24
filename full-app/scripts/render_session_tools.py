@@ -528,6 +528,13 @@ def install():
             importlib.import_module(optional).install()
         except Exception as error:
             print("Render optional panel unavailable:", optional, type(error).__name__, flush=True)
+    # Unified mobile-friendly Blender sections are optional, never required
+    # for native saving, rendering, session restore or the original editor.
+    try:
+        import render_unified_workspace
+        render_unified_workspace.install_ui()
+    except Exception as error:
+        print("Render unified Blender tabs unavailable:",type(error).__name__,flush=True)
     import render_v25_recovery
     render_v25_recovery.install()
     try:

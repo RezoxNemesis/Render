@@ -28,8 +28,15 @@ _NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]{0,63}$")
 
 def command_started(command):
     global _event, _pointer
-    action = command.get("args", {}).get("operation", command.get("action", "Native action"))
-    _event = {"state": "running", "action": str(action)[:80], "object": None, "at": time.monotonic()}
+    args=command.get("args", {})
+    action=args.get("operation",command.get("action","Native action"))
+    payload=args.get("payload",{}) if isinstance(args.get("payload",{}),dict) else {}
+    name=payload.get("object",payload.get("rig"))
+    # Real Blender target projection, not a fake mouse cursor or sculpt stroke.
+    if not isinstance(name,str) or not _NAME.fullmatch(name) or bpy.data.objects.get(name) is None:
+        name=None
+    _event={"state":"running","action":str(action)[:80],
+            "object":name,"at":time.monotonic()}
     _pointer = None
 
 
@@ -116,7 +123,8 @@ def model():
             "stage": status.get("stage", "Native command received" if status["state"] == "running" else status["state"]),
             "fraction": fraction, "progress_label": progress["label"] if progress else
                 f"{percent}% native reported progress" if fraction is not None else "Waiting for native progress",
-            "object": _event["object"] if recent and _event["state"] == "succeeded" else None}
+            "object": _event["object"] if (_event["state"]=="running" or
+                (recent and _event["state"]=="succeeded")) else None}
 
 
 def draw_card(value, width, height, rectangle, text, hand, inset_left=0, inset_right=0):
@@ -196,7 +204,8 @@ def _draw():
             if point is not None:
                 x,y=point
                 shape([(x,y),(x+8,y-24),(x+13,y-13),(x,y),(x+13,y-13),(x+24,y-8)],(0.95,0.98,1,1))
-                text(min(x+25,region.width-140),max(12,y-24),"Edited: "+value["object"][:18],11)
+                label="Target: " if value.get("state")=="running" else "Edited: "
+                text(min(x+25,region.width-140),max(12,y-24),label+value["object"][:18],11)
                 _pointer={"object":value["object"],"x":x,"y":y,"region_width":region.width,"region_height":region.height}
                 _pointer_at=time.monotonic()
         finally:
@@ -231,7 +240,7 @@ def snapshot():
             "last_viewport_draw_age_ms": round((time.monotonic()-_last_draw_at)*1000) if _last_draw_at > 0 else None,
             "last_draw_error": _draw_error,
             "pointer": _pointer if time.monotonic()-_pointer_at < 1 else None,
-            "pointer_source": "completed_native_object_projection",
+            "pointer_source": "actual_native_target_projection_not_touch_input",
             "pointer_is_ui_input": False, "fabricated_ui_taps": False,
             "in_frame_sample_progress_available": False}
 
