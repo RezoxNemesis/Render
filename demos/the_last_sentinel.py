@@ -32,9 +32,7 @@ scene.render.resolution_y = 720
 scene.render.resolution_percentage = 75 if PREVIEW else 100
 scene.render.image_settings.file_format = "PNG"
 scene.render.film_transparent = False
-scene.render.engine = "BLENDER_EEVEE" if "BLENDER_EEVEE" in [
-    k.identifier for k in scene.bl_rna.properties["render"].fixed_type.properties["engine"].enum_items
-] else "BLENDER_EEVEE"
+scene.render.engine = "BLENDER_EEVEE"
 if hasattr(scene, "eevee"):
     scene.eevee.taa_render_samples = RENDER_SAMPLES
     if hasattr(scene.eevee, "use_gtao"):
