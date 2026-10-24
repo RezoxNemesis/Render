@@ -36,6 +36,24 @@ class ReferenceMotionContracts(unittest.TestCase):
             C.multiview({"object":"Figure","views":[dict(one,model={"eye":1})]})
         with self.assertRaises(ValueError):
             C.multiview({"object":"Figure","views":[dict(one,camera="../outside")]})
+    def test_landmark_fit_requires_vertex_revision_and_safe_strength(self):
+        valid={"object":"Body","camera":"Front","expected_vertices":100,
+               "reference":{"left":[.2,.3],"right":[.8,.3]},
+               "model":{"left":10,"right":11},
+               "strength":.7,"max_displacement":.12,"dry_run":True}
+        self.assertEqual(C.fit(valid)["expected_vertices"],100)
+        invalid=[
+            dict(valid,strength=1.5),
+            dict(valid,max_displacement=100),
+            dict(valid,model={"left":10,"right":10}),
+            dict(valid,expected_vertices=11),
+            dict(valid,reference={"left":[0,0]}),
+            dict(valid,dry_run="True"),
+        ]
+        for test in invalid:
+            with self.subTest(bad=test):
+                with self.assertRaises(ValueError):C.fit(test)
+
     def test_real_clip_channels_bounded_and_non_overlapping(self):
         clip={"rig":"BodyRig","name":"LookAndBlink","interpolation":"BEZIER","nla":True,
             "poses":[
