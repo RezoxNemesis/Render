@@ -22,12 +22,17 @@ metal base, lighting, keyframes and explicitly selected preview jobs through
 Render's native operations. The build workflow emits a matching signed test APK;
 a differently signed local runner was correctly rejected by Android.
 
-Validation completed before the candidate build: Android foundation compilation
-and seven focused native-assembly checks. Native modelling/rendering acceptance
-remains pending until actual native receipts and output files are obtained.
+Validation: Android foundation/full-native compilation, seven focused native
+assembly checks, and two targeted Robolectric checks for the UI-thread guard,
+retained failure log and preserved output-directory override. The OS environment
+calls use an explicit host-test shadow. These checks do not establish native
+modelling/rendering success; that requires actual receipts and output files.
 
 The first software-emulator attempt reached Blender's Vulkan device checks.
 SwiftShader lacks the geometry-shader feature required by the bundled engine;
-the native engine then crashed. A Lavapipe emulator attempt follows. These
+the native engine then crashed. Lavapipe passed the geometry-feature check and
+reached native Python, a timer heartbeat and the Blender Quick Setup UI. The
+emulator later aborted in Mesa's software-GPU memory mapping; a recovery attempt
+uses fewer software-GPU workers. No model or animation output is claimed. These
 workspace results do not establish realme compatibility, performance, thermal
 behavior or uninterrupted 24-hour execution. No owner phone was used.
