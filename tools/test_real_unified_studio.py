@@ -65,6 +65,27 @@ with tempfile.TemporaryDirectory() as d:
     scene.frame_set(20)
     x2=float(actual.location.x)
     assert abs(x2-x1)>.9,(x1,x2)
+    # Edit an actual Graph Editor F-Curve, not a visual transform preview.
+    action=actual.animation_data.action
+    info=Studio.execute("studio.curve.inspect",{"action":action.name},root,scene)
+    curve=next(c for c in info["curves"]
+               if c["data_path"]=="location" and c["array_index"]==0)
+    token=curve["revision_sha256"]
+    updated=Studio.execute("studio.curve.adjust",{
+        "action":action.name,"data_path":"location","array_index":0,
+        "key_frame":20,"expected_sha256":token,
+        "new_value":1.35,"interpolation":"LINEAR"},root,scene)
+    assert updated["actual_blender_fcurve_updated"] and updated["new_revision"]!=token
+    scene.frame_set(20)
+    assert abs(actual.location.x-1.35)<.001,actual.location
+    try:
+        Studio.execute("studio.curve.adjust",{
+            "action":action.name,"data_path":"location","array_index":0,
+            "key_frame":20,"expected_sha256":token,
+            "new_value":12},root,scene)
+        raise AssertionError("Stale revisions must not overwrite current curves")
+    except ValueError as exc:
+        assert "STUDIO_CURVE_REVISION_CONFLICT" in str(exc)
     assert before==(scene.render.engine,scene.render.fps,
                     scene.render.resolution_x,scene.render.resolution_y)
     assert (root/"StudioPlans"/(plan_id+".json")).is_file()
