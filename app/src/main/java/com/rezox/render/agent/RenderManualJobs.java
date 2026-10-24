@@ -329,8 +329,10 @@ public final class RenderManualJobs {
         JSONObject receipts=manifest.optJSONObject("encoded_segments");
         if(receipts==null||!receipts.has(Integer.toString(index)))
             throw new IllegalStateException("VIDEO_PART_NOT_YET_ENCODED");
+        java.util.List<ProductionSegmentPlan.Span> plan=ProductionSegmentPlan.plan(manifest.getJSONObject("spec"));
+        if(index>=plan.size())throw new IllegalArgumentException("SEGMENT_OUTSIDE_RENDER_PLAN");
         JSONObject part=ProductionSegmentedEncoder.readVerified(context,job,
-            receipts.getJSONObject(Integer.toString(index)));
+            receipts.getJSONObject(Integer.toString(index)),plan.get(index));
         if(part==null)throw new IllegalStateException("VIDEO_PART_CHECKSUM_MISMATCH");
         JSONObject exported=ProductionFiles.export(context,new JSONObject()
             .put("category",job).put("filename",part.getString("filename"))
