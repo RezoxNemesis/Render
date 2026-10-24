@@ -75,9 +75,14 @@ public final class RenderManualJobs {
         SharedPreferences p=preferences(c);
         JSONObject data=new JSONObject();
         try{
+            String cached=p.getString("state","idle");
+            boolean active=ACTIVE.get();
+            boolean interrupted=!active&&Arrays.asList("running","rendering","encoding","preparing","starting","cooling").contains(cached);
             return data.put("job_id",p.getString("job_id",""))
-                .put("state",ACTIVE.get()?"running":p.getString("state","idle"))
-                .put("detail",p.getString("detail",""))
+                .put("state",active?"running":interrupted?"interrupted":cached)
+                .put("detail",interrupted?"Previous render worker interrupted; inspect the exact native command result before resuming":p.getString("detail",""))
+                .put("cached_worker_state",cached).put("manual_worker_active",active)
+                .put("recovery_required",interrupted)
                 .put("completed",p.getInt("completed",0))
                 .put("total",p.getInt("total",0))
                 .put("updated",p.getLong("updated",0L))

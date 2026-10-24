@@ -127,8 +127,36 @@ public final class FileTransfers {
             for(String key:new String[]{"transfer_id","request_id","kind","state","bytes_transferred","total_bytes","started_at_ms",
                     "updated_at_ms","error_code","error_type","result","requires_explicit_resume","resume_mode","requires_owner_open","android_restriction"})
                 if(row.has(key))reply.put(key,row.get(key));
+            if(reply.has("error_code")){
+                String code=reply.getString("error_code");
+                if(code.equals("STORAGE_TRANSFER_FAILED"))code=errorCode(reply.optString("error_type"),null);
+                reply.put("error_code",code).put("error_hint",errorHint(code));
+            }
             return reply.put("native_editor_required",false).put("execution_after_force_stop_promised",false);
         }
+    }
+    static String errorCode(String type,String message){
+        if(message!=null&&message.matches("[A-Z][A-Z0-9_]{2,100}"))return message;
+        switch(type){
+            case "SSLHandshakeException":return "TLS_HANDSHAKE_OR_TRUST_FAILED";
+            case "SSLPeerUnverifiedException":return "TLS_PEER_VERIFICATION_FAILED";
+            case "SSLException":return "TLS_CONNECTION_FAILED";
+            case "ConnectException":return "NETWORK_CONNECTION_FAILED_CHECK_CONNECTION_OR_PROXY";
+            case "UnknownHostException":return "NETWORK_DNS_UNAVAILABLE";
+            case "SocketTimeoutException":return "NETWORK_TRANSFER_TIMEOUT";
+            case "SecurityException":return "STORAGE_PERMISSION_MISSING_OR_REVOKED";
+            case "FileNotFoundException":return "SOURCE_OR_DESTINATION_DOCUMENT_UNAVAILABLE";
+            default:return "STORAGE_TRANSFER_FAILED";
+        }
+    }
+    static String errorHint(String code){
+        if(code.startsWith("TLS_"))return "Android could not complete verified TLS. Check device date, network certificate trust and proxy configuration, or use the Android document provider. Certificate checks remain enabled; originals are retained.";
+        if(code.startsWith("NETWORK_"))return "Check the device connection, DNS and any required network proxy. Inspect this exact transfer, refresh an expired file reference if needed, then explicitly Resume.";
+        if(code.equals("SOURCE_URL_EXPIRED_OR_UNAUTHORIZED"))return "Obtain a fresh authorized original-file URL. Use storage.task.refresh on this transfer, keeping its expected size and SHA-256, then Resume.";
+        if(code.startsWith("DESTINATION_"))return "The destination conflicts with this copy or changed after interruption. Preserve that artist file and choose a new destination name/request.";
+        if(code.contains("PERMISSION")||code.contains("GRANT"))return "Reopen Render and select the folder or file in Android's system picker. Import needs read access; export and folder creation need write access.";
+        if(code.contains("SHA256")||code.contains("SOURCE_CHANGED"))return "No verified native import was completed by this transfer. Check the source and digest; use a new request ID for changed or corrupt source bytes. Originals remain intact.";
+        return "Original projects are retained. Inspect this exact transfer and resolve its reported file, format or storage limit before an explicit Resume; do not replay an uncertain Blender edit.";
     }
     public static JSONObject list(Context c)throws Exception{
         JSONArray rows=new JSONArray();File[] files=folder(c).listFiles((d,n)->n.matches("[a-f0-9]{32}\\.json"));
@@ -354,7 +382,7 @@ public final class FileTransfers {
             synchronized(LOCK){
                 row=load(c,id);String message=error.getMessage();
                 row.put("state","failed").put("error_type",error.getClass().getSimpleName())
-                    .put("error_code",message!=null&&message.matches("[A-Z][A-Z0-9_]{2,100}")?message:"STORAGE_TRANSFER_FAILED")
+                    .put("error_code",errorCode(error.getClass().getSimpleName(),message)).put("updated_at_ms",System.currentTimeMillis())
                     .put("requires_explicit_resume",true);save(c,row);
             }
         }finally{ACTIVE.remove(id);CONTROL.remove(id);}

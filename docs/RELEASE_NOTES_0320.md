@@ -1,7 +1,7 @@
-# Render Studio 0.32.0 — native storage and assets
+# Render Studio 0.32.1 — native storage and assets
 
-Package `com.rezox.render`, version code **40**, version name
-`0.32.0-native-storage-assets`. Retains 0.31.3 and the previously committed
+Package `com.rezox.render`, version code **41**, version name
+`0.32.1-native-storage-assets`. Retains 0.31.3 and the previously committed
 native engine, startup recovery, render profiles, durable render queue, thermal
 policy, checkpoints, VideoStudio Binder connection and artist controls.
 
@@ -38,6 +38,12 @@ policy, checkpoints, VideoStudio Binder connection and artist controls.
 - Adds `asset.providers`, AmbientCG HDRI import and honest category filtering
   when an upstream model query returns unrelated materials. Poly Haven and
   AmbientCG remain finite sources with source/license/format/size metadata.
+- Maps TLS, connection, DNS, timeouts and revoked storage grants to actionable
+  transfer errors without exposing signed URLs. Retained 0.32.0 failures also
+  receive these hints when inspected; no automatic retries or TLS bypass.
+- Marks cached in-flight render-worker states as interrupted when that worker
+  no longer exists, retaining saved frame counts and requiring exact native
+  receipt inspection. A stale saved label cannot keep claiming live rendering.
 - Connection diagnosis now explicitly distinguishes local dispatch from a
   verified end-to-end Binder authentication check.
 

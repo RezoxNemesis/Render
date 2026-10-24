@@ -77,7 +77,7 @@ jobs:
           grep -Fqi 'f3d63fb20be25ca0be8aa6a161d5cf13cd98ba2fa300c7a604cce35131b9eb30' "$RUNNER_TEMP/render-instrumentation-signature.txt"
       - uses: actions/upload-artifact@v4
         with:
-          name: Render-0.32.0-native-workspace-instrumentation
+          name: Render-0.32.1-native-workspace-instrumentation
           path: |
             full-app/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
             ${{ runner.temp }}/render-instrumentation-signature.txt
@@ -93,7 +93,7 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee "$RUNNER_TEMP/render-production-signature.txt"
           grep -Fqi 'f3d63fb20be25ca0be8aa6a161d5cf13cd98ba2fa300c7a604cce35131b9eb30' "$RUNNER_TEMP/render-production-signature.txt"
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | tee "$RUNNER_TEMP/render-production-badging.txt"
-          grep -Fq "versionCode='40'" "$RUNNER_TEMP/render-production-badging.txt"
+          grep -Fq "versionCode='41'" "$RUNNER_TEMP/render-production-badging.txt"
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump xmltree "$APK" AndroidManifest.xml | tee "$RUNNER_TEMP/render-long-service-manifest.txt"
           grep -Fq "RenderLongForegroundService" "$RUNNER_TEMP/render-long-service-manifest.txt"
           grep -Fq "FOREGROUND_SERVICE_MEDIA_PROCESSING" "$RUNNER_TEMP/render-long-service-manifest.txt"
@@ -115,21 +115,21 @@ jobs:
                       assert 'scripts/startup/omega/'+name in z.namelist(), name
           print('PASS: production runtime packaged with native Blender')
           PY
-          cp "$APK" "$RUNNER_TEMP/Render-0.32.0-historical-signer-candidate.apk"
-          sha256sum "$RUNNER_TEMP/Render-0.32.0-historical-signer-candidate.apk" > "$RUNNER_TEMP/render-production-sha256.txt"
+          cp "$APK" "$RUNNER_TEMP/Render-0.32.1-historical-signer-candidate.apk"
+          sha256sum "$RUNNER_TEMP/Render-0.32.1-historical-signer-candidate.apk" > "$RUNNER_TEMP/render-production-sha256.txt"
       - uses: actions/upload-artifact@v4
         with:
-          name: Render-0.32.0-HISTORICAL-SIGNER-NATIVE-CANDIDATE
-          path: ${{ runner.temp }}/Render-0.32.0-historical-signer-candidate.apk
+          name: Render-0.32.1-HISTORICAL-SIGNER-NATIVE-CANDIDATE
+          path: ${{ runner.temp }}/Render-0.32.1-historical-signer-candidate.apk
           compression-level: 0
           retention-days: 7
           if-no-files-found: error
       - name: Record release boundary
-        run: echo 'Render 0.32.0 original-package APK uses the pinned historical development signer with versionCode 40; any actual install still requires matching the device-installed signature, sufficient free disk and owner approval. Never uninstall or clear original app data. Permanent release key remains protected.' >> "$GITHUB_STEP_SUMMARY"
+        run: echo 'Render 0.32.1 original-package APK uses the pinned historical development signer with versionCode 41; any actual install still requires matching the device-installed signature, sufficient free disk and owner approval. Never uninstall or clear original app data. Permanent release key remains protected.' >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: Render-0.32.0-build-and-signature-proof
+          name: Render-0.32.1-build-and-signature-proof
           path: |
             ${{ runner.temp }}/render-production-signature.txt
             ${{ runner.temp }}/render-production-badging.txt

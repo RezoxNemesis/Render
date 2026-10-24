@@ -16,7 +16,7 @@ including the existing VideoStudio native Binder connection. The `app/` project
 also supplies the JNI bridge and project inspector; building only that module
 emits the smaller foundation APK, not the full editor.
 
-The 0.32.0 candidate retains the native-control, durable rendering and character
+The 0.32.1 candidate retains the native-control, durable rendering and character
 review improvements. It adds artist-granted folders, durable original-file
 transfers, dependency bundles and discoverable native model/media import through
 the existing VideoStudio connection. See [release notes](docs/RELEASE_NOTES_0320.md),
