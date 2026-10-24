@@ -305,7 +305,7 @@ def _fit_multiview(scene,p):
         for label,vertex in view["model"].items():
             old_world=obj.matrix_world @ obj.data.vertices[vertex].co
             target=Vector(view["reference"][label])
-            def projection(world):
+            def projection(world,camera=camera):
                 ndc=world_to_camera_view(scene,camera,world)
                 if ndc.z<=0:
                     raise ValueError("FIT_MULTIVIEW_POINT_BEHIND_CAMERA")
