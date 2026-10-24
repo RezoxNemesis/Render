@@ -226,20 +226,26 @@ def _step_end(pid,index,operation,state,result):
 
 def _tick():
     global _LAST_TIMER_ERROR
+    result={"executed_steps":0,"blocked":"UNAVAILABLE"}
     try:
         render_busy=False
         try:render_busy=bool(bpy.app.is_job_running("RENDER"))
         except (AttributeError,TypeError,RuntimeError):pass
-        Q.tick(_root(),_execute_step,on_start=_step_start,
-               on_finish=_step_end,render_busy=render_busy)
+        result=Q.tick(_root(),_execute_step,on_start=_step_start,
+                      on_finish=_step_end,render_busy=render_busy)
         _LAST_TIMER_ERROR=""
     except (OSError,ValueError,RuntimeError) as exc:
-        # Do not auto-clear corrupt queues or silently retry unreceipted edits.
+        # Never discard corrupt native plans to manufacture a clean status.
         _LAST_TIMER_ERROR=type(exc).__name__
-    try:
-        for area in _areas():area.tag_redraw()
-    except (AttributeError,RuntimeError):pass
-    return .6
+        return 3.0
+    if result["executed_steps"]>0:
+        try:
+            for area in _areas():area.tag_redraw()
+        except (AttributeError,RuntimeError):pass
+        return .2  # Real work, yield to Blender event loop between edits.
+    if result.get("blocked")=="NATIVE_RENDER_IN_PROGRESS":
+        return 3.0  # No spin loops while a costly native frame is rendering.
+    return 2.0   # Idle Android phone: no constant half-second UI wakeups.
 
 def install_timer():
     global TIMER_INSTALLED
