@@ -1,5 +1,9 @@
 # Render 0.31.1 workspace testing
 
+Historical result. Subsequent owner-authorized native modelling/animation checks
+and the startup ANR fix are recorded in
+[WORKSPACE_TESTING_0312.md](WORKSPACE_TESTING_0312.md).
+
 Application: `com.rezox.render`, versionCode 37 / `0.31.1-native-reliability`.
 Built application source: `37062c838cdf58e52f912eb0fff0606aa86680bd`.
 

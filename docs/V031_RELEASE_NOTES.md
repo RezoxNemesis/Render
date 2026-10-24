@@ -1,5 +1,11 @@
 # Render Studio 0.31.1 follow-up (versionCode 37)
 
+Current candidate: **0.31.2 / versionCode 38**. See
+[release notes](RELEASE_NOTES_0312.md) and
+[native workspace evidence](WORKSPACE_TESTING_0312.md). The older skipped-runtime
+statement below describes the original engineering-only request; the owner later
+authorized workspace and native asset/animation checks.
+
 The user subsequently authorized workspace testing. **149 Android/JVM tests and
 118 Python checks passed** (45 contracts, 68 behavior checks and 5 archive/catalog
 recovery checks). These include SQLite migration, exact-ID interrupted command

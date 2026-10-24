@@ -1,4 +1,4 @@
-name: Render 0.31 build only - runtime testing skipped
+name: Render 0.31 build only - device checks reported separately
 on:
   pull_request:
     branches: [feature/native-production-toolkit-20261022]
