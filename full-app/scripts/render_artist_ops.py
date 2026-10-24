@@ -11,6 +11,7 @@ import bpy
 SCHEMAS = {
     'artist.capabilities': [],
     'artist.inspect': [],
+    'body.blockout': ['name', 'proportions', 'subdivision_levels'],
     'object.duplicate': ['object', 'name', 'linked'],
     'object.remove': ['object'],
     'sculpt.mask': ['object', 'vertices', 'weights'],
@@ -24,6 +25,8 @@ SCHEMAS = {
 }
 READ_ONLY = {'artist.capabilities', 'artist.inspect', 'material.inspect'}
 _FIELDS = {
+    'proportions': {'type':'object'},
+    'subdivision_levels': {'type':'integer','minimum':0,'maximum':3},
     'object': {'type':'string','minLength':1,'maxLength':255},
     'material': {'type':'string','minLength':1,'maxLength':255},
     'name': {'type':'string','pattern':'^[A-Za-z][A-Za-z0-9_-]{0,63}$'},
@@ -47,6 +50,7 @@ _FIELDS = {
     'format': {'enum':['BLEND','GLB']},
 }
 _REQUIRED = {'object.duplicate':['object','name'],'object.remove':['object'],
+             'body.blockout':['name','proportions'],
              'sculpt.mask':['object','vertices','weights'],'sculpt.stroke':['object','points'],
              'facial.expression':['object','weights'],'material.inspect':['material'],
              'light.configure':['object'],'camera.configure':['object'],'media.import':['asset']}
@@ -82,7 +86,6 @@ def _operator(path):
 def checkpoint(scene, root, reason):
     if scene.get('production_frozen_job'):
         raise ValueError('RENDER_SNAPSHOT_IMMUTABLE')
-    from render_production_contract import file_receipt
     folder = Path(root) / 'Projects'
     if folder.is_symlink():
         raise ValueError('CHECKPOINT_FOLDER_SYMLINK')
@@ -91,12 +94,9 @@ def checkpoint(scene, root, reason):
     if shutil.disk_usage(folder).free < 256*1024*1024:
         raise ValueError('CHECKPOINT_STORAGE_PRESSURE')
     path = folder / ('Before_' + uuid.uuid4().hex + '.blend')
-    if 'FINISHED' not in bpy.ops.wm.save_as_mainfile(filepath=str(path), copy=True, compress=False, check_existing=False):
-        raise RuntimeError('ARTIST_CHECKPOINT_FAILED')
-    from omega.phase02_render import sync_file, sync_directory
-    sync_file(path)
-    sync_directory(folder)
-    return dict(file_receipt(path), category='Projects', reason=reason, source_project_unchanged=True)
+    import render_session_tools
+    receipt=render_session_tools.save_copy_atomic(path,compress=False)
+    return dict(receipt, category='Projects', reason=reason, source_project_unchanged=True)
 
 
 @contextlib.contextmanager
@@ -149,6 +149,9 @@ def execute(operation, scene, root, p):
                 except (AttributeError, RuntimeError):
                     available, reason = False, 'NATIVE_OPERATOR_NOT_BUNDLED'
             properties={field:_FIELDS[field] for field in fields}
+            if op=='body.blockout':
+                from render_body_blockout import profile_schema
+                properties['proportions']=profile_schema()
             if op=='sculpt.mask':properties['weights']={'type':'array','minItems':1,'maxItems':50000,
                 'items':{'type':'number','minimum':0,'maximum':1}}
             operations.append({'operation': op, 'fields': fields, 'read_only': op in READ_ONLY,
@@ -164,7 +167,8 @@ def execute(operation, scene, root, p):
         return {'operations': operations, 'blender_version': bpy.app.version_string,
                 'export_formats': ['BLEND'] + (['GLB'] if glb else []),
                 'sculpt_stroke_requires': 'active native sculpt brush and VIEW_3D context',
-                'arbitrary_python_allowed': False, 'runtime_testing_skipped_for_release': True}
+                'arbitrary_python_allowed': False,
+                'runtime_acceptance_not_established_by_capabilities': True}
     if operation == 'artist.inspect':
         return {'scene': scene.name, 'mode': bpy.context.mode,
                 'selected': [ob.name for ob in bpy.context.selected_objects][:128],
@@ -199,6 +203,9 @@ def execute(operation, scene, root, p):
 
 
 def _mutate(operation, scene, root, p):
+    if operation == 'body.blockout':
+        import render_body_blockout
+        return render_body_blockout.create(scene,p.get('name'),p.get('proportions'),p.get('subdivision_levels',2))
     if operation == 'object.duplicate':
         ob = _object(scene, p.get('object'))
         name = p.get('name')

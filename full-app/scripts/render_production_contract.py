@@ -7,7 +7,7 @@ from pathlib import Path
 import re
 
 OPERATIONS = frozenset((
-    'artist.capabilities','artist.inspect','object.duplicate','object.remove','sculpt.mask','sculpt.stroke','facial.expression','material.inspect','light.configure','camera.configure','media.import','project.export',
+    'artist.capabilities','artist.inspect','body.blockout','object.duplicate','object.remove','sculpt.mask','sculpt.stroke','facial.expression','material.inspect','light.configure','camera.configure','media.import','project.export',
     'asset.search','asset.details','asset.preview','asset.download','asset.download.status','asset.download.pause','asset.import',
     'render.quality.inspect','render.quality.configure','render.performance.inspect','render.performance.configure',
     'render.profile.inspect','render.profile.configure',

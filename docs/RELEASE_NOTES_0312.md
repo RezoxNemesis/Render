@@ -1,5 +1,10 @@
 # Render Studio 0.31.2 — native startup storage
 
+Adds discoverable `body.blockout` with explicit, validated proportions and native
+editable body volumes for a staged character workflow. It checkpoints first and
+does not claim a finished sculpt, facial likeness or final render. Reference
+images are not bundled. See [native body controls](NATIVE_BODY_BLOCKOUT.md).
+
 Package `com.rezox.render`, versionCode **38**. Retains the 0.31.1 engineering
 upgrades, native Blender libraries, project compatibility and render settings.
 
