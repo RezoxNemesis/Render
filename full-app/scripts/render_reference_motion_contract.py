@@ -157,3 +157,45 @@ def audit(p):
         if f<=previous:raise ValueError("MOTION_FRAMES_NOT_ASCENDING")
         previous=f
     return p
+
+def capabilities():
+    """Discoverable, typed, bounded native operations; not proof of device use."""
+    options=[
+      ("reference.workspace.open",False,["asset"],
+       {"asset":{"type":"string","pattern":ASSET.pattern},
+        "preview_asset":{"type":"string","pattern":ASSET.pattern},
+        "model":{"type":"string","pattern":NAME.pattern},
+        "mode":{"enum":["SPLIT","REUSE","CAMERA"]},
+        "split_factor":{"type":"number","minimum":.3,"maximum":.7},
+        "frame":{"type":"integer","minimum":1,"maximum":100000}}),
+      ("reference.workspace.inspect",True,[],{}),
+      ("reference.compare.multiview",True,["object","views"],
+       {"object":{"type":"string","pattern":NAME.pattern},
+        "views":{"type":"array","minItems":1,"maxItems":6}}),
+      ("reference.fit.landmarks",False,["object","camera","reference","model","expected_vertices"],
+       {"object":{"type":"string","pattern":NAME.pattern},
+        "camera":{"type":"string","pattern":NAME.pattern},
+        "reference":{"type":"object","minProperties":2,"maxProperties":64},
+        "model":{"type":"object","minProperties":2,"maxProperties":64},
+        "expected_vertices":{"type":"integer","minimum":1},
+        "strength":{"type":"number","minimum":.01,"maximum":1},
+        "max_displacement":{"type":"number","minimum":.000001,"maximum":10},
+        "dry_run":{"type":"boolean"}}),
+      ("animation.clip.create",False,["rig","name","poses"],
+       {"rig":{"type":"string","pattern":NAME.pattern},
+        "name":{"type":"string","pattern":NAME.pattern},
+        "poses":{"type":"array","minItems":2,"maxItems":96},
+        "interpolation":{"enum":["BEZIER","LINEAR","CONSTANT"]},
+        "nla":{"type":"boolean"},"track":{"type":"string","pattern":NAME.pattern}}),
+      ("animation.clip.inspect",True,[],{"rig":{"type":"string","pattern":NAME.pattern}}),
+      ("animation.motion.audit",True,["rig","bones","frames"],
+       {"rig":{"type":"string","pattern":NAME.pattern},
+        "bones":{"type":"array","minItems":1,"maxItems":32},
+        "frames":{"type":"array","minItems":2,"maxItems":128}})
+    ]
+    return [{"operation":operation,"available":True,"read_only":readonly,
+             "requires_native_blender":True,"runtime_tested_on_this_device":False,
+             "checkpoint_before_change":not readonly,
+             "input_schema":{"type":"object","properties":properties,
+                             "required":required,"additionalProperties":False}}
+            for operation,readonly,required,properties in options]
