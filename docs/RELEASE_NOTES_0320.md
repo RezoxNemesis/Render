@@ -46,6 +46,10 @@ policy, checkpoints, VideoStudio Binder connection and artist controls.
 - Marks cached in-flight render-worker states as interrupted when that worker
   no longer exists, retaining saved frame counts and requiring exact native
   receipt inspection. A stale saved label cannot keep claiming live rendering.
+- Extends a native frame's client deadline and matching bounded wake lease to
+  48 hours, so a permitted day-long frame is not abandoned by the old six-hour
+  client timeout. Ordinary edit commands keep their shorter deadline. Android
+  limits, thermal protections, pause/cancel controls and force-stop still apply.
 - Connection diagnosis now explicitly distinguishes local dispatch from a
   verified end-to-end Binder authentication check.
 
@@ -60,7 +64,9 @@ Google Drive connector OAuth does **not** grant Android folder access. Drive's
 document provider must support the selected operation, or ChatGPT must transfer
 original bytes using an authorized file reference. Provider readback proves the
 copy visible to that provider; it does not prove completed remote Drive sync.
-There is no automatic two-way Drive synchronization.
+There is no automatic two-way Drive synchronization. Recovery retains completed
+frames and checkpoints; an interrupted frame's in-memory sample buffers are not
+checkpointed and may need that frame restarted after exact-result inspection.
 
 Files are limited to **4 GiB**, dependency bundles to **2,048 entries / 4 GiB
 uncompressed**, and transfer history to **512 records**. Image admission defaults

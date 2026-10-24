@@ -20,9 +20,9 @@ import static org.junit.Assert.*;
 public class NativeCommandDurabilityTest {
     @Test public void longFrameBudgetDoesNotExpandUnrelatedCalls()throws Exception{
         JSONObject frame=new JSONObject().put("operation","render.step");
-        assertEquals(21600000,NativeCommandBudget.timeout("blender.production.execute",frame,600000));
+        assertEquals(172800000,NativeCommandBudget.timeout("blender.production.execute",frame,600000));
         assertEquals(600000,NativeCommandBudget.timeout("blender.production.execute",new JSONObject().put("operation","scene.inspect"),600000));
-        assertEquals(21630000,NativeWakeGuard.timeoutForAction("blender.production.render_frame"));
+        assertEquals(172830000,NativeWakeGuard.timeoutForAction("blender.production.render_frame"));
         assertTrue(NativeCommandBudget.readOnlyAssetPoll("blender.production.execute",new JSONObject().put("operation","asset.search")));
         assertFalse(NativeCommandBudget.readOnlyAssetPoll("blender.production.execute",new JSONObject().put("operation","asset.download")));
         assertFalse(NativeCommandBudget.readOnlyAssetPoll("blender.production.execute",new JSONObject().put("operation","asset.import")));

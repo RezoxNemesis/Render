@@ -4,7 +4,9 @@ import org.json.JSONObject;
 
 /** The batch admission window and the time needed for one frame are distinct. */
 public final class NativeCommandBudget {
-    public static final long FRAME_TIMEOUT_MS = 6L * 60 * 60 * 1000;
+    // Day-long frames must not lose their foreground worker at an arbitrary
+    // six-hour client deadline. Android quotas/owner cancellation still apply.
+    public static final long FRAME_TIMEOUT_MS = 48L * 60 * 60 * 1000;
     private NativeCommandBudget() {}
 
     public static boolean frame(String action, JSONObject args) {
