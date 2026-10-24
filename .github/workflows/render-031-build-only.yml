@@ -66,6 +66,22 @@ jobs:
         run: python tools/assemble_full_native.py --engine-apk "$RUNNER_TEMP/blender-full.apk" --bridge-apk app/build/outputs/apk/debug/app-debug.apk --upstream-source "$RUNNER_TEMP/full-blender-src" --output full-app/stage
       - name: Compile original-package development candidate
         run: gradle -p full-app --no-daemon :app:assembleDebug
+      - name: Compile fixed emulator instrumentation with matching historical signer
+        run: gradle -p full-app --no-daemon :app:assembleDebugAndroidTest
+      - name: Verify instrumentation signer matches application
+        run: |
+          set -euo pipefail
+          TEST_APK=full-app/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$TEST_APK" > "$RUNNER_TEMP/render-instrumentation-signature.txt"
+          grep -Fqi 'f3d63fb20be25ca0be8aa6a161d5cf13cd98ba2fa300c7a604cce35131b9eb30' "$RUNNER_TEMP/render-instrumentation-signature.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Render-0.31.1-native-workspace-instrumentation
+          path: |
+            full-app/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+            ${{ runner.temp }}/render-instrumentation-signature.txt
+          retention-days: 7
+          if-no-files-found: error
       - name: Verify APK runtime manifest and certificate
         run: |
           set -euo pipefail
