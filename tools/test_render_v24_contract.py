@@ -90,7 +90,7 @@ class RenderSessionTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError,'CHECKPOINT_INCOMPLETE'):
             self.module.save_copy_atomic(path)
         self.assertEqual(original,path.read_bytes())
-        self.assertEqual([],list((path.parent/'.render-staging').iterdir()))
+        self.assertEqual([],list(path.parent.glob('.render-copy-*.blend')))
 
     def test_failed_storage_sync_does_not_publish_a_checkpoint(self):
         path=Path(self.tmp.name)/'Production/Projects/ArtistCheckpoint.blend'
@@ -108,6 +108,20 @@ class RenderSessionTests(unittest.TestCase):
         self.assertTrue(receipt['file_fsync_completed'])
         self.assertTrue(receipt['directory_fsync_completed'])
         self.assertEqual([path],list(path.parent.glob('*.blend')))
+
+    def test_checkpoint_rename_preserves_remapped_relative_dependencies(self):
+        path=Path(self.tmp.name)/'Production/Projects/ArtistCheckpoint.blend'
+        asset=Path(self.tmp.name)/'ArtistTextures/texture.bin'
+        asset.parent.mkdir();asset.write_bytes(b'original texture')
+        def save_with_relative_asset(filepath,**kwargs):
+            saved=Path(filepath)
+            relative=os.path.relpath(asset,saved.parent)
+            saved.write_bytes(b'BLENDER'+relative.encode()+b'\n'+b'x'*500)
+            return {'FINISHED'}
+        self.fake.ops.wm.save_as_mainfile=save_with_relative_asset
+        self.module.save_copy_atomic(path)
+        relative=path.read_bytes()[7:].split(b'\n')[0].decode()
+        self.assertEqual(asset,(path.parent/relative).resolve())
 
     def test_corrupt_latest_restores_last_valid_backup(self):
         self.module.save_session()

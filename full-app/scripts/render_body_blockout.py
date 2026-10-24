@@ -46,6 +46,12 @@ def validate_profile(value):
     return result
 
 
+def scene_coordinates(vertices, scale_length):
+    if not math.isfinite(scale_length) or scale_length <= 0:
+        raise ValueError('BODY_SCENE_SCALE_INVALID')
+    return [tuple(coordinate / scale_length for coordinate in point) for point in vertices]
+
+
 def create(scene, name, proportions, subdivision_levels=2):
     # Geometry is computed here in the installed native Blender timer, never
     # by a host mesh generator or a desktop/cloud Blender substitute.
@@ -132,7 +138,7 @@ def create(scene, name, proportions, subdivision_levels=2):
                               (.055,.036,.034,.036),(.068,.02,.014,.02)]],axis='Y')
     mesh = bpy.data.meshes.new(name+'Mesh'); ob = None
     try:
-        mesh.from_pydata(vertices,[],faces);mesh.update()
+        mesh.from_pydata(scene_coordinates(vertices,scene.unit_settings.scale_length),[],faces);mesh.update()
         bm=bmesh.new()
         try:
             bm.from_mesh(mesh);bmesh.ops.recalc_face_normals(bm,faces=list(bm.faces));bm.to_mesh(mesh)
@@ -152,6 +158,7 @@ def create(scene, name, proportions, subdivision_levels=2):
         return {'object':ob.name,'name':ob.name,'stage':'01_body_proportions',
                 'proportions_m':p,'base_vertices':len(mesh.vertices),'base_polygons':len(mesh.polygons),
                 'anatomical_volumes':components,'subdivision_levels':subdivision_levels,
+                'scene_scale_length_preserved':scene.unit_settings.scale_length,
                 'sculpt_union_pending':True,'fingers_face_clothing_rigging_completed':False,
                 'visual_likeness_verified':False,'geometry_created_inside_native_blender':True,
                 'performed_visible_pointer_click':False}

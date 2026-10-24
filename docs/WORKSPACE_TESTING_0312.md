@@ -128,9 +128,9 @@ mug checkpoint remained intact. The animation project is therefore not delivered
 as a valid file and checkpoint durability did not pass this check.
 
 Inspection found missing explicit file/directory fsync in these copy paths.
-The follow-up stages native BLEND copies in a hidden directory, checks the native
+The follow-up stages native BLEND copies in hidden files beside their destinations, checks the native
 save/header and unchanged open-project path, fsyncs the file, computes its hash,
-atomically publishes it, and syncs both directories before issuing success.
+atomically publishes it, and syncs the containing directory before issuing success.
 Sessions also sync their recovery manifests. BLEND exports and explicit recovery
 backups share the verified copy path. Host fault-injection checks cover cancelled
 native writes and failed storage sync without replacing/publishing a checkpoint.

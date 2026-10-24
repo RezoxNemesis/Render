@@ -84,11 +84,9 @@ def save_copy_atomic(path, compress=True):
     if path.suffix != '.blend' or path.is_symlink() or path.parent.is_symlink():
         raise RuntimeError('INVALID_CHECKPOINT_DESTINATION')
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    staging = path.parent / '.render-staging'
-    if staging.is_symlink():
-        raise RuntimeError('CHECKPOINT_STAGING_SYMLINK')
-    staging.mkdir(mode=0o700, exist_ok=True)
-    temporary = staging / (uuid.uuid4().hex + '.blend')
+    # Blender remaps relative dependencies against the save directory. Stage
+    # beside the destination so the final rename cannot break linked assets.
+    temporary = path.parent / ('.render-copy-' + uuid.uuid4().hex + '.blend')
     previous_path = bpy.data.filepath
     try:
         result = bpy.ops.wm.save_as_mainfile(filepath=str(temporary), copy=True,
@@ -104,7 +102,6 @@ def save_copy_atomic(path, compress=True):
                    'source_project_unchanged': True}
         os.replace(temporary, path)
         _sync_directory(path.parent)
-        _sync_directory(staging)
         return dict(receipt, atomically_published=True, directory_fsync_completed=True)
     finally:
         if temporary.exists():

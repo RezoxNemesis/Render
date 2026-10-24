@@ -33,5 +33,8 @@ class BodyProfileContractTests(unittest.TestCase):
         self.assertFalse(schema['additionalProperties'])
         self.assertEqual(set(body.DEFAULTS),set(schema['properties']))
 
+    def test_metre_dimensions_respect_an_existing_centimetre_scene(self):
+        self.assertEqual([(0,0,165)],body.scene_coordinates([(0,0,1.65)],.01))
+
 
 if __name__=='__main__':unittest.main()
