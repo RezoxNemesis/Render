@@ -28,7 +28,7 @@ with tempfile.TemporaryDirectory() as d:
             scene.render.resolution_x,scene.render.resolution_y)
     Studio.install_timer()
     api=Studio.execute("studio.capabilities",{},root,scene)
-    assert len(api["workspaces"])==9 and not api["background_scene_edits_concurrent"]
+    assert len(api["workspaces"])==9 and not api["concurrent_scene_edits"]
     assert "studio.plan.submit" in api["api_supported_ops"]
     assert api["background_bpy"] and not api["app_ui_installed"]
     index=Studio.execute("studio.tool.search",{"query":"rig","limit":20},root,scene)
