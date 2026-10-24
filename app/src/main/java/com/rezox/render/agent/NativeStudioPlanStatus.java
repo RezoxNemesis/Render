@@ -21,8 +21,16 @@ public final class NativeStudioPlanStatus {
     private static final String ID="[a-f0-9]{32}";
     private static final int MAX_RECEIPT=100000;
 
-    private static File folder(Context context)throws Exception{
-        return ProductionFiles.folder(context,"StudioPlans");
+    static File folder(Context context)throws Exception{
+        File root=ProductionFiles.root(context),dir=new File(root,"StudioPlans");
+        // A native-only status directory is not an exportable artifact
+        // category. Keep it separate from owner Downloads and user files.
+        if(Files.isSymbolicLink(dir.toPath())||
+           !root.getCanonicalFile().equals(dir.getCanonicalFile().getParentFile()))
+            throw new IOException("STUDIO_PLAN_FOLDER_OUTSIDE_SCOPE");
+        if(!dir.isDirectory()&&!dir.mkdirs())
+            throw new IOException("STUDIO_PLAN_FOLDER_UNAVAILABLE");
+        return dir;
     }
     private static JSONObject raw(Context context,String id)throws Exception{
         if(id==null||!id.matches(ID))throw new IllegalArgumentException("STUDIO_PLAN_ID_INVALID");
