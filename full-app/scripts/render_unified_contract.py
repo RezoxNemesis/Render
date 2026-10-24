@@ -49,6 +49,8 @@ PROGRAM_OPS={
  "render.profile.inspect":"cinema",
  "render.quality.inspect":"cinema",
  "project.checkpoint":"agent",
+ "studio.workspace.activate":"agent",
+ "studio.view.orbit":"sculpt",
 }
 MUTATING=frozenset(PROGRAM_OPS)-{
  "scene.inspect","animation.clip.inspect","animation.motion.audit",
