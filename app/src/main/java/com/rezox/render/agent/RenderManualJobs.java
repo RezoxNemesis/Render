@@ -77,7 +77,8 @@ public final class RenderManualJobs {
         try{
             String cached=p.getString("state","idle");
             boolean active=ACTIVE.get();
-            boolean interrupted=!active&&Arrays.asList("running","rendering","encoding","preparing","starting","cooling").contains(cached);
+            boolean interrupted=!active&&(Arrays.asList("running","rendering","encoding","preparing","starting","cooling").contains(cached)
+                ||("ready".equals(cached)&&"Rendering".equals(p.getString("detail",""))));
             return data.put("job_id",p.getString("job_id",""))
                 .put("state",active?"running":interrupted?"interrupted":cached)
                 .put("detail",interrupted?"Previous render worker interrupted; inspect the exact native command result before resuming":p.getString("detail",""))
