@@ -8,9 +8,12 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 import java.io.File;
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.List;
+import java.util.Arrays;
 import static org.junit.Assert.*;
 
 @RunWith(RobolectricTestRunner.class)
@@ -21,6 +24,24 @@ public class ProductionSegmentPlanTest {
             .put("fps",fps).put("fps_base",1.0).put("bitrate",bitrate)
             .put("width",1920).put("height",1080)
             .put("frame_count",last-first+1);
+    }
+    // A lightweight box-layout fixture, deliberately NOT a claimed playable
+    // video. Android MediaMetadataRetriever checks actual encoder output.
+    private static byte[] atom(String fourcc,byte[] payload)throws Exception{
+        ByteArrayOutputStream bytes=new ByteArrayOutputStream();
+        DataOutputStream out=new DataOutputStream(bytes);
+        out.writeInt(payload.length+8);
+        out.writeBytes(fourcc);
+        out.write(payload);
+        out.flush();
+        return bytes.toByteArray();
+    }
+    private static byte[] mp4ContainerFixture()throws Exception{
+        ByteArrayOutputStream bytes=new ByteArrayOutputStream();
+        bytes.write(atom("ftyp",new byte[]{'i','s','o','m',0,0,0,0,'i','s','o','m'}));
+        bytes.write(atom("mdat",new byte[64]));
+        bytes.write(atom("moov",atom("trak",new byte[16])));
+        return bytes.toByteArray();
     }
     @Test public void tenGigabyteVideoHasExactGaplessSegments()throws Exception{
         JSONObject request=spec(101,100000,24,32000000);
@@ -65,13 +86,49 @@ public class ProductionSegmentPlanTest {
         Context c=RuntimeEnvironment.getApplication(),app=c;
         String job="7".repeat(32);
         File output=ProductionFiles.file(app,job,ProductionSegmentedEncoder.partName(job,0));
-        byte[] original="bounded encoder output bytes".getBytes(StandardCharsets.UTF_8);
+        byte[] original=mp4ContainerFixture();
         try{
             Files.write(output.toPath(),original);
-            JSONObject receipt=ProductionFiles.receipt(output,job);
-            assertNotNull(ProductionSegmentedEncoder.readVerified(app,job,receipt));
+            JSONObject receipt=ProductionFiles.receipt(output,job)
+                .put("frames",24).put("start_frame",101).put("end_frame",124);
+            ProductionSegmentPlan.Span span=new ProductionSegmentPlan.Span(101,124,0);
+            assertTrue(ProductionSegmentedEncoder.hasCompleteMp4Container(output));
+            assertNotNull(ProductionSegmentedEncoder.readVerified(app,job,receipt,span));
+            receipt.put("end_frame",125);
+            assertNull("matching bytes are not proof of the same frame range",
+                ProductionSegmentedEncoder.readVerified(app,job,receipt,span));
+            receipt.put("end_frame",124);
+            assertNull("a different part index must not adopt these frames",
+                ProductionSegmentedEncoder.readVerified(app,job,receipt,
+                    new ProductionSegmentPlan.Span(101,124,1)));
+            Files.write(output.toPath(),Arrays.copyOf(original,original.length-3));
+            assertFalse("truncated moov must not be accepted",
+                ProductionSegmentedEncoder.hasCompleteMp4Container(output));
+            assertNull(ProductionSegmentedEncoder.readVerified(app,job,receipt,span));
             Files.write(output.toPath(),"tampered bytes".getBytes(StandardCharsets.UTF_8));
-            assertNull(ProductionSegmentedEncoder.readVerified(app,job,receipt));
+            assertNull(ProductionSegmentedEncoder.readVerified(app,job,receipt,span));
+        }finally{output.delete();}
+    }
+    @Test public void noTrakAndCorruptAtomSizesCannotBePublished()throws Exception{
+        Context app=RuntimeEnvironment.getApplication();
+        String job="e".repeat(32);
+        File output=ProductionFiles.file(app,job,ProductionSegmentedEncoder.partName(job,0));
+        try{
+            byte[] good=mp4ContainerFixture();
+            Files.write(output.toPath(),good);
+            assertTrue(ProductionSegmentedEncoder.hasCompleteMp4Container(output));
+            byte[] corrupted=good.clone();
+            // "moov" is the last box: a length larger than the file is invalid.
+            int moov=20+72;
+            corrupted[moov+0]=(byte)0x7f;
+            Files.write(output.toPath(),corrupted);
+            assertFalse(ProductionSegmentedEncoder.hasCompleteMp4Container(output));
+            ByteArrayOutputStream missingTrack=new ByteArrayOutputStream();
+            missingTrack.write(atom("ftyp",new byte[]{'i','s','o','m',0,0,0,0}));
+            missingTrack.write(atom("mdat",new byte[64]));
+            missingTrack.write(atom("moov",atom("free",new byte[16])));
+            Files.write(output.toPath(),missingTrack.toByteArray());
+            assertFalse(ProductionSegmentedEncoder.hasCompleteMp4Container(output));
         }finally{output.delete();}
     }
     @Test public void unsupportedFrameRatesAreRejectedExplicitly()throws Exception{
