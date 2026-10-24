@@ -192,6 +192,16 @@ def observe_native(method,value):
     if method in ("command_started","command_finished"):_record(method,value)
 
 def _execute_step(op,payload,plan_id):
+    # Native Blender mutations run on this timer ONLY. Make a real .blend
+    # checkpoint before a consequential step unless the existing operation
+    # already checkpoints itself. No replay of an interrupted write.
+    if op in C.MUTATING and op not in (
+            "studio.workspace.activate","studio.view.orbit",
+            "body.blockout","reference.workspace.open",
+            "reference.fit.landmarks","reference.fit.multiview",
+            "animation.clip.create","project.checkpoint"):
+        import render_artist_ops
+        render_artist_ops.checkpoint(bpy.context.scene,_root(),"studio.plan."+op)
     import render_production
     return render_production.execute(
         {"operation":op,"payload":payload},
