@@ -398,9 +398,9 @@ def execute(args, spool, command_id):
         C.fields(p,('name',))
         name=C.safe_name(p.get('name','Project'))+'_'+uuid.uuid4().hex+'.blend'
         folder=root/'Projects';folder.mkdir(exist_ok=True);file=C.owned_path(folder,name)
-        result=bpy.ops.wm.save_as_mainfile(filepath=str(file),copy=True,compress=True,check_existing=False)
-        if 'FINISHED' not in result or not file.is_file():raise RuntimeError('CHECKPOINT_FAILED')
-        return dict(C.file_receipt(file),category='Projects',scene=scene.name,source_unchanged=True)
+        import render_session_tools
+        receipt=render_session_tools.save_copy_atomic(file,compress=True)
+        return dict(receipt,category='Projects',scene=scene.name,source_unchanged=True)
     if operation=='mesh.create':return _mesh(scene,p)
     if operation=='material.assign':return _material(scene,p,root)
     if operation=='animation.keys':return _keys(scene,p)

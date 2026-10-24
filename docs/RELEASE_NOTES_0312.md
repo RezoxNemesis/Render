@@ -50,7 +50,14 @@ Render's native-window capture. Native modelling receipts confirm the original
 scene checkpoint and complete 11-object mug scene with materials, subdivision,
 lights and camera. Its editable BLEND checkpoint was pulled and hash verified.
 Native checkpoint restore and five turntable rotation keys also passed; a separate
-animation BLEND checkpoint was saved. The real native viewport screenshot is
+animation checkpoint was reported saved. After a host-GPU crash and Android
+reboot, that recent file and its rollback were **zero bytes**. The earlier mug
+checkpoint survived. Successful save callbacks and immediate hashes were not
+sufficient evidence of durable storage. Native checkpoint copies, session saves,
+recovery backups and BLEND exports now use hidden staging, file fsync, verified
+publication by rename and directory fsync before returning a receipt. These
+changes still require native interruption validation; no host-power-loss guarantee
+is made. The real native viewport screenshot is
 included with the workspace evidence.
 The still job started EEVEE in an active Android foreground service, then the
 emulator's ARM translator aborted on missing F16C. A separate CPU probe confirms

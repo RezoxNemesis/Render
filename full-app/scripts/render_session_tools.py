@@ -13,6 +13,7 @@ from pathlib import Path
 import re
 import time
 import threading
+import uuid
 
 import bpy
 
@@ -31,7 +32,15 @@ def _root():
     _ROOT.mkdir(parents=True, mode=0o700, exist_ok=True)
     return _ROOT
 
-def _atomic_json(path, data):
+def _sync_directory(path):
+    fd = os.open(str(path), os.O_RDONLY | getattr(os, 'O_DIRECTORY', 0) | getattr(os, 'O_NOFOLLOW', 0))
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
+def _atomic_json(path, data, durable=False):
     path.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
     temporary = path.with_name(path.name + ".tmp")
     with temporary.open("w", encoding="utf8") as output:
@@ -39,6 +48,8 @@ def _atomic_json(path, data):
         output.flush()
         os.fsync(output.fileno())
     os.replace(temporary, path)
+    if durable:
+        _sync_directory(path.parent)
 
 def _sha(path):
     digest = hashlib.sha256()
@@ -60,6 +71,44 @@ def _blend_file(path):
         return False
     with path.open("rb") as stream:
         return stream.read(7) == b"BLENDER" or _compressed_blend_header(path)
+
+
+def save_copy_atomic(path, compress=True):
+    """Publish a verified native BLEND copy only after file/directory fsync.
+
+    A successful Blender save and an immediate hash can both read kernel-cached
+    bytes. Neither alone proves a checkpoint survived a sudden interruption.
+    Hidden staging also keeps partial saves out of project discovery.
+    """
+    path = Path(path)
+    if path.suffix != '.blend' or path.is_symlink() or path.parent.is_symlink():
+        raise RuntimeError('INVALID_CHECKPOINT_DESTINATION')
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    staging = path.parent / '.render-staging'
+    if staging.is_symlink():
+        raise RuntimeError('CHECKPOINT_STAGING_SYMLINK')
+    staging.mkdir(mode=0o700, exist_ok=True)
+    temporary = staging / (uuid.uuid4().hex + '.blend')
+    previous_path = bpy.data.filepath
+    try:
+        result = bpy.ops.wm.save_as_mainfile(filepath=str(temporary), copy=True,
+                    compress=compress, check_existing=False, relative_remap=True)
+        if 'FINISHED' not in result or not _blend_file(temporary):
+            raise RuntimeError('CHECKPOINT_INCOMPLETE')
+        if bpy.data.filepath != previous_path:
+            raise RuntimeError('OPEN_PROJECT_PATH_CHANGED')
+        with temporary.open('rb') as stream:
+            os.fsync(stream.fileno())
+        receipt = {'filename': path.name, 'bytes': temporary.stat().st_size,
+                   'sha256': _sha(temporary), 'file_fsync_completed': True,
+                   'source_project_unchanged': True}
+        os.replace(temporary, path)
+        _sync_directory(path.parent)
+        _sync_directory(staging)
+        return dict(receipt, atomically_published=True, directory_fsync_completed=True)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
 
 def _session_dir():
     folder = _root() / "Projects"
@@ -86,11 +135,7 @@ def save_session():
         stage.unlink()
     prior_path = bpy.data.filepath
     try:
-        result = bpy.ops.wm.save_as_mainfile(
-            filepath=str(stage), copy=True, compress=True,
-            check_existing=False, relative_remap=True)
-        if "FINISHED" not in result or not _blend_file(stage):
-            raise RuntimeError("SESSION_SNAPSHOT_INCOMPLETE")
+        save_copy_atomic(stage, compress=True)
         receipt = {"filename": latest.name, "bytes": stage.stat().st_size,
                    "sha256": _sha(stage), "saved_at": int(time.time()),
                    "source_path_retained": bpy.data.filepath == prior_path}
@@ -101,7 +146,7 @@ def save_session():
             prior_manifest = folder / "CurrentSession.previous.json"
             if _receipt_matches(manifest, latest):
                 old = json.loads(manifest.read_text(encoding="utf8"))
-                _atomic_json(prior_manifest, dict(old, filename=previous.name))
+                _atomic_json(prior_manifest, dict(old, filename=previous.name), durable=True)
             os.replace(latest, previous)
         try:
             os.replace(stage, latest)
@@ -109,7 +154,7 @@ def save_session():
             if previous.exists() and not latest.exists():
                 os.replace(previous, latest)
             raise
-        _atomic_json(folder / "CurrentSession.json", receipt)
+        _atomic_json(folder / "CurrentSession.json", receipt, durable=True)
         _LAST_SAVE = time.monotonic()
         return {"saved": True, "reopen_on_next_launch": True,
                 "bytes": receipt["bytes"], "sha256": receipt["sha256"],

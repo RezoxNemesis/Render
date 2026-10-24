@@ -341,9 +341,15 @@ def _mutate(operation, scene, root, p):
         if folder.is_symlink():raise ValueError('EXPORT_FOLDER_SYMLINK')
         folder.mkdir(mode=0o700,exist_ok=True)
         path=folder/('Export_'+uuid.uuid4().hex+('.blend' if form=='BLEND' else '.glb'))
-        if form=='BLEND':result=bpy.ops.wm.save_as_mainfile(filepath=str(path),copy=True,compress=False,check_existing=False)
-        else:result=_operator('export_scene.gltf')(filepath=str(path),export_format='GLB',check_existing=False)
-        if 'FINISHED' not in result or not path.is_file():raise RuntimeError('NATIVE_EXPORT_NOT_FINISHED')
-        from render_production_contract import file_receipt
-        return dict(file_receipt(path),category='Exports',editable_blend_preserved=True,format=form)
+        if form=='BLEND':
+            import render_session_tools
+            receipt=render_session_tools.save_copy_atomic(path,compress=False)
+        else:
+            result=_operator('export_scene.gltf')(filepath=str(path),export_format='GLB',check_existing=False)
+            if 'FINISHED' not in result or not path.is_file():raise RuntimeError('NATIVE_EXPORT_NOT_FINISHED')
+            from omega.phase02_render import sync_file, sync_directory
+            sync_file(path);sync_directory(folder)
+            from render_production_contract import file_receipt
+            receipt=file_receipt(path)
+        return dict(receipt,category='Exports',editable_blend_preserved=True,format=form)
     raise ValueError('ARTIST_OPERATION_UNAVAILABLE')

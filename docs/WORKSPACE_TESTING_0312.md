@@ -121,8 +121,24 @@ The saved animation checkpoint is 151,918 bytes, native SHA-256
 `365e035ab86925c8eaa4b6960875395207b6238865cdc5063ed42e6223b4ae52`.
 A second host `llvmpipe_map_memory` assertion terminated the emulator before the
 independent pull and halfway-pose check. The latter failed before queuing any
-command. Recovery now boots Android only to retrieve the exact saved checkpoint;
-no native render is retried. The intended 32-frame/16 fps animation preview and
+command. Android was rebooted for exact-file retrieval, without restarting
+Blender. **Both recent animation checkpoints were zero bytes after recovery**,
+despite their successful pre-crash native save receipts. The older 150,581-byte
+mug checkpoint remained intact. The animation project is therefore not delivered
+as a valid file and checkpoint durability did not pass this check.
+
+Inspection found missing explicit file/directory fsync in these copy paths.
+The follow-up stages native BLEND copies in a hidden directory, checks the native
+save/header and unchanged open-project path, fsyncs the file, computes its hash,
+atomically publishes it, and syncs both directories before issuing success.
+Sessions also sync their recovery manifests. BLEND exports and explicit recovery
+backups share the verified copy path. Host fault-injection checks cover cancelled
+native writes and failed storage sync without replacing/publishing a checkpoint.
+This addresses the observed durability gap; it does not establish that this
+emulator's virtual disk honors flushes across host failure. Native interruption
+validation of the change remains outstanding.
+
+No native render is retried. The intended 32-frame/16 fps animation preview and
 encoding phases were **not started** after the proven F16C blocker. No movie,
 completed PNG render, evaluated halfway pose or visual-realism pass is claimed.
 

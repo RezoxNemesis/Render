@@ -11,6 +11,7 @@ import sys
 import tempfile
 import types
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "full-app/scripts/render_session_tools.py"
@@ -77,6 +78,36 @@ class RenderSessionTests(unittest.TestCase):
         self.fake.data.is_dirty=False
         self.assertTrue(self.module.restore_session()["restored"])
         self.assertEqual(1,len(self.fake.loaded_paths))
+
+    def test_interrupted_native_copy_does_not_replace_a_valid_checkpoint(self):
+        path=Path(self.tmp.name)/'Production/Projects/ArtistCheckpoint.blend'
+        path.parent.mkdir(parents=True);original=b'BLENDER'+b'original'*100
+        path.write_bytes(original)
+        def interrupted(filepath,**kwargs):
+            Path(filepath).write_bytes(b'BLENDER'+b'partial'*100)
+            return {'CANCELLED'}
+        self.fake.ops.wm.save_as_mainfile=interrupted
+        with self.assertRaisesRegex(RuntimeError,'CHECKPOINT_INCOMPLETE'):
+            self.module.save_copy_atomic(path)
+        self.assertEqual(original,path.read_bytes())
+        self.assertEqual([],list((path.parent/'.render-staging').iterdir()))
+
+    def test_failed_storage_sync_does_not_publish_a_checkpoint(self):
+        path=Path(self.tmp.name)/'Production/Projects/ArtistCheckpoint.blend'
+        with patch.object(self.module.os,'fsync',side_effect=OSError('simulated write failure')):
+            with self.assertRaises(OSError):self.module.save_copy_atomic(path)
+        self.assertFalse(path.exists())
+        self.assertEqual('/safe/original.blend',self.fake.data.filepath)
+
+    def test_atomic_checkpoint_receipt_matches_only_the_published_copy(self):
+        path=Path(self.tmp.name)/'Production/Projects/ArtistCheckpoint.blend'
+        receipt=self.module.save_copy_atomic(path)
+        self.assertEqual(self.module._sha(path),receipt['sha256'])
+        self.assertEqual(path.stat().st_size,receipt['bytes'])
+        self.assertTrue(receipt['atomically_published'])
+        self.assertTrue(receipt['file_fsync_completed'])
+        self.assertTrue(receipt['directory_fsync_completed'])
+        self.assertEqual([path],list(path.parent.glob('*.blend')))
 
     def test_corrupt_latest_restores_last_valid_backup(self):
         self.module.save_session()

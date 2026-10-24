@@ -74,16 +74,13 @@ def _preserve_before_recover():
     folder = S._session_dir()
     path = folder / ("BeforeExplicitRecover_" + uuid.uuid4().hex + ".blend")
     previous_path = bpy.data.filepath
-    result = bpy.ops.wm.save_as_mainfile(
-        filepath=str(path), copy=True, compress=True,
-        check_existing=False, relative_remap=True)
-    if ("FINISHED" not in result or not S._blend_file(path) or
-        bpy.data.filepath != previous_path):
+    saved = S.save_copy_atomic(path, compress=True)
+    if not S._blend_file(path) or bpy.data.filepath != previous_path:
         raise RuntimeError("CURRENT_SCENE_ROLLBACK_BACKUP_FAILED")
     receipt = {"filename": path.name, "sha256": S._sha(path),
                "bytes": path.stat().st_size,
                "owner_action": "explicit_recovery"}
-    S._atomic_json(folder / (path.stem + ".json"), receipt)
+    S._atomic_json(folder / (path.stem + ".json"), receipt, durable=True)
     return receipt
 
 
