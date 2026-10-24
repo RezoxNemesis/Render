@@ -152,7 +152,8 @@ public class ProductionSegmentPlanTest {
                 assertEquals("UNVERIFIED_VIDEO_NEEDS_MANUAL_INSPECTION",
                     expected.getMessage());
             }
-            assertEquals("second video",Files.readString(output.toPath()));
+            assertEquals("second video",new String(Files.readAllBytes(output.toPath()),
+                StandardCharsets.UTF_8));
             assertArrayEquals(original,Files.readAllBytes(preserved.toPath()));
         }finally{output.delete();preserved.delete();}
     }
