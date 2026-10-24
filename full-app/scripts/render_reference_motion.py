@@ -67,6 +67,9 @@ def _workspace_open(scene,root,p):
     data=C.workspace(p)
     from render_studio_ops import _asset
     source=_asset(Path(root),data["asset"])
+    # Video fallback displays a user-sampled original frame when the native
+    # video decoder cannot expose movie pixels in Blender's Image Editor.
+    preview=_asset(Path(root),data["preview_asset"]) if "preview_asset" in data else source
     if "model" in data:_scene_object(scene,data["model"])
     mode=data["mode"]
     window=None; area=None
@@ -80,17 +83,19 @@ def _workspace_open(scene,root,p):
     elif scene.camera is None:
         raise ValueError("CAMERA_REQUIRED")
 
-    try:image=bpy.data.images.load(str(source),check_existing=True)
+    try:image=bpy.data.images.load(str(preview),check_existing=True)
     except (RuntimeError,ValueError,OSError) as exc:
-        raise ValueError("NATIVE_REFERENCE_DECODER_UNAVAILABLE") from exc
+        raise ValueError("NATIVE_REFERENCE_DECODER_UNAVAILABLE_USE_SAMPLED_FRAME") from exc
     is_movie=source.suffix.lower()==".mp4"
-    if is_movie and image.source!="MOVIE":
+    preview_movie=preview.suffix.lower()==".mp4"
+    if preview_movie and image.source!="MOVIE":
         raise ValueError("NATIVE_MOVIE_PREVIEW_UNAVAILABLE_USE_REFERENCE_SAMPLE")
-    if not is_movie:
+    if not preview_movie:
         if min(image.size[:2])<1:raise ValueError("REFERENCE_IMAGE_EMPTY")
         if image.packed_file is None:image.pack()
     image["render_reference_workspace"]=True
     image["render_reference_source"]=source.name
+    image["render_reference_preview"]=preview.name
     # Do not change the selected object, scene camera, samples, lighting or fps.
     if mode=="CAMERA":
         backgrounds=scene.camera.data.background_images
@@ -103,7 +108,7 @@ def _workspace_open(scene,root,p):
         scene.camera.data.show_background_images=True
         background.alpha=.75
         background.display_depth="BACK"
-        if is_movie:
+        if preview_movie:
             background.image_user.frame_start=1
             background.image_user.use_auto_refresh=True
         panel="CAMERA_BACKGROUND"
@@ -112,7 +117,7 @@ def _workspace_open(scene,root,p):
         area.spaces.active.image=image
         if area.spaces.active.image!=image:
             raise RuntimeError("REFERENCE_EDITOR_IMAGE_NOT_ASSIGNED")
-        if is_movie:
+        if preview_movie:
             area.spaces.active.image_user.frame_start=1
             area.spaces.active.image_user.use_auto_refresh=True
         panel="IMAGE_EDITOR"
@@ -126,7 +131,11 @@ def _workspace_open(scene,root,p):
             "model":data.get("model",None),"image_pixels":list(image.size[:2]),
             "source_kind":"VIDEO" if is_movie else "IMAGE",
             "native_blender_panel_assigned":True,"side_by_side":panel=="IMAGE_EDITOR",
-            "original_media_kept":True,"packed_in_blend":not is_movie,
+            "original_media_kept":True,"packed_in_blend":not preview_movie,
+            "video_original_retained_in_assets":is_movie,
+            "video_scrubbing_native":preview_movie,
+            "still_frame_sample_used":is_movie and not preview_movie,
+            "comparison_preview_asset":preview.name,
             "not_in_final_camera_render":True,
             "scene_render_settings_unchanged":True,"exact_3d_likeness_claimed":False,
             "unseen_geometry_inferred":True}
