@@ -193,6 +193,25 @@ public class ProductionSegmentPlanTest {
             }
         }finally{manifest.delete();}
     }
+    @Test public void exportRejectsHashedButMislabelledPart()throws Exception{
+        Context c=RuntimeEnvironment.getApplication();
+        String id="1".repeat(32);
+        File mp4=ProductionFiles.file(c,id,ProductionSegmentedEncoder.partName(id,0));
+        File manifest=ProductionFiles.file(c,id,"manifest.json");
+        try{
+            Files.write(mp4.toPath(),mp4ContainerFixture());
+            JSONObject receipt=ProductionFiles.receipt(mp4,id)
+                .put("frames",24).put("start_frame",101).put("end_frame",125);
+            JSONObject data=new JSONObject().put("spec",spec(101,124,24,16000000))
+                .put("encoded_segments",new JSONObject().put("0",receipt));
+            Files.write(manifest.toPath(),data.toString().getBytes(StandardCharsets.UTF_8));
+            assertNotNull(ProductionSegmentedEncoder.readVerified(c,id,receipt));
+            try{RenderManualJobs.exportSegment(c,id,0);fail();}
+            catch(IllegalStateException expected){
+                assertEquals("VIDEO_PART_CHECKSUM_MISMATCH",expected.getMessage());
+            }
+        }finally{manifest.delete();mp4.delete();}
+    }
     @Test public void unsupportedFrameRatesAreRejectedExplicitly()throws Exception{
         JSONObject request=spec(1,1000,24,32000000).put("fps_base",100);
         try{ProductionSegmentPlan.plan(request);fail();}
