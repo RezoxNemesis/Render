@@ -311,6 +311,7 @@ def execute(op,p,root,scene):
                           "studio.capabilities","studio.tool.search",
                           "studio.workspace.activate","studio.workspace.inspect",
                           "studio.view.orbit","studio.editor.open",
+                          "studio.curve.inspect","studio.curve.adjust",
                           "studio.plan.submit","studio.plan.status","studio.plan.list",
                           "studio.plan.pause","studio.plan.resume","studio.plan.cancel",
                           "studio.activity"])
