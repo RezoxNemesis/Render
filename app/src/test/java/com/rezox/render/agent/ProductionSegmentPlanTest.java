@@ -8,6 +8,7 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 import java.io.File;
+import java.io.IOException;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.nio.charset.StandardCharsets;
@@ -130,6 +131,51 @@ public class ProductionSegmentPlanTest {
             Files.write(output.toPath(),missingTrack.toByteArray());
             assertFalse(ProductionSegmentedEncoder.hasCompleteMp4Container(output));
         }finally{output.delete();}
+    }
+    @Test public void badMonolithicVideoIsPreservedBeforeRetry()throws Exception{
+        Context app=RuntimeEnvironment.getApplication();
+        String job="b".repeat(32),filename="Production_"+job+".mp4";
+        File output=ProductionFiles.file(app,job,filename);
+        File preserved=ProductionFiles.file(app,job,
+            "Production_"+job+".unverified.mp4");
+        byte[] original="do not overwrite artist bytes".getBytes(StandardCharsets.UTF_8);
+        try{
+            Files.write(output.toPath(),original);
+            ProductionVideoEncoder.quarantineUnverifiedOutput(app,job,filename);
+            assertFalse(output.exists());
+            assertArrayEquals(original,Files.readAllBytes(preserved.toPath()));
+            Files.write(output.toPath(),"second video".getBytes(StandardCharsets.UTF_8));
+            try{
+                ProductionVideoEncoder.quarantineUnverifiedOutput(app,job,filename);
+                fail("must not overwrite existing quarantined output");
+            }catch(IllegalStateException expected){
+                assertEquals("UNVERIFIED_VIDEO_NEEDS_MANUAL_INSPECTION",
+                    expected.getMessage());
+            }
+            assertEquals("second video",Files.readString(output.toPath()));
+            assertArrayEquals(original,Files.readAllBytes(preserved.toPath()));
+        }finally{output.delete();preserved.delete();}
+    }
+    @Test public void downloadsRejectQuarantinedOrIncompleteRenderMp4()throws Exception{
+        Context app=RuntimeEnvironment.getApplication();
+        String job="c".repeat(32);
+        for(String filename:new String[]{
+            "Production_"+job+".unverified.mp4",
+            "Production_"+job+".mp4"}){
+            File output=ProductionFiles.file(app,job,filename);
+            try{
+                Files.write(output.toPath(),"bad MP4".getBytes(StandardCharsets.UTF_8));
+                JSONObject request=new JSONObject().put("category",job)
+                    .put("filename",filename)
+                    .put("expected_sha256",ProductionFiles.sha(output));
+                try{ProductionFiles.export(app,request);fail("invalid MP4 exported");}
+                catch(IOException expected){
+                    assertEquals(filename.endsWith(".unverified.mp4")?
+                        "ARTIFACT_INCOMPLETE":"VIDEO_CONTAINER_INCOMPLETE",
+                        expected.getMessage());
+                }
+            }finally{output.delete();}
+        }
     }
     @Test public void unsupportedFrameRatesAreRejectedExplicitly()throws Exception{
         JSONObject request=spec(1,1000,24,32000000).put("fps_base",100);
