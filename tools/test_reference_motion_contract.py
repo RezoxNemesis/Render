@@ -77,6 +77,21 @@ class ReferenceMotionContracts(unittest.TestCase):
         self.assertEqual(C.audit(good)["frames"],[1,5,10])
         for frames in ([1,1],[10,8],[],[1,2.5],[1,100001]):
             with self.assertRaises(ValueError):C.audit(dict(good,frames=frames))
+    def test_agent_discovers_recovery_safe_typed_operations(self):
+        schemas={entry["operation"]:entry for entry in C.capabilities()}
+        self.assertEqual(len(schemas),7)
+        for operation in ("reference.workspace.open","reference.compare.multiview",
+                          "reference.fit.landmarks","animation.clip.create",
+                          "animation.motion.audit"):
+            self.assertIn(operation,schemas)
+            self.assertTrue(schemas[operation]["requires_native_blender"])
+            self.assertFalse(schemas[operation]["runtime_tested_on_this_device"])
+            self.assertFalse(schemas[operation]["input_schema"]["additionalProperties"])
+        self.assertIn("preview_asset",schemas["reference.workspace.open"]["input_schema"]["properties"])
+        self.assertTrue(schemas["reference.fit.landmarks"]["checkpoint_before_change"])
+        artist=(ROOT/"full-app/scripts/render_artist_ops.py").read_text()
+        self.assertIn("render_reference_motion_contract.capabilities()",artist)
+
     def test_dispatch_and_engine_packaging_use_explicit_allowlist(self):
         py=(ROOT/"full-app/scripts/render_production_contract.py").read_text()
         dispatch=(ROOT/"full-app/scripts/render_production.py").read_text()
