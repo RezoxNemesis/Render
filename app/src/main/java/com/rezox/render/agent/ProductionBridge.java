@@ -23,7 +23,7 @@ public final class ProductionBridge {
         "scene.inspect","mesh.create","body.blockout","camera.frame","viewport.orient","sculpt.prepare","asset.create","material.assign","group.create","animation.keys","camera.aim",
         "world.configure","instances.plan","instances.create","reference.attach",
         "reference.list","reference.metadata","reference.video_frame","reference.pick","ui.state","connection.diagnose","reference.bind","reference.landmarks",
-        "reference.workspace.open","reference.workspace.inspect","reference.compare.multiview","reference.fit.landmarks",
+        "reference.workspace.open","reference.workspace.inspect","reference.compare.multiview","reference.fit.landmarks","reference.fit.multiview",
         "animation.clip.create","animation.clip.inspect","animation.motion.audit","viewport.inspect","viewport.configure","viewport.focus","object.geometry","operator.describe","operator.execute","render.plan","render.step","render.batch","render.status","render.encode","drive.status","drive.backup",
         "render.storage.status","render.job.start","render.job.status","render.job.pause",
         "render.job.export","render.job.export_segment","project.checkpoint_export","native.command.status",
