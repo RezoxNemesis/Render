@@ -18,6 +18,47 @@ class Scene(dict):
         self.eevee=types.SimpleNamespace(taa_render_samples=128)
 
 class ExecutionSettingsTests(unittest.TestCase):
+    def test_workbench_changes_its_own_antialiasing_without_touching_eevee(self):
+        scene=Scene();scene.render.engine='BLENDER_WORKBENCH'
+        scene.display=types.SimpleNamespace(render_aa='8')
+        self.assertEqual(8,E.inspect(scene)['samples'])
+        E.configure(scene,{'samples':32})
+        self.assertEqual('32',scene.display.render_aa)
+        self.assertEqual(128,scene.eevee.taa_render_samples)
+
+    def test_workbench_unavailable_sample_count_does_not_mutate_other_settings(self):
+        class Display:
+            _aa='8'
+            @property
+            def render_aa(self):return self._aa
+            @render_aa.setter
+            def render_aa(self,value):
+                if value not in ('OFF','FXAA','5','8','11','16','32'):raise TypeError('unsupported native enum')
+                self._aa=value
+        scene=Scene();scene.render.engine='BLENDER_WORKBENCH';scene.display=Display()
+        before=E.inspect(scene)
+        with self.assertRaises((ValueError,TypeError)):
+            E.configure(scene,{'width':1920,'samples':64})
+        self.assertEqual(before,E.inspect(scene))
+        self.assertEqual(128,scene.eevee.taa_render_samples)
+
+    def test_engine_override_inherits_target_engine_samples_not_previous_engine(self):
+        scene=Scene();scene.display=types.SimpleNamespace(render_aa='16')
+        E.profiles(scene,{'profile':'preview','settings':{'engine':'BLENDER_WORKBENCH'}},True)
+        plan,_,_=E.profile_plan(scene,{'profile':'preview'})
+        self.assertEqual(16,plan['samples'])
+        self.assertEqual('CYCLES',scene.render.engine)
+        self.assertEqual(512,scene.cycles.samples)
+
+    def test_workbench_fxaa_does_not_inherit_eevee_samples_or_silently_change_aa(self):
+        scene=Scene();scene.render.engine='BLENDER_WORKBENCH'
+        scene.display=types.SimpleNamespace(render_aa='FXAA')
+        self.assertIsNone(E.inspect(scene)['samples'])
+        with self.assertRaisesRegex(ValueError,'EXPLICIT_SUPPORTED_SAMPLES'):
+            E.plan_payload(scene,{})
+        self.assertEqual('FXAA',scene.display.render_aa)
+        self.assertEqual(128,scene.eevee.taa_render_samples)
+
     def test_preview_profile_cannot_change_final_or_active_scene_settings(self):
         scene=Scene();before=E.inspect(scene)
         E.profiles(scene,{'profile':'preview','settings':{'percentage':50,'samples':32,'fps_base':1.25}},True)

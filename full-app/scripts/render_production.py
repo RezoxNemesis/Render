@@ -308,11 +308,9 @@ def _step(root,p):
         if getattr(render,key)!=value:setattr(render,key,value)
         if abs(getattr(render,key)-value)>1e-5:raise ValueError('NATIVE_RENDER_SETTING_WAS_CLAMPED')
     import render_execution_settings
-    owner, field=render_execution_settings._samples(scene)
-    if owner is not None:
-        if getattr(owner,field)!=spec['samples']:setattr(owner,field,spec['samples'])
-        if getattr(owner,field)!=spec['samples']:raise ValueError('NATIVE_RENDER_SETTING_WAS_CLAMPED')
-    elif render.engine!='BLENDER_WORKBENCH':raise ValueError('REQUESTED_SAMPLE_CONTROL_UNAVAILABLE')
+    owner, field, native_samples=render_execution_settings.sample_target(scene,spec['samples'])
+    if getattr(owner,field)!=native_samples:setattr(owner,field,native_samples)
+    if getattr(owner,field)!=native_samples:raise ValueError('NATIVE_RENDER_SETTING_WAS_CLAMPED')
     if render.image_settings.file_format!='PNG':render.image_settings.file_format='PNG'
     for key, value in (('color_depth',spec.get('image_color_depth',render.image_settings.color_depth)),
                        ('color_mode',spec.get('image_color_mode',render.image_settings.color_mode))):

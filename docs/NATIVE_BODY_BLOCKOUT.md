@@ -23,3 +23,5 @@ with new checkpoints. Presence in capabilities is not a runtime acceptance pass.
 Use front/side/back references to choose explicit dimensions. A reference sheet
 is design guidance, not proof of physical measurements or a 3D scan. Keep private
 reference images and character projects outside the application source repository.
+
+For the next stage, see [native character review and sculpt preparation](NATIVE_CHARACTER_REVIEW.md).

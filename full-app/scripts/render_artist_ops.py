@@ -12,6 +12,9 @@ SCHEMAS = {
     'artist.capabilities': [],
     'artist.inspect': [],
     'body.blockout': ['name', 'proportions', 'subdivision_levels'],
+    'camera.frame': ['object', 'name', 'view', 'margin', 'aspect'],
+    'viewport.orient': ['object', 'view', 'margin'],
+    'sculpt.prepare': ['object', 'name', 'voxel_size_m', 'max_voxels', 'hide_source', 'require_connected'],
     'object.duplicate': ['object', 'name', 'linked'],
     'object.remove': ['object'],
     'sculpt.mask': ['object', 'vertices', 'weights'],
@@ -27,6 +30,13 @@ READ_ONLY = {'artist.capabilities', 'artist.inspect', 'material.inspect'}
 _FIELDS = {
     'proportions': {'type':'object'},
     'subdivision_levels': {'type':'integer','minimum':0,'maximum':3},
+    'view': {'enum':['FRONT','BACK','LEFT','RIGHT','THREE_QUARTER']},
+    'margin': {'type':'number','minimum':1.01,'maximum':3},
+    'aspect': {'type':'number','minimum':.1,'maximum':10},
+    'voxel_size_m': {'type':'number','minimum':.0001,'maximum':.1},
+    'max_voxels': {'type':'integer','minimum':1000,'maximum':32000000},
+    'hide_source': {'type':'boolean'},
+    'require_connected': {'type':'boolean'},
     'object': {'type':'string','minLength':1,'maxLength':255},
     'material': {'type':'string','minLength':1,'maxLength':255},
     'name': {'type':'string','pattern':'^[A-Za-z][A-Za-z0-9_-]{0,63}$'},
@@ -51,6 +61,9 @@ _FIELDS = {
 }
 _REQUIRED = {'object.duplicate':['object','name'],'object.remove':['object'],
              'body.blockout':['name','proportions'],
+             'camera.frame':['object','name','view'],
+             'viewport.orient':['object','view'],
+             'sculpt.prepare':['object','name','voxel_size_m'],
              'sculpt.mask':['object','vertices','weights'],'sculpt.stroke':['object','points'],
              'facial.expression':['object','weights'],'material.inspect':['material'],
              'light.configure':['object'],'camera.configure':['object'],'media.import':['asset']}
@@ -59,6 +72,8 @@ _REQUIRED = {'object.duplicate':['object','name'],'object.remove':['object'],
 def _fields(p, operation):
     if not isinstance(p, dict) or set(p) - set(SCHEMAS[operation]):
         raise ValueError('UNKNOWN_ARTIST_ARGUMENT')
+    if not set(_REQUIRED.get(operation, [])) <= set(p):
+        raise ValueError('ARTIST_REQUIRED_ARGUMENT_MISSING')
 
 
 def _number(value, low, high):
@@ -142,7 +157,8 @@ def execute(operation, scene, root, p):
         operations = []
         for op, fields in SCHEMAS.items():
             available, reason = True, ''
-            native = {'sculpt.stroke': 'sculpt.brush_stroke', 'project.export': 'wm.save_as_mainfile'}.get(op)
+            native = {'sculpt.stroke': 'sculpt.brush_stroke', 'sculpt.prepare': 'object.voxel_remesh',
+                      'project.export': 'wm.save_as_mainfile'}.get(op)
             if native:
                 try:
                     _operator(native)
@@ -203,6 +219,17 @@ def execute(operation, scene, root, p):
 
 
 def _mutate(operation, scene, root, p):
+    if operation in ('camera.frame', 'viewport.orient', 'sculpt.prepare'):
+        import render_character_tools as tools
+        ob = _object(scene, p.get('object'), 'MESH')
+        if operation == 'viewport.orient':
+            return tools.viewport_orient(scene, ob, p)
+        name = p.get('name')
+        if not isinstance(name, str) or not re.fullmatch(r'[A-Za-z][A-Za-z0-9_-]{0,63}', name):
+            raise ValueError('INVALID_ARTIST_OBJECT_NAME')
+        if operation == 'camera.frame':
+            return tools.camera_frame(scene, ob, name, p)
+        return tools.sculpt_prepare(scene, ob, name, p, _target)
     if operation == 'body.blockout':
         import render_body_blockout
         return render_body_blockout.create(scene,p.get('name'),p.get('proportions'),p.get('subdivision_levels',2))

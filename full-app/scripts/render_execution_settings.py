@@ -9,9 +9,15 @@ except ImportError:
 _INSTALLED = False
 
 
-def _samples(scene):
-    if scene.render.engine == "CYCLES" and hasattr(scene, "cycles"):
+def _samples(scene, engine=None):
+    engine = engine or scene.render.engine
+    if engine == "CYCLES" and hasattr(scene, "cycles"):
         return scene.cycles, "samples"
+    if engine == "BLENDER_WORKBENCH":
+        display = getattr(scene, "display", None)
+        return (display, "render_aa") if display is not None and hasattr(display, "render_aa") else (None, None)
+    if engine not in ("BLENDER_EEVEE", "BLENDER_EEVEE_NEXT"):
+        return None, None
     eevee = getattr(scene, "eevee", None)
     if eevee is not None and hasattr(eevee, "taa_render_samples"):
         return eevee, "taa_render_samples"
@@ -20,13 +26,35 @@ def _samples(scene):
     return None, None
 
 
+def sample_value(scene, engine=None):
+    owner, field = _samples(scene, engine)
+    value = getattr(owner, field) if owner is not None else None
+    if isinstance(value, str):
+        return int(value) if value.isdigit() else None  # OFF/FXAA are not sample counts.
+    return value
+
+
+def sample_target(scene, value):
+    owner, field = _samples(scene)
+    if owner is None:
+        raise ValueError("ACTIVE_ENGINE_SAMPLE_SETTING_UNAVAILABLE")
+    native = str(value) if isinstance(getattr(owner, field), str) else value
+    if field == "render_aa":
+        prop = getattr(getattr(owner, "bl_rna", None), "properties", {}).get(field)
+        if prop is not None and native not in {item.identifier for item in prop.enum_items}:
+            raise ValueError("WORKBENCH_ANTIALIAS_SAMPLES_UNAVAILABLE")
+    return owner, field, native
+
+
 def inspect(scene):
     render = scene.render
     owner, field = _samples(scene)
     return {"engine": render.engine, "width": render.resolution_x,
             "height": render.resolution_y, "percentage": render.resolution_percentage,
             "fps": render.fps, "fps_base": render.fps_base,
-            "samples": getattr(owner, field) if owner else None,
+            "samples": sample_value(scene),
+            "sample_control": field,
+            "workbench_antialiasing": getattr(owner, field) if render.engine == "BLENDER_WORKBENCH" and owner is not None else None,
             "film_transparent": render.film_transparent,
             "persistent_data": render.use_persistent_data,
             "threads_mode": render.threads_mode, "threads": render.threads,
@@ -38,10 +66,14 @@ def inspect(scene):
 
 def plan_payload(scene, requested):
     current = inspect(scene)
+    engine = requested.get("engine", current["engine"])
+    samples = requested.get("samples", sample_value(scene, engine))
+    if samples is None:
+        raise ValueError("RENDER_PLAN_REQUIRES_EXPLICIT_SUPPORTED_SAMPLES")
     result = {"width": current["width"] * current["percentage"] // 100,
               "height": current["height"] * current["percentage"] // 100,
-              "engine": current["engine"], "fps": current["fps"],
-              "samples": current["samples"] if current["samples"] is not None else 64,
+              "engine": engine, "fps": current["fps"],
+              "samples": samples,
               "start": scene.frame_start, "end": scene.frame_end}
     result.update(requested)
     return result
@@ -90,10 +122,8 @@ def configure(scene, p, performance=False):
             if key in p:
                 set_value(scene.render, field, p[key])
         if "samples" in p:
-            owner, field = _samples(scene)
-            if owner is None:
-                raise ValueError("ACTIVE_ENGINE_SAMPLE_SETTING_UNAVAILABLE")
-            set_value(owner, field, p["samples"])
+            owner, field, native = sample_target(scene, p["samples"])
+            set_value(owner, field, native)
         if "denoising" in p:
             if scene.render.engine != "CYCLES":
                 raise ValueError("DENOISING_SETTING_REQUIRES_CYCLES")
@@ -136,10 +166,11 @@ def profile_plan(scene, requested):
     overrides = profiles(scene, {})["profiles"][name]
     current = inspect(scene)
     combined = dict(current, **overrides)
-    plan = plan_payload(scene, {})
-    for key in ("engine", "fps", "samples"):
-        if key in overrides:
-            plan[key] = combined[key]
+    selected = {key: requested.get(key, overrides.get(key)) for key in ("engine", "samples")
+                if key in requested or key in overrides}
+    plan = plan_payload(scene, selected)
+    if "fps" in overrides:
+        plan["fps"] = combined["fps"]
     for key in ("width", "height"):
         plan[key] = combined[key] * combined["percentage"] // 100
     plan.update(requested)
