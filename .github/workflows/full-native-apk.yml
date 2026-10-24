@@ -30,6 +30,8 @@ jobs:
     if: github.head_ref != 'upgrade/render-studio-031'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    env:
+      PYTHONPATH: full-app/scripts
     steps:
       - uses: actions/checkout@v4
       - run: python3 tools/prepare_production_toolkit.py
