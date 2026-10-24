@@ -1,0 +1,109 @@
+name: The Last Sentinel - Real Blender Animation
+on:
+  pull_request:
+    branches: [upgrade/render-studio-034-reference-animation-20261024]
+    paths:
+      - "demos/the_last_sentinel.py"
+      - ".github/workflows/sentinel-cinematic-demo.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  preview:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 22
+    env:
+      LIBGL_ALWAYS_SOFTWARE: "1"
+      SENTINEL_OUTPUT: sentinel-preview
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install genuine Blender, virtual framebuffer and FFmpeg
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends blender xvfb ffmpeg
+          blender --version | head -2
+      - name: Validate script syntax and run six true 3D frames
+        run: |
+          python3 -m py_compile demos/the_last_sentinel.py
+          xvfb-run -a -s "-screen 0 1280x1024x24" blender -b -t 4 --python-exit-code 1 \
+            --python demos/the_last_sentinel.py -- --preview
+          test "$(find "$SENTINEL_OUTPUT/frames" -name 'frame_*.png' | wc -l)" -eq 6
+      - name: Generate six-image contact sheet
+        run: |
+          ffmpeg -hide_banner -loglevel error -y -pattern_type glob \
+            -i "$SENTINEL_OUTPUT/frames/frame_*.png" -vf "scale=240:360,tile=3x2" \
+            -frames:v 1 "$SENTINEL_OUTPUT/PreviewContact.png"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SENTINEL-six-frame-native-Blender-preview
+          path: |
+            sentinel-preview/PreviewContact.png
+            sentinel-preview/proof.json
+            sentinel-preview/frames/
+          retention-days: 7
+  final:
+    needs: preview
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    env:
+      LIBGL_ALWAYS_SOFTWARE: "1"
+      SENTINEL_OUTPUT: sentinel-final
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install actual Blender and FFmpeg
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends blender xvfb ffmpeg
+      - name: Render all 144 individual frames in Blender
+        run: |
+          xvfb-run -a -s "-screen 0 1280x1024x24" blender -b -t 4 --python-exit-code 1 \
+            --python demos/the_last_sentinel.py
+          test "$(find "$SENTINEL_OUTPUT/frames" -name 'frame_*.png' | wc -l)" -eq 144
+      - name: Encode real H.264 video without still-image pans
+        run: |
+          ffmpeg -hide_banner -loglevel error -y \
+            -framerate 24 -start_number 1 -i "$SENTINEL_OUTPUT/frames/frame_%04d.png" \
+            -c:v libx264 -crf 18 -preset fast -pix_fmt yuv420p -movflags +faststart \
+            "$SENTINEL_OUTPUT/TheLastSentinel.mp4"
+          ffprobe -v error -show_entries stream=width,height,nb_frames,r_frame_rate,codec_name \
+            -show_entries format=duration -of json "$SENTINEL_OUTPUT/TheLastSentinel.mp4" \
+            | tee "$SENTINEL_OUTPUT/ffprobe.json"
+          python3 - <<'PY'
+          import json,os,pathlib
+          p=pathlib.Path(os.environ['SENTINEL_OUTPUT'])
+          m=json.loads((p/'ffprobe.json').read_text())
+          stream=m['streams'][0]
+          assert stream['codec_name']=='h264'
+          assert int(stream['nb_frames'])==144
+          assert stream['r_frame_rate']=='24/1'
+          assert abs(float(m['format']['duration'])-6)<.04
+          proof=json.loads((p/'proof.json').read_text())
+          assert proof['armature_bones']>=12 and proof['nla_strips']>=1
+          assert proof['forearm_motion_path_units']>.05
+          assert (p/'TheLastSentinel_Editable.blend').stat().st_size>4096
+          print('PASS: 144 genuine Blender-rendered frames, animated rig, MP4 and editable BLEND')
+          PY
+      - name: Build preview contact and release ZIP
+        run: |
+          mkdir -p "$SENTINEL_OUTPUT/keyframes"
+          for i in 0001 0037 0071 0102 0118 0144; do
+            cp "$SENTINEL_OUTPUT/frames/frame_$i.png" "$SENTINEL_OUTPUT/keyframes/"
+          done
+          ffmpeg -hide_banner -loglevel error -y -pattern_type glob \
+            -i "$SENTINEL_OUTPUT/keyframes/frame_*.png" \
+            -vf "scale=240:360,tile=3x2" -frames:v 1 \
+            "$SENTINEL_OUTPUT/ContactSheet.png"
+          cd "$SENTINEL_OUTPUT"
+          zip -9 -q Sentinel_Real3D_Deliverables.zip TheLastSentinel.mp4 \
+            TheLastSentinel_Editable.blend proof.json ffprobe.json ContactSheet.png \
+            keyframes/frame_*.png
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SENTINEL-full-6s-144-real-Blender-frames-MP4-and-BLEND
+          path: |
+            sentinel-final/Sentinel_Real3D_Deliverables.zip
+            sentinel-final/TheLastSentinel.mp4
+            sentinel-final/TheLastSentinel_Editable.blend
+            sentinel-final/ContactSheet.png
+            sentinel-final/proof.json
+          retention-days: 7
