@@ -15,6 +15,22 @@ import static org.junit.Assert.*;
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk=33,manifest=Config.NONE)
 public class ProductionBridgeTest {
+    @Test public void compatibilityDiagnosisBypassesBusyNativeWorkAndNeedsNoEditor()throws Exception{
+        JSONObject args=new JSONObject().put("operation","connection.diagnose").put("payload",new JSONObject());
+        assertTrue(ProductionBridge.outOfBand(args));
+        Context c=RuntimeEnvironment.getApplication();
+        JSONObject caps=ProductionBridge.execute(c,new JSONObject().put("operation","capabilities"),new AtomicBoolean(false));
+        args.put("target_id",caps.getString("render_public_id"));
+        Files.write(new File(c.getFilesDir(),"blender-startup.log").toPath(),
+            "ndk_translation/intrinsics CHECK failed: host_platform::kHasF16C".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        c.getSharedPreferences("render_editor_launch",Context.MODE_PRIVATE).edit()
+            .putLong("launch_started_wall_ms",1).commit();
+        JSONObject result=ProductionBridge.execute(c,args,new AtomicBoolean(false))
+            .getJSONObject("native_runtime_diagnostics");
+        assertTrue(result.getBoolean("failure_classified"));
+        assertEquals("ANDROID_TRANSLATOR_F16C_UNAVAILABLE",result.getString("failure_code"));
+        assertFalse(result.getBoolean("automatic_retry_safe"));
+    }
     @Test public void acceptsTypedEnvelopeButNeverPythonOrGallery()throws Exception{
         ProductionBridge.validate(new JSONObject().put("operation","mesh.create").put("payload",new JSONObject()));
         for(String name:new String[]{"python.eval","shell.exec","gallery.list","read_arbitrary_file"}){

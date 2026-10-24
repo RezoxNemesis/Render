@@ -36,7 +36,7 @@ public final class ProductionBridge {
     static boolean outOfBand(JSONObject args){
         return Arrays.asList("ipc.command.status","ipc.command.cancel","native.command.status",
             "render.job.status","render.job.pause","render.job.cancel","render.queue.status",
-            "device.profile","capabilities").contains(args.optString("operation"));
+            "device.profile","capabilities","connection.diagnose").contains(args.optString("operation"));
     }
     public static void fields(JSONObject p,String allowed)throws Exception {
         Set<String> names=new HashSet<>(Arrays.asList(allowed.split(",")));
@@ -242,6 +242,7 @@ public final class ProductionBridge {
                 .put("render_public_id",publicId)
                 .put("target_package",context.getPackageName())
                 .put("editor_ready",editorReady(context))
+                .put("native_runtime_diagnostics",com.rezox.render.omega.engine.EngineRuntimeDiagnostics.inspect(context))
                 .put("owner_bridge_enabled",new AgentSecrets(context).videoStudioBridgeEnabled())
                 .put("work",StudioLiveHandOverlay.snapshot(context))
                 .put("reference_inbox",StudioReferenceInbox.list(context,

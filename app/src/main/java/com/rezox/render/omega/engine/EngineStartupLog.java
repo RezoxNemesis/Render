@@ -9,6 +9,19 @@ import java.util.List;
 /** Bounded selection of known Blender logs; historical failures are not current evidence. */
 public final class EngineStartupLog {
     private EngineStartupLog(){}
+    /** Classify only an observed assertion in the current launch's bounded log. */
+    public static String failureCode(String tail,boolean current){
+        if(current&&tail!=null&&tail.contains("CHECK failed: host_platform::kHasF16C")
+                &&tail.contains("ndk_translation/"))return "ANDROID_TRANSLATOR_F16C_UNAVAILABLE";
+        return "";
+    }
+    public static String failureMessage(String code){
+        if("ANDROID_TRANSLATOR_F16C_UNAVAILABLE".equals(code))
+            return "The Android ARM translation layer lacks required F16C support for this native Blender path. "
+                +"Use a compatible native ARM64 Android device or supported emulation. Preserve the checkpoint "
+                +"and inspect the original command result before retrying; changing quality or thermal settings does not fix this CPU compatibility failure.";
+        return "";
+    }
     public static final class Selection {
         public final File file;
         public final boolean current;

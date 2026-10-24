@@ -395,6 +395,9 @@ public final class EditorLaunchActivity extends Activity {
                 .append(log.file.getAbsolutePath()).append("\n");
             try{
                 String tail=EngineStartupLog.readTail(log.file,32000);
+                String failure=EngineStartupLog.failureCode(tail,log.current);
+                if(!failure.isEmpty())data.append("Runtime compatibility: ").append(failure).append("\n")
+                    .append(EngineStartupLog.failureMessage(failure)).append("\n\n");
                 data.append(tail.isEmpty()?"No native log output yet.\n":tail);
                 if(!log.current)data.append("\nNo fresh log for the current launch yet.");
                 return data.toString();

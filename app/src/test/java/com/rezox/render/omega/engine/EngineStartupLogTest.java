@@ -10,6 +10,18 @@ import java.util.Arrays;
 import static org.junit.Assert.*;
 
 public class EngineStartupLogTest {
+    @Test public void currentTranslatorAssertionHasAnActionableCompatibilityDiagnosis(){
+        String line="vendor/unbundled_google/libs/ndk_translation/intrinsics/arm_to_x86_32_or_x86_64/intrinsics.cc:28: CHECK failed: host_platform::kHasF16C";
+        assertEquals("ANDROID_TRANSLATOR_F16C_UNAVAILABLE",EngineStartupLog.failureCode(line,true));
+        assertTrue(EngineStartupLog.failureMessage(EngineStartupLog.failureCode(line,true)).contains("ARM translation"));
+    }
+    @Test public void historicalTranslatorFailureCannotDiagnoseTheCurrentLaunch(){
+        assertEquals("",EngineStartupLog.failureCode("ndk_translation/intrinsics CHECK failed: host_platform::kHasF16C",false));
+    }
+    @Test public void mentioningACpuFeatureDoesNotEstablishAFailure(){
+        assertEquals("",EngineStartupLog.failureCode("ndk_translation F16C enabled",true));
+        assertEquals("",EngineStartupLog.failureCode("CHECK failed: unrelated_condition",true));
+    }
     @Rule public TemporaryFolder temp=new TemporaryFolder();
     private File log(String name,long time,String text)throws Exception{
         File file=temp.newFile(name);
