@@ -40,7 +40,7 @@ def prepare():
         required=(
             ('tools/assemble_full_native.py','render_studio_contract.py'),
             ('app/src/main/java/com/rezox/render/agent/ProductionBridge.java','StudioReferenceInbox.list(context,p)'),
-            ('full-app/scripts/render_production.py','render_studio_ops.py'),
+            ('full-app/scripts/render_production.py','import render_studio_ops'),
             ('full-app/app/build.gradle','versionCode 36'),
             ('app/build.gradle.kts','versionCode = 36'),
         )
