@@ -1,84 +1,83 @@
-# Render Studio 0.31.2 — native startup storage
+# Render Studio 0.31.2 — native engineering candidate
 
-Adds discoverable `body.blockout` with explicit, validated proportions and native
-editable body volumes for a staged character workflow. It checkpoints first and
-does not claim a finished sculpt, facial likeness or final render. Reference
-images are not bundled. See [native body controls](NATIVE_BODY_BLOCKOUT.md).
+Package `com.rezox.render`; versionCode **38**;
+versionName `0.31.2-native-startup-storage`; ARM64; minimum Android 12/API 31.
+Retains the previously committed native Blender, Vulkan, OMEGA, project-storage
+and export improvements. No native engine library was replaced.
 
-Package `com.rezox.render`, versionCode **38**. Retains the 0.31.1 engineering
-upgrades, native Blender libraries, project compatibility and render settings.
+## Changes
 
-The retained upgrades include process/launch-bound native readiness, durable
-exact-ID Binder results and render queues, completed-frame recovery, foreground
-controls/notifications, separate preview/final profiles, Android thermal/memory
-gates, native artist operations, the truthful editor HUD, explicit media import
-and CC0 asset search/download/import. The existing VideoStudio Binder integration
-remains; no additional MCP server or relay was introduced.
+- Native startup separates launch acceptance from a fresh Blender timer heartbeat
+  bound to the current process and launch. It reuses a live editor, guards
+  overlapping launches, stages runtime upgrades, preserves failure logs and
+  reports readiness failures. Real workspace execution exposed a UI-thread
+  shared-Downloads log probe; startup storage now prepares on the loader worker.
+  Buffered extraction reduces storage queries and bounds progress updates.
+- Render intentions, settings, exact command IDs, retained results and verified
+  completed frames persist. Foreground notifications and Hub/editor controls
+  expose pause, resume, cancellation and recovery. Uncertain mutations require
+  polling their original IDs before retry. The existing VideoStudio native Binder
+  integration remains, with the private credential separate from the public ID.
+- Separate preview/final profiles preserve unspecified artist settings. Persistent
+  render data, scene/module reuse, bounded caches and fewer redundant native
+  updates avoid unnecessary work without reducing final resolution, samples,
+  geometry or textures. No performance gain has been measured.
+- Android thermal status and memory govern frame admission. Battery temperature
+  is labeled separately from unavailable CPU temperature. Memory reserve and
+  frame pacing are configurable; thermal protections remain active.
+- Native artist operations cover inspection, modelling, sculpting, materials,
+  expressions, rigging, animation, cameras, lights, saving and available exports.
+  New `body.blockout` supports validated metre-based proportions for an editable
+  first-stage character. It explicitly leaves sculpt union, fingers, facial
+  likeness, garments and rigging unfinished. See [body controls](NATIVE_BODY_BLOCKOUT.md).
+- The native HUD reports real actions, queue/frame progress, elapsed time and
+  calculable frame ETA. Paused/interrupted/terminal states are explicit. The
+  unobtrusive pointer reflects actual input/actions and stays outside camera renders.
+- Poly Haven/AmbientCG search exposes licensing, formats, previews and sizes.
+  Resumable downloads keep originals separate from previews and report available
+  integrity checks honestly. Explicit document/share imports handle supported
+  images/videos without Gallery enumeration.
+- A native crash-recovery check exposed zero-byte checkpoint copies after
+  successful save callbacks. Copies now use hidden same-directory staging,
+  header/path checks, file fsync, SHA-256, atomic rename and directory fsync.
+  BLEND exports/recovery backups share this path; relative asset links and the
+  current scene's unit scale are preserved. A later native body checkpoint
+  survived one unexpected emulator host-GPU abort with its exact hash intact.
 
-Real Android workspace testing exposed an input-dispatch ANR while the native
-activity opened its startup log in shared Downloads storage on the UI thread.
-Startup log/output storage is now prepared by the existing background loader.
-The native activity publishes an already prepared private log path without
-probing shared storage. The previous private startup log is retained, and both
-current and previous logs are available to diagnostics. Existing explicit
-Blender output paths and native output-directory overrides are preserved.
+## Build and validation
 
-Runtime extraction now buffers archive reads and checks the free-space reserve
-at bounded 4 MiB intervals instead of querying storage for every inflater chunk.
-Progress updates include bytes during large files and are limited to one update
-per two seconds. Archive validation, staging/rollback and the 64 MiB free-space
-reserve remain. No scene detail, samples, textures or output quality is reduced.
+Final APK source: `8fe278b8917d02d47dcbc660d8cb27ee0854531d`.
+Signed [CI build 40080186139](https://github.com/RezoxNemesis/Render/actions/runs/40080186139)
+succeeded. Independent signature, package identity, ZIP CRC and source-packaging
+checks verified **146 unchanged native libraries** and **18 matching Python modules**.
+The runtime archive changed to package the updated Python operations.
 
-The native HUD now labels interrupted, paused, completed, cancelled and failed
-work explicitly. Workspace captures exposed an interrupted render retaining an
-ambiguous historical action heading; the recovery stage and verified frame count
-were already correct. This final heading change receives a separate signed build.
+The owner subsequently authorized tests, superseding the original request to
+skip them. Earlier host suites and focused follow-ups passed. Actual Android
+Blender execution created and checkpointed an editable mug, inserted animation
+keys and created a separate Stage 1 body blockout. Native viewport captures were
+verified. The animation checkpoint failed crash recovery before the save fix.
+No camera-render frame or encoded movie completed. Runtime evidence belongs to
+the specific earlier builds in the [workspace report](WORKSPACE_TESTING_0312.md);
+the final relative-link/unit-scale changes have host checks, not a native rerun.
 
-The fixed workspace integration fixture creates an editable glazed ceramic mug,
-metal base, lighting, keyframes and explicitly selected preview jobs through
-Render's native operations. The build workflow emits a matching signed test APK;
-a differently signed local runner was correctly rejected by Android.
+## Limits and signing
 
-Validation: Android foundation/full-native compilation, seven focused native
-assembly checks, and two targeted Robolectric checks for the UI-thread guard,
-retained failure log and preserved output-directory override. The OS environment
-calls use an explicit host-test shadow. These checks do not establish native
-modelling/rendering success; that requires actual receipts and output files.
+Repeated emulator host software-GPU aborts prevented full character proportion
+review and sculpting. The ARM translator also lacks F16C required by the attempted
+EEVEE frame. Photorealism, final-quality comparisons, phone performance/thermals,
+remote VideoStudio authentication and uninterrupted 24-hour work are unverified.
+Android/vendor limits can stop work; explicit force-stop prevents execution.
+Pause/cancel acts at native frame boundaries, and interrupted frames restart;
+completed verified frames are retained. Catalogs/importers/exporters remain finite.
+HDR/32-bit rendering remains available through native Blender, outside the new
+durable PNG-job pipeline. See [retained limits](V031_RELEASE_NOTES.md).
 
-The first software-emulator attempt reached Blender's Vulkan device checks.
-SwiftShader lacks the geometry-shader feature required by the bundled engine;
-the native engine then crashed. Lavapipe passed the geometry-feature check and
-reached native Python, a timer heartbeat and the Blender Quick Setup UI. The
-emulator later aborted in Mesa's software-GPU memory mapping; a recovery attempt
-uses fewer software-GPU workers. That recovery passed native diagnostics and
-Render's native-window capture. Native modelling receipts confirm the original
-scene checkpoint and complete 11-object mug scene with materials, subdivision,
-lights and camera. Its editable BLEND checkpoint was pulled and hash verified.
-Native checkpoint restore and five turntable rotation keys also passed; a separate
-animation checkpoint was reported saved. After a host-GPU crash and Android
-reboot, that recent file and its rollback were **zero bytes**. The earlier mug
-checkpoint survived. Successful save callbacks and immediate hashes were not
-sufficient evidence of durable storage. Native checkpoint copies, session saves,
-recovery backups and BLEND exports now use hidden staging, file fsync, verified
-publication by rename and directory fsync before returning a receipt. These
-changes still require native interruption validation; no host-power-loss guarantee
-is made. The real native viewport screenshot is
-included with the workspace evidence.
-The still job started EEVEE in an active Android foreground service, then the
-emulator's ARM translator aborted on missing F16C. A separate CPU probe confirms
-this TCG emulator cannot provide AVX/F16C. No PNG frame or movie completed;
-visual realism and final output quality are unverified. See the
-[native workspace report](WORKSPACE_TESTING_0312.md) for exact evidence and limits.
-
-No physical-phone installation, realme performance/thermal result, measured
-speedup, final-quality comparison or uninterrupted 24-hour operation is claimed.
-Android may terminate work; force-stop prevents execution. Pause/cancel takes
-effect at a native frame boundary, and resume preserves verified completed frames,
-not samples inside an interrupted frame. Catalogs and native import/export
-availability remain finite. See [retained engineering limits](V031_RELEASE_NOTES.md).
-
-The APK uses the repository's historical certificate
+APK SHA-256: `9e745320c1c468a6a4f6963b19cb962e24f09ea85fdd3563ced90e38e463ee12`.
+Historical certificate SHA-256:
 `f3d63fb20be25ca0be8aa6a161d5cf13cd98ba2fa300c7a604cce35131b9eb30`.
-It is a debuggable candidate. The installed phone certificate was not queried;
-in-place phone compatibility requires it to match. Do not uninstall to bypass
-a mismatch. The owned emulator accepted the matching signed update.
+This is a **debuggable candidate**. Matching-signer updates were installed only
+in the owned emulator; the final APK was inspected, not installed there.
+No phone install, certificate query, uninstall or data clear occurred. An in-place
+phone update requires the installed certificate to match; do not uninstall to
+bypass a mismatch.
