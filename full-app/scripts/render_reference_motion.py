@@ -13,7 +13,7 @@ from bpy_extras.object_utils import world_to_camera_view
 import render_reference_motion_contract as C
 
 OPS=frozenset(("reference.workspace.open","reference.workspace.inspect",
-               "reference.compare.multiview","animation.clip.create",
+               "reference.compare.multiview","reference.fit.landmarks","animation.clip.create",
                "animation.clip.inspect","animation.motion.audit"))
 READ_ONLY=frozenset(("reference.workspace.inspect","reference.compare.multiview",
                      "animation.clip.inspect","animation.motion.audit"))
@@ -191,6 +191,71 @@ def _multi(scene,p):
             "unseen_geometry_measured":False,"likeness_percent_available":False,
             "native_mesh_geometry_read":True}
 
+def _fit_landmarks(scene,p):
+    C.fit(p)
+    obj=_scene_object(scene,p["object"],"MESH")
+    cam=_scene_object(scene,p["camera"],"CAMERA")
+    if len(obj.data.vertices)!=p["expected_vertices"]:
+        raise ValueError("FIT_MESH_REVISION_CONFLICT")
+    if obj.data.shape_keys is not None:
+        raise ValueError("FIT_BASE_MESH_WITH_SHAPE_KEYS_UNSUPPORTED")
+    if cam.data.type not in ("PERSP","ORTHO"):
+        raise ValueError("FIT_CAMERA_TYPE_UNSUPPORTED")
+    bpy.context.view_layer.update()
+    rotation=cam.matrix_world.to_quaternion()
+    right=rotation @ Vector((1,0,0))
+    up=rotation @ Vector((0,1,0))
+    cam_inv=cam.matrix_world.inverted_safe()
+    ob_inv=obj.matrix_world.inverted_safe()
+    strength=p.get("strength",.5)
+    maximum=p.get("max_displacement",.15)
+    before=[];after=[];changes=[]
+    def image_xy(world):
+        n=world_to_camera_view(scene,cam,world)
+        if n.z<=0:
+            raise ValueError("FIT_LANDMARK_BEHIND_CAMERA")
+        return Vector((float(n.x),float(1.0-n.y)))
+    for label,target in p["reference"].items():
+        index=p["model"][label]
+        world=obj.matrix_world @ obj.data.vertices[index].co
+        current=image_xy(world)
+        goal=Vector(target)
+        offset=goal-current
+        depth=abs((cam_inv @ world).z)
+        epsilon=max(.0001,depth*.001)
+        j_r=(image_xy(world+epsilon*right)-current)/epsilon
+        j_u=(image_xy(world+epsilon*up)-current)/epsilon
+        determinant=j_r.x*j_u.y-j_u.x*j_r.y
+        if abs(determinant)<1e-10:
+            raise ValueError("FIT_CAMERA_JACOBIAN_DEGENERATE")
+        x=(offset.x*j_u.y-offset.y*j_u.x)/determinant
+        y=(j_r.x*offset.y-j_r.y*offset.x)/determinant
+        step=right*x+up*y
+        if step.length>maximum:step=step.normalized()*maximum
+        step*=strength
+        updated=world+step
+        projected=image_xy(updated)
+        before.append(offset.length_squared)
+        after.append((goal-projected).length_squared)
+        changes.append((index,ob_inv@updated,step.length))
+    old_rms=math.sqrt(sum(before)/len(before))
+    predicted=math.sqrt(sum(after)/len(after))
+    if predicted>old_rms+1e-9:
+        raise ValueError("FIT_PROPOSED_STEP_WORSENS_PROJECTION")
+    if not p.get("dry_run",False) and predicted<old_rms-1e-12:
+        if obj.data.users>1:obj.data=obj.data.copy()
+        for index,local,step_size in changes:obj.data.vertices[index].co=local
+        obj.data.update()
+        bpy.context.view_layer.update()
+    return {"object":obj.name,"camera":cam.name,
+        "landmarks":len(changes),"rms_before":old_rms,"rms_predicted_after":predicted,
+        "maximum_vertex_world_displacement":max(x[2] for x in changes),
+        "applied":not p.get("dry_run",False) and predicted<old_rms-1e-12,
+        "preserved_camera_depth":True,"mesh_density_unchanged":True,
+        "automatic_hidden_geometry_reconstruction":False,
+        "reference_metric":"normalized 2D projection error; not perceptual likeness",
+        "final_render_quality_unchanged":True}
+
 def _action_curves(action,slot):
     result=[]
     try:result=list(action.fcurves)
@@ -365,6 +430,7 @@ def execute(op,p,root,scene):
     if op=="reference.workspace.inspect":
         C.fields(p,());return _workspace_inspect(scene)
     if op=="reference.compare.multiview":return _multi(scene,p)
+    if op=="reference.fit.landmarks":return _fit_landmarks(scene,p)
     if op=="animation.clip.create":return _clip_create(scene,p)
     if op=="animation.clip.inspect":return _clip_inspect(scene,p)
     if op=="animation.motion.audit":return _motion_audit(scene,p)
