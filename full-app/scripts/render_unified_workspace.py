@@ -316,6 +316,9 @@ def execute(op,p,root,scene):
                           "studio.activity"])
         return result
     if op=="studio.tool.search":return _tool_search(p)
+    if op in ("studio.curve.inspect","studio.curve.adjust"):
+        import render_unified_curves
+        return render_unified_curves.execute(op,p)
     if op=="studio.workspace.activate":return _activate(scene,p)
     if op=="studio.view.orbit":return _orbit(scene,p)
     if op=="studio.editor.open":return _editor(p)
