@@ -8,8 +8,8 @@ android {
         applicationId = "com.rezox.render"
         minSdk = 28
         targetSdk = 35
-        versionCode = 42
-        versionName = "0.32.2-mp4-recovery"
+        versionCode = 43
+        versionName = "0.34.0-native-reference-motion"
         ndk { abiFilters += listOf("arm64-v8a") }
         externalNativeBuild {
             cmake { cppFlags += listOf("-std=c++20", "-Wall", "-Wextra", "-Werror") }
