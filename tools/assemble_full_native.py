@@ -41,7 +41,33 @@ def valid_zip_entry(info):
         raise ValueError("UNSAFE_ENGINE_APK_MEMBER")
     return name
 
-def merge_manifest(source):
+def native_configuration_mask(value):
+    # CONFIG_ASSETS_PATHS is a framework configuration bit, absent from the
+    # public aapt flag names. An integer resource preserves it through Android's
+    # normal TypedArray/package parsing. GHOST already handles CONFIG_CHANGED.
+    flags = dict(mcc=1, mnc=2, locale=4, touchscreen=8, keyboard=16,
+                 keyboardHidden=32, navigation=64, orientation=128,
+                 screenLayout=256, uiMode=512, screenSize=1024,
+                 smallestScreenSize=2048, density=4096, layoutDirection=8192,
+                 colorMode=16384, grammaticalGender=32768,
+                 fontWeightAdjustment=0x10000000, fontScale=0x40000000)
+    result = 0
+    for token in filter(None, value.split("|")):
+        token = token.strip()
+        if token in flags:
+            result |= flags[token]
+        else:
+            try:
+                number = int(token, 0)
+            except ValueError:
+                raise ValueError("UNKNOWN_UPSTREAM_NATIVE_CONFIGURATION_FLAG") from None
+            if not 0 <= number <= 0xffffffff:
+                raise ValueError("INVALID_UPSTREAM_NATIVE_CONFIGURATION_MASK")
+            result |= number
+    return result | 0x80000000
+
+
+def merge_manifest(source, resources=None):
     root = ET.parse(source).getroot()
     root.attrib.pop("package", None)   # AGP 8+ namespace comes from Gradle.
     # Android 11+ package visibility: explicitly inspect only our known
@@ -66,6 +92,15 @@ def merge_manifest(source):
     # full landscape AND a portrait-focused native workspace on a phone.
     # Java BlenderMobileControls supplies the owner's preferred orientation.
     activity.set(ANDROID + "screenOrientation", "unspecified")
+    config_mask = native_configuration_mask(activity.get(ANDROID + "configChanges", ""))
+    activity.set(ANDROID + "configChanges", "@integer/render_native_config_changes")
+    if resources is not None:
+        config_file = Path(resources) / "values/render_native_configuration.xml"
+        if config_file.exists():
+            raise ValueError("UPSTREAM_NATIVE_CONFIGURATION_RESOURCE_COLLISION")
+        config_file.parent.mkdir(parents=True, exist_ok=True)
+        config_file.write_text('<resources><integer name="render_native_config_changes">'
+                               + hex(config_mask) + '</integer></resources>\n', encoding="utf8")
     # One launcher opens Render's hub; native editor keeps .blend VIEW/EDIT intents.
     for intent in list(activity.findall("intent-filter")):
         if any(x.get(ANDROID + "name") == "android.intent.action.MAIN"
@@ -75,6 +110,8 @@ def merge_manifest(source):
     existing = {p.get(ANDROID + "name") for p in root.findall("uses-permission")}
     for permission in ("android.permission.FOREGROUND_SERVICE",
                        "android.permission.FOREGROUND_SERVICE_SPECIAL_USE",
+                       "android.permission.FOREGROUND_SERVICE_MEDIA_PROCESSING",
+                       "android.permission.FOREGROUND_SERVICE_DATA_SYNC",
                        "android.permission.POST_NOTIFICATIONS",
                        "android.permission.WAKE_LOCK"):
         if permission not in existing:
@@ -94,11 +131,23 @@ def merge_manifest(source):
     ET.SubElement(filter_, "category", {ANDROID + "name": "android.intent.category.LAUNCHER"})
     for klass in ("com.rezox.render.MainActivity", "com.rezox.render.agent.AgentActivity",
                   "com.rezox.render.EditorLaunchActivity"):
-        ET.SubElement(application, "activity", {
+        is_reference_inbox = klass.endswith("agent.AgentActivity")
+        node = ET.SubElement(application, "activity", {
             ANDROID + "name": klass,
-            ANDROID + "exported": "false",
+            ANDROID + "exported": "true" if is_reference_inbox else "false",
             ANDROID + "screenOrientation": "unspecified",
         })
+        # Only explicit user SEND/Open Document grants arrive here; no Gallery
+        # enumeration or broad READ_MEDIA permissions are requested.
+        if is_reference_inbox:
+            for action in ("android.intent.action.SEND",
+                           "android.intent.action.SEND_MULTIPLE"):
+                for mime in ("image/*", "video/*"):
+                    intent = ET.SubElement(node, "intent-filter")
+                    ET.SubElement(intent, "action", {ANDROID + "name": action})
+                    ET.SubElement(intent, "category", {
+                        ANDROID + "name": "android.intent.category.DEFAULT"})
+                    ET.SubElement(intent, "data", {ANDROID + "mimeType": mime})
     service = ET.SubElement(application, "service", {
         ANDROID + "name": "com.rezox.render.agent.AgentService",
         ANDROID + "exported": "false",
@@ -107,6 +156,20 @@ def merge_manifest(source):
     ET.SubElement(service, "property", {
         ANDROID + "name": "android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE",
         ANDROID + "value": "User-started and visible remote native project-command session with notification, Stop and Revoke",
+    })
+    long_render = ET.SubElement(application, "service", {
+        ANDROID + "name": "com.rezox.render.agent.RenderLongForegroundService",
+        ANDROID + "exported": "false",
+        ANDROID + "foregroundServiceType": "mediaProcessing|specialUse",
+    })
+    ET.SubElement(long_render, "property", {
+        ANDROID + "name": "android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE",
+        ANDROID + "value": "Explicit user-requested native Blender frame rendering with visible status, pause and crash-safe checkpoints",
+    })
+    ET.SubElement(application, "service", {
+        ANDROID + "name": "com.rezox.render.agent.FileTransferService",
+        ANDROID + "exported": "false",
+        ANDROID + "foregroundServiceType": "dataSync",
     })
     ET.SubElement(application, "service", {
         ANDROID + "name": "com.rezox.render.agent.VideoStudioNativeBridgeService",
@@ -117,6 +180,20 @@ def merge_manifest(source):
         ANDROID + "exported": "false",
     })
     return ET.ElementTree(root)
+
+
+class _RuntimeScriptArchive(zipfile.ZipFile):
+    """Keep runtime seals stable when a checkout changes only file metadata."""
+
+    def write(self, filename, arcname=None, compress_type=None, compresslevel=None):
+        if arcname is None:
+            raise ValueError("RUNTIME_SCRIPT_ARCHIVE_NAME_REQUIRED")
+        entry = zipfile.ZipInfo(arcname, date_time=(2020, 1, 1, 0, 0, 0))
+        entry.create_system = 3
+        entry.external_attr = 0o100644 << 16
+        self.writestr(entry, Path(filename).read_bytes(),
+                      compress_type=self.compression if compress_type is None else compress_type,
+                      compresslevel=compresslevel)
 
 
 def attach_bpy_agent(runtime_zip, source_py, scene_py=None, batch_py=None):
@@ -131,15 +208,56 @@ def attach_bpy_agent(runtime_zip, source_py, scene_py=None, batch_py=None):
             raise ValueError("BLENDER_LIVELY_SCRIPT_COLLISION")
         if batch_py is not None and "scripts/startup/render_batch_assembly.py" in names:
             raise ValueError("BLENDER_BATCH_SCRIPT_COLLISION")
-    with zipfile.ZipFile(runtime_zip, "a") as packed:
+    with _RuntimeScriptArchive(runtime_zip, "a") as packed:
         packed.write(source_py, "scripts/startup/render_agent_startup.py",
                      compress_type=zipfile.ZIP_DEFLATED)
         if scene_py is not None:
             packed.write(scene_py, "scripts/startup/render_lively_scene.py",
                          compress_type=zipfile.ZIP_DEFLATED)
+        for name in ("render_file_contract.py", "render_file_ops.py", "render_artist_ops.py", "render_body_blockout.py", "render_character_tools.py", "render_asset_sources.py", "render_production.py", "render_production_contract.py", "render_production_detail.py", "render_studio_ops.py", "render_studio_contract.py", "render_reference_motion.py", "render_reference_motion_contract.py"):
+            source = Path(source_py).with_name(name)
+            if not source.is_file():
+                raise ValueError("PRODUCTION_RUNTIME_NOT_PACKAGED")
+            packed.write(source, "scripts/startup/" + name,
+                         compress_type=zipfile.ZIP_DEFLATED)
         if batch_py is not None:
             packed.write(batch_py, "scripts/startup/render_batch_assembly.py",
                          compress_type=zipfile.ZIP_DEFLATED)
+        # The runtime is immutable after stage; save/recovery helpers are
+        # packaged alongside the upstream bpy startup script, not an APK shell.
+        for extra in ("render_session_tools.py", "render_v25_recovery.py", "render_assets.py", "render_native_hud.py",
+                      "render_asset_library.py", "render_execution_settings.py"):
+            source = Path(source_py).with_name(extra)
+            if not source.is_file():
+                raise ValueError("SESSION_RUNTIME_NOT_PACKAGED")
+            packed.write(source, "scripts/startup/" + extra,
+                         compress_type=zipfile.ZIP_DEFLATED)
+        # Keep the pinned full Blender runtime intact. Each independently
+        # reviewed Omega module is an optional Python package member, not a
+        # startup script or a replacement for libblender.so.
+        scripts = Path(source_py).parent
+        omega_dir = scripts / "omega"
+        omega_files = [
+            (scripts / "omega_registry.py", "scripts/startup/omega_registry.py"),
+            (omega_dir / "__init__.py", "scripts/startup/omega/__init__.py"),
+        ]
+        allowed = {
+            "phase01_engine.py", "phase02_render.py", "phase03_agent.py",
+            "phase04_geometry.py", "phase05_character.py", "phase06_rig.py",
+            "phase07_motion.py", "phase08_world.py", "phase09_vfx.py",
+            "phase11_artist.py", "phase12_quality.py", "phase13_simulation.py",
+        }
+        if omega_dir.is_dir():
+            for phase_file in sorted(omega_dir.glob("phase*.py")):
+                if phase_file.name not in allowed:
+                    raise ValueError("UNRECOGNIZED_OMEGA_MODULE")
+                omega_files.append((phase_file, "scripts/startup/omega/" + phase_file.name))
+        for source, archive_name in omega_files:
+            if not source.is_file():
+                raise ValueError("OMEGA_REGISTRY_RUNTIME_MISSING")
+            if archive_name in names:
+                raise ValueError("UPSTREAM_OMEGA_MODULE_COLLISION")
+            packed.write(source, archive_name, compress_type=zipfile.ZIP_DEFLATED)
 
 def patch_native_activity(path):
     java = path.read_text(encoding="utf-8")
@@ -163,6 +281,7 @@ def patch_native_activity(path):
     /* Render's app-private command spool, read by Blender's bpy startup timer.
        No Android listening port, no remote render process. */
     try {
+      com.rezox.render.NativeEditorConfiguration.publish(this);
       File commandDirectory = new File(getFilesDir(), "render_bpy_jobs");
       if (!commandDirectory.isDirectory() && !commandDirectory.mkdirs()) {
         throw new java.io.IOException("Cannot initialize Render command directory");
@@ -174,6 +293,39 @@ def patch_native_activity(path):
     }
 """
     java = java.replace(original, patch)
+    # App-private projects, runtime and SAF imports do not require all-files
+    # access. Launching Settings after NativeActivity starts steals its window
+    # during Vulkan initialization. Keep broad file access an explicit action.
+    storage_request = "    requestAllFilesAccess();"
+    if java.count(storage_request) != 1:
+        raise ValueError("PINNED_BLENDER_STORAGE_REQUEST_HOOK_CHANGED")
+    java = java.replace(storage_request, "    // File browser access is requested explicitly from Render controls.", 1)
+    # Shared-storage probes on NativeActivity's main thread caused an actual
+    # input-dispatch ANR. The loader prepares log/output storage off the UI
+    # thread; the activity publishes only the already prepared private path.
+    method = "  private void chooseLogPath() {"
+    if java.count(method) != 1:
+        raise ValueError("PINNED_BLENDER_LOG_PREPARATION_HOOK_CHANGED")
+    start = java.index(method)
+    end = start + len(method)
+    depth = 1
+    while end < len(java) and depth:
+        depth += (java[end] == '{') - (java[end] == '}')
+        end += 1
+    if depth or "nativeSetLogPath(logPath);" not in java[start:end]:
+        raise ValueError("PINNED_BLENDER_LOG_PREPARATION_BODY_CHANGED")
+    java = java[:start] + '''  private void chooseLogPath() {
+    logPath = com.rezox.render.omega.engine.EngineNativePaths.logPath(this);
+    if (logPath != null) {
+      nativeSetLogPath(logPath);
+    }
+  }''' + java[end:]
+    log_hook = "      nativeSetLogPath(logPath);"
+    if java.count(log_hook) != 1:
+        raise ValueError("PINNED_BLENDER_LOG_PATH_HOOK_CHANGED")
+    java = java.replace(log_hook, log_hook + '''
+      getSharedPreferences("render_editor_launch", MODE_PRIVATE).edit()
+          .putString("native_log_path", logPath).apply();''', 1)
     final_init = "    super.onCreate(state);"
     if final_init in java:
         java = java.replace(final_init, final_init + """
@@ -188,7 +340,7 @@ def patch_native_activity(path):
                   "\n    enterImmersive();")
     if old_launch not in java:
         raise ValueError("PINNED_NATIVE_BLENDER_LAUNCH_HOOK_CHANGED")
-    java = java.replace(old_launch, "    BlenderMobileControls.attach(this);", 1)
+    java = java.replace(old_launch, "    BlenderMobileControls.attach(this);\n    com.rezox.render.agent.ProductionCapture.attach(this);\n    com.rezox.render.agent.StudioLiveHandOverlay.attach(this);", 1)
     old_immersive = """  private void enterImmersive() {
     View d = getWindow().getDecorView();
     d.setSystemUiVisibility(
@@ -208,7 +360,8 @@ def patch_native_activity(path):
         cls = "public class BlenderActivity extends NativeActivity {"
         if java.count(cls)!=1: raise ValueError("PINNED_BLENDER_CLASS_DECLARATION_CHANGED")
         java=java.replace(cls,cls+"\n  android.window.OnBackInvokedCallback renderBackCallback;",1)
-    if "  public void onBackPressed(" in java or "  protected void onDestroy(" in java:
+    if ("  public void onBackPressed(" in java or "  protected void onDestroy(" in java
+            or " void onConfigurationChanged(" in java):
         raise ValueError("PINNED_BLENDER_NAVIGATION_HOOK_COLLISION")
     # The system back callback handles Android 13+/16 gestures. This fallback
     # handles old navigation-key devices. Neither exits without confirmation.
@@ -219,7 +372,20 @@ def patch_native_activity(path):
   }
 
   @Override
+  public void onConfigurationChanged(android.content.res.Configuration value) {
+    super.onConfigurationChanged(value);
+    com.rezox.render.NativeEditorConfiguration.configurationChanged(this);
+  }
+
+  @Override
+  public boolean dispatchTouchEvent(android.view.MotionEvent event) {
+    com.rezox.render.agent.StudioLiveHandOverlay.onRealTouch(event);
+    return super.dispatchTouchEvent(event);
+  }
+
+  @Override
   protected void onDestroy() {
+    com.rezox.render.agent.StudioLiveHandOverlay.detach(this);
     BlenderMobileControls.detach(this);
     super.onDestroy();
   }
@@ -293,17 +459,23 @@ def stage(engine, bridge, source, destination, expected_size=ENGINE_BYTES,
     lively = Path(__file__).resolve().parents[1] / "full-app/scripts/render_lively_scene.py"
     assembly = Path(__file__).resolve().parents[1] / "full-app/scripts/render_batch_assembly.py"
     attach_bpy_agent(assets / "blender_runtime.zip", startup, lively, assembly)
-    merged = merge_manifest(manifest)
+    merged = merge_manifest(manifest, destination / "res")
     merged.write(destination / "AndroidManifest.xml", encoding="utf-8", xml_declaration=True)
     notices = assets / "licenses"
     notices.mkdir(exist_ok=True)
+    if verify_source:
+        from patch_pinned_timeline_dispatch import apply_pinned_fix
+        apply_pinned_fix(libraries / "libblender.so", notices)
     (notices / "Render-Full-Native-Sources.txt").write_text(
         "Full Blender native engine source: https://github.com/simfeo/blender\n"
         "Pinned source revision: " + UPSTREAM_COMMIT + "\n"
         "APK release: https://github.com/simfeo/blender/releases/tag/android-alpha-4\n"
         "Engine APK SHA-256: " + ENGINE_SHA256 + "\n"
         "Blender source is GPL-2.0-or-later; consult matching source and bundled licenses.\n"
-        "Render Android agent code and build adapters are in https://github.com/RezoxNemesis/Render\n",
+        "Render Android agent code and build adapters are in https://github.com/RezoxNemesis/Render\n"
+        "Verified production staging applies the timeline-core dispatch fix; see "
+        "Render-Native-Engine-Patches.json and blender-timeline-core.patch for exact hashes "
+        "and corresponding source. Other engine features are retained.\n",
         encoding="utf-8")
     print("STAGED_FULL_NATIVE_BLENDER", len(list(libraries.glob("*.so"))),
           "libraries", (assets / "blender_runtime.zip").stat().st_size, "runtime bytes")
