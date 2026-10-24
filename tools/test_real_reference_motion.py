@@ -50,8 +50,6 @@ with tempfile.TemporaryDirectory() as tmp:
     figure=bpy.data.objects.new("Figure",mesh)
     scene.collection.objects.link(figure)
     face=figure
-    face.shape_key_add(name="Basis")
-    face.shape_key_add(name="Blink")
 
     bound=M.execute("reference.workspace.open",{
         "asset":photo.name,"mode":"CAMERA","model":"Figure"},root,scene)
@@ -70,6 +68,23 @@ with tempfile.TemporaryDirectory() as tmp:
     alignment=M.execute("reference.compare.multiview",{"object":"Figure",
                  "views":views},root,scene)
     assert alignment["overall_rms_normalized_image_error"]<1e-8,alignment
+
+    # The edit changes the real native mesh, not just a screen-space glow.
+    # It changes only the corresponding vertices, preserving camera depth.
+    target={label:[min(.98,xy[0]+.03),xy[1]]
+            for label,xy in views[0]["reference"].items()}
+    request={"object":"Figure","camera":"FrontCam","reference":target,
+             "model":views[0]["model"],"expected_vertices":3,
+             "strength":.8,"max_displacement":.3}
+    coordinates=[tuple(v.co) for v in figure.data.vertices]
+    planned=M.execute("reference.fit.landmarks",dict(request,dry_run=True),root,scene)
+    assert planned["rms_predicted_after"]<planned["rms_before"],planned
+    assert coordinates==[tuple(v.co) for v in figure.data.vertices]
+    moved=M.execute("reference.fit.landmarks",request,root,scene)
+    assert moved["applied"] and moved["rms_predicted_after"]<moved["rms_before"],moved
+    assert coordinates!=[tuple(v.co) for v in figure.data.vertices]
+    face.shape_key_add(name="Basis")
+    face.shape_key_add(name="Blink")
 
     rig_data=bpy.data.armatures.new("FigureRigData")
     rig=bpy.data.objects.new("FigureRig",rig_data)
@@ -104,5 +119,5 @@ with tempfile.TemporaryDirectory() as tmp:
     assert bound["asset"]==photo.name and scene["render_compare_source"]==photo.name
     assert settings==(scene.render.engine,scene.render.resolution_x,scene.render.resolution_y,
                      scene.render.fps,scene.render.fps_base,scene.frame_start,scene.frame_end)
-print("PASS: actual Blender two-camera landmark audit, packed reference, armature, face keys, LINEAR NLA and evaluated motion")
+print("PASS: genuine Blender reference, two-camera audit, depth-safe mesh fit, armature, facial keyframes, NLA and evaluated motion")
 print("NOT VERIFIED: live Android area split, MP4 movie decoding, physical phone playback, exact photo likeness")
