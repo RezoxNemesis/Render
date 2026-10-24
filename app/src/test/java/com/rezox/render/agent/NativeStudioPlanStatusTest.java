@@ -20,7 +20,7 @@ public class NativeStudioPlanStatusTest {
     @Test public void statusIsAvailableWithoutBpyAndDisclosesNoPayload()throws Exception{
         Context app=RuntimeEnvironment.getApplication();
         String id="e".repeat(32);
-        File record=new File(ProductionFiles.folder(app,"StudioPlans"),id+".json");
+        File record=new File(NativeStudioPlanStatus.folder(app),id+".json");
         JSONObject first=new JSONObject().put("operation","mesh.create")
             .put("payload",new JSONObject().put("secret_asset_name","private-work"));
         JSONObject other=new JSONObject().put("operation","animation.keys").put("payload",new JSONObject());
@@ -67,7 +67,7 @@ public class NativeStudioPlanStatusTest {
         try{NativeStudioPlanStatus.status(app,new JSONObject().put("plan_id","../../.."));fail();}
         catch(IllegalArgumentException expected){assertEquals("STUDIO_PLAN_ID_INVALID",expected.getMessage());}
         String id="f".repeat(32);
-        File corrupt=new File(ProductionFiles.folder(app,"StudioPlans"),id+".json");
+        File corrupt=new File(NativeStudioPlanStatus.folder(app),id+".json");
         try{
             Files.write(corrupt.toPath(),new byte[]{0,1,2,3});
             try{NativeStudioPlanStatus.status(app,new JSONObject().put("plan_id",id));fail();}
