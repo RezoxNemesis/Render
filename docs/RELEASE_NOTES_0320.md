@@ -28,6 +28,8 @@ policy, checkpoints, VideoStudio Binder connection and artist controls.
   directory names, originals, per-entry CRC and SHA-256. Traversal, conflicting
   names, oversized bundles and checksum failures are rejected.
 - Adds native `file.importers`, `file.inspect` and checkpointed `file.import`.
+  Handles the native RNA `KeyError` for absent importers, so an unbundled
+  Collada/other format is reported unavailable without breaking discovery.
   Discover actual installed Blender operators for GLB/glTF, OBJ, STL, PLY, FBX,
   USD, Alembic, BVH and Collada. Availability varies by build. Append explicitly
   selected editable Blender objects/collections/materials; import image

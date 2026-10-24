@@ -162,7 +162,7 @@ def execute(operation, scene, root, p):
             if native:
                 try:
                     _operator(native)
-                except (AttributeError, RuntimeError):
+                except (AttributeError, RuntimeError, KeyError):
                     available, reason = False, 'NATIVE_OPERATOR_NOT_BUNDLED'
             properties={field:_FIELDS[field] for field in fields}
             if op=='body.blockout':
@@ -178,7 +178,7 @@ def execute(operation, scene, root, p):
         try:
             _operator('export_scene.gltf')
             glb = True
-        except (AttributeError, RuntimeError):
+        except (AttributeError, RuntimeError, KeyError):
             glb = False
         import render_file_ops
         operations.extend(render_file_ops.capabilities())

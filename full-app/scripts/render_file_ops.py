@@ -30,7 +30,7 @@ def _operator(name):
 
 def _available(name):
     try:_operator(name);return True
-    except (AttributeError,RuntimeError):return False
+    except (AttributeError,RuntimeError,KeyError):return False
 
 
 def capabilities():

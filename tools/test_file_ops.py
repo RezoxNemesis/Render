@@ -13,6 +13,10 @@ O=importlib.util.module_from_spec(spec)
 with patch.dict(sys.modules,{'bpy':N()}):spec.loader.exec_module(O)
 
 class FileOpsTests(unittest.TestCase):
+    def test_missing_native_operator_key_error_is_reported_unavailable(self):
+        # Observed Android RNA response for the unbundled Collada importer.
+        with patch.object(O,'_operator',side_effect=KeyError('WM_OT_collada_import')):
+            self.assertFalse(O._available('wm.collada_import'))
     def test_importer_changes_and_failures_preserve_artist_settings(self):
         world=object();camera=object()
         scene=N(render=N(engine='CYCLES',resolution_x=2048,resolution_y=2048,fps=24,image_settings=N(file_format='PNG')),
