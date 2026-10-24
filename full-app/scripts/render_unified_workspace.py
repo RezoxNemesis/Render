@@ -19,6 +19,7 @@ import render_unified_queue as Q
 
 INSTALLED=False
 TIMER_INSTALLED=False
+_LAST_EDITOR_AREA=0
 _ACTIVITY=deque(maxlen=64)
 _LAST_TIMER_ERROR=""
 SECTIONS=tuple((row[0],row[1],"Native Blender: "+row[3]) for row in C.WORKSPACES)
@@ -122,6 +123,7 @@ _EDITORS={
  "TEXT_EDITOR":("TEXT_EDITOR",None),
 }
 def _editor(p):
+    global _LAST_EDITOR_AREA
     _check(p,("editor",),("editor",))
     editor=p["editor"]
     if editor not in _EDITORS:raise ValueError("STUDIO_EDITOR_UNAVAILABLE")
@@ -131,7 +133,11 @@ def _editor(p):
     area=bpy.context.area if bpy.context.area and bpy.context.area in window.screen.areas else None
     if area is None:
         area=next((x for x in window.screen.areas if x.type=="VIEW_3D"),None)
+    if area is None and _LAST_EDITOR_AREA:
+        area=next((x for x in window.screen.areas
+                   if x.as_pointer()==_LAST_EDITOR_AREA),None)
     if area is None:raise ValueError("STUDIO_EDITOR_AREA_NOT_AVAILABLE")
+    _LAST_EDITOR_AREA=area.as_pointer()
     area.type=_EDITORS[editor][0]
     desired=_EDITORS[editor][1]
     if desired is not None:
