@@ -132,6 +132,10 @@ public final class FileTransfers {
                 if(code.equals("STORAGE_TRANSFER_FAILED"))code=errorCode(reply.optString("error_type"),null);
                 reply.put("error_code",code).put("error_hint",errorHint(code));
             }
+            JSONObject payload=row.optJSONObject("payload"),result=row.optJSONObject("result");
+            String label=result==null?"":result.optString("original_name",result.optString("name",""));
+            if(label.isEmpty()&&payload!=null)label=payload.optString("name","");
+            reply.put("display_name",label);
             return reply.put("native_editor_required",false).put("execution_after_force_stop_promised",false);
         }
     }

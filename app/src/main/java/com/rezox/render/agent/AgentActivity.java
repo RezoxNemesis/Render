@@ -345,23 +345,49 @@ public final class AgentActivity extends Activity {
             String[] labels=new String[rows.length()];
             for(int i=0;i<rows.length();i++){
                 JSONObject row=rows.getJSONObject(i);
-                labels[i]=row.optString("kind")+" · "+row.optString("state")+" · "+row.optLong("bytes_transferred")/1048576+" MiB · "+row.optString("request_id");
+                labels[i]=transferTitle(row)+" · "+transferState(row);
             }
             ui.post(()->new AlertDialog.Builder(this).setTitle("File transfers")
                 .setItems(labels,(dialog,index)->{
                     try{
                         JSONObject row=rows.getJSONObject(index);String id=row.getString("transfer_id");
-                        new AlertDialog.Builder(this).setTitle(row.optString("request_id"))
-                            .setMessage(row.toString(2))
-                            .setNeutralButton("Pause",(d,w)->perform(()->FileTransfers.control(this,id,"pause").toString(2)))
-                            .setNegativeButton("Cancel transfer",(d,w)->perform(()->FileTransfers.control(this,id,"cancel").toString(2)))
+                        new AlertDialog.Builder(this).setTitle(transferTitle(row))
+                            .setMessage(transferSummary(row))
+                            .setNeutralButton("Pause",(d,w)->perform(()->transferSummary(FileTransfers.control(this,id,"pause"))))
+                            .setNegativeButton("Cancel transfer",(d,w)->perform(()->transferSummary(FileTransfers.control(this,id,"cancel"))))
                             .setPositiveButton("Resume",(d,w)->perform(()->{
-                                FileTransfers.control(this,id,"resume");return FileTransferService.request(this,id).toString(2);
+                                FileTransfers.control(this,id,"resume");return transferSummary(FileTransferService.request(this,id));
                             })).show();
                     }catch(Exception e){Toast.makeText(this,"Transfer unavailable",Toast.LENGTH_LONG).show();}
                 }).setNegativeButton("Close",null).show());
             return "File transfers report copied bytes separately from native Blender imports. Failed or interrupted transfers require an explicit Resume.";
         });
+    }
+    private String transferTitle(JSONObject row){
+        String name=row.optString("display_name","");
+        if(!name.isEmpty())return name;
+        switch(row.optString("kind")){
+            case "import":return "Import original file";
+            case "export":return "Export project or output";
+            case "fetch":return "Download original file";
+            case "unpack":return "Extract asset dependencies";
+            default:return "File transfer";
+        }
+    }
+    private String transferState(JSONObject row){return row.optString("state","unknown").replace('_',' ');}
+    private String transferSummary(JSONObject row){
+        if(row.optBoolean("cancelled"))return "No file selected.";
+        long done=row.optLong("bytes_transferred",0),total=row.optLong("total_bytes",-1);
+        String text=transferState(row)+"\n"+android.text.format.Formatter.formatShortFileSize(this,done);
+        if(total>=0)text+=" / "+android.text.format.Formatter.formatShortFileSize(this,total);
+        JSONObject result=row.optJSONObject("result");
+        if(result!=null){
+            if(result.optBoolean("provider_readback_sha256_verified"))text+="\nVerified copy saved. The original project is retained.";
+            if(result.optBoolean("original_bytes_preserved"))text+="\nOriginal bytes saved for native Blender import.";
+        }
+        if(row.has("error_hint"))text+="\n\n"+row.optString("error_hint").replace("Use storage.task.refresh on this transfer","Ask ChatGPT to refresh this transfer");
+        if(row.optBoolean("requires_owner_open"))text+="\nOpen Render and explicitly Resume when Android permits.";
+        return text;
     }
     private void addAction(LinearLayout parent,String title,int style,Runnable action) {
         TextView view=StudioUi.action(this,title,style);
@@ -594,7 +620,7 @@ public final class AgentActivity extends Activity {
     });}
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){
         super.onActivityResult(requestCode,resultCode,data);
-        if(requestCode==StorageDocuments.PICK_FILE)perform(()->StorageDocuments.acceptFile(this,resultCode,data).toString(2));
+        if(requestCode==StorageDocuments.PICK_FILE)perform(()->transferSummary(StorageDocuments.acceptFile(this,resultCode,data)));
         if(requestCode==StudioReferenceInbox.PICK_REFERENCE && resultCode==Activity.RESULT_OK){
             Intent ownerSelected=new Intent(Intent.ACTION_OPEN_DOCUMENT);
             if(data!=null){

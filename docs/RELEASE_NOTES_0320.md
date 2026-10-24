@@ -67,6 +67,9 @@ copy visible to that provider; it does not prove completed remote Drive sync.
 There is no automatic two-way Drive synchronization. Recovery retains completed
 frames and checkpoints; an interrupted frame's in-memory sample buffers are not
 checkpointed and may need that frame restarted after exact-result inspection.
+Pause/cancel requests stay responsive but an in-flight native frame may continue
+until Blender reaches its safe frame boundary. This does not provide resumable
+mid-frame renderer sample buffers.
 
 Files are limited to **4 GiB**, dependency bundles to **2,048 entries / 4 GiB
 uncompressed**, and transfer history to **512 records**. Image admission defaults
