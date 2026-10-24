@@ -175,7 +175,8 @@ def animate(scene,rig):
         shapes.append({"object":"Eye_"+str(side),"key":"Blink","value":0.0})
     def pose(frame,head_pitch,rightarm,blink,torso=.0):
         return {"frame":frame,"bones":[
-            {"bone":"Torso","rotation_euler":[0,0,torso]},
+            {"bone":"Torso","rotation_euler":[0,0,torso],
+             "location":[.085*math.sin(frame*.075),0,0]},
             {"bone":"Head","rotation_euler":[head_pitch,.06*math.sin(frame*.12),head_pitch*.35]},
             {"bone":"RightArm","rotation_euler":[0,rightarm,0.18*math.sin(frame*.08)]},
             {"bone":"LeftArm","rotation_euler":[0,-.09,0]}
