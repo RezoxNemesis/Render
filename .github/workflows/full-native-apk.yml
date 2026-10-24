@@ -118,7 +118,7 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee "$RUNNER_TEMP/render-production-signature.txt"
           grep -Fqi 'f3d63fb20be25ca0be8aa6a161d5cf13cd98ba2fa300c7a604cce35131b9eb30' "$RUNNER_TEMP/render-production-signature.txt"
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | tee "$RUNNER_TEMP/render-production-badging.txt"
-          grep -Fq "versionCode='37'" "$RUNNER_TEMP/render-production-badging.txt"
+          grep -Fq "versionCode='42'" "$RUNNER_TEMP/render-production-badging.txt"
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump xmltree "$APK" AndroidManifest.xml | tee "$RUNNER_TEMP/render-long-service-manifest.txt"
           grep -Fq "RenderLongForegroundService" "$RUNNER_TEMP/render-long-service-manifest.txt"
           grep -Fq "FOREGROUND_SERVICE_MEDIA_PROCESSING" "$RUNNER_TEMP/render-long-service-manifest.txt"
