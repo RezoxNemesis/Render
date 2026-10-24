@@ -37,9 +37,14 @@ def vec(value,size,lo=-100000,hi=100000):
     return [number(x,lo,hi) for x in value]
 
 def workspace(p):
-    fields(p,("asset","mode","split_factor","frame","model","reference_name"),("asset",))
+    fields(p,("asset","preview_asset","mode","split_factor","frame","model","reference_name"),("asset",))
     if not isinstance(p["asset"],str) or not ASSET.fullmatch(p["asset"]):
         raise ValueError("REFERENCE_ASSET_ID_INVALID")
+    if "preview_asset" in p:
+        preview=p["preview_asset"]
+        if not isinstance(preview,str) or not ASSET.fullmatch(preview) or
+            preview.endswith(".mp4") or not p["asset"].endswith(".mp4"):
+            raise ValueError("VIDEO_REFERENCE_PREVIEW_INVALID")
     mode=p.get("mode","SPLIT")
     if mode not in ("SPLIT","REUSE","CAMERA"):raise ValueError("REFERENCE_MODE_INVALID")
     if "model" in p:name(p["model"])
@@ -79,7 +84,7 @@ def clip(p):
     poses=p["poses"]
     if not isinstance(poses,list) or not 2<=len(poses)<=96:
         raise ValueError("MOTION_POSES_INVALID")
-    last=0;total=0
+    last=0;total=0;bone_channels=0
     for pose in poses:
         fields(pose,("frame","bones","shapes"),("frame",))
         frame=integer(pose["frame"])
@@ -103,7 +108,7 @@ def clip(p):
                 if not .999<=math.sqrt(sum(x*x for x in q))<=1.001:
                     raise ValueError("MOTION_QUATERNION_NOT_NORMALIZED")
             if "scale" in b:vec(b["scale"],3,.000001,1000)
-            total+=len(channels)
+            total+=len(channels);bone_channels+=len(channels)
         shape_seen=set()
         for shape in shapes:
             fields(shape,("object","key","value"),("object","key","value"))
@@ -112,6 +117,7 @@ def clip(p):
             shape_seen.add(ident)
             number(shape["value"],0,1)
             total+=1
+    if bone_channels<1:raise ValueError("MOTION_RIG_REQUIRES_BONE_KEYS")
     if total>8192:raise ValueError("MOTION_KEY_BUDGET_EXCEEDED")
     return p
 
