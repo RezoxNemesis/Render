@@ -17,6 +17,7 @@ public final class AgentPolicy {
     static {
         Map<String, Set<String>> registry = new LinkedHashMap<>();
         registry.put("engine.status", Collections.emptySet());
+        registry.put("production.execute", fields("operation", "payload", "target_id"));
         registry.put("agent.diagnostics", Collections.emptySet());
         registry.put("agent.capabilities", Collections.emptySet());
         registry.put("projects.list", fields("offset", "limit"));

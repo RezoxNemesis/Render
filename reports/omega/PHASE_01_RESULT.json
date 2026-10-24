@@ -1,0 +1,81 @@
+{
+  "contract": "RENDER-OMEGA-13P-20261022",
+  "phase": 1,
+  "title": "Native Blender engine and Android viewport reliability",
+  "status": "Partial",
+  "seed_sha": "ed7ef34fa85d9e361bc9c92d554d8ec937755cc2",
+  "head_branch": "feature/omega-P01-native-engine-20261022",
+  "head_sha": "fbb24cae8be36c86167040623be532ec9800614c",
+  "head_sha_note": "This is the last implementation/test commit before adding this self-referential report. Read PR head for report commit SHA.",
+  "pr_url": "https://github.com/RezoxNemesis/Render/pull/9",
+  "scope": "Bounded first-sprint Phase 01 vertical slice; not a claim of complete native Android GPU validation",
+  "implementation": [
+    "SHA-256 stable installed Blender runtime matching across compatible APK updates, no unnecessary re-extraction",
+    "Process-wide preflight guard and Activity-recreation retry without deleting app-owned projects",
+    "Bounded truthful startup event journal: native Activity requested and controls attached do not attest Vulkan frame",
+    "Read-only Android API/Vulkan advertised version, memory, thermal status with unavailable driver marked unknown",
+    "Movable native Blender overlay handle, bounded scrollable menu and retained top position",
+    "Typed native bpy omega.engine.diagnose and omega.engine.viewport_profile module with strict validation and reversible viewport-only settings"
+  ],
+  "owned_paths_changed": [
+    "app/src/main/java/com/rezox/render/omega/engine/EngineEvidence.java",
+    "app/src/main/java/com/rezox/render/omega/engine/EngineRuntimeSeal.java",
+    "app/src/main/java/com/rezox/render/omega/engine/OverlayBounds.java",
+    "app/src/test/java/com/rezox/render/omega/engine/EngineEvidenceTest.java",
+    "app/src/test/java/com/rezox/render/omega/engine/EngineRuntimeSealTest.java",
+    "app/src/test/java/com/rezox/render/omega/engine/OverlayBoundsTest.java",
+    "app/src/test/java/com/rezox/render/omega/engine/PythonViewportContractTest.java",
+    "full-app/app/src/main/java/com/rezox/render/EditorLaunchActivity.java",
+    "full-app/app/src/main/java/org/blender/blender/BlenderMobileControls.java",
+    "full-app/scripts/omega/phase01_engine.py",
+    "tools/omega/test_phase01_contract.py",
+    "tools/omega/test_phase01_native_blender.py",
+    "reports/omega/PHASE_01_RESULT.json"
+  ],
+  "test_evidence": {
+    "android_foundation_run_preceding_ui_sizing": "https://github.com/RezoxNemesis/Render/actions/runs/39789325806",
+    "android_foundation_run_current": "https://github.com/RezoxNemesis/Render/actions/runs/39789601223",
+    "latest_android_build_and_unit_tests": "PASS in run 39789601223 build-and-test job, including phase-owned Java/Robolectric tests and PythonViewportContractTest which launches the pure Python unittests",
+    "existing_real_blend_compatibility": "PASS in run 39789325806; existing native Blender file fixture, not a direct Phase 01 on-device viewport test",
+    "source_ownership": "All 12 implementation/test changes restricted to assigned Phase 01 paths; report added as explicitly allowed thirteenth path"
+  },
+  "real_bpy_tests": {
+    "state": "NOT_RUN",
+    "commands": [
+      "blender -b -noaudio --python-exit-code 1 --python tools/omega/test_phase01_native_blender.py"
+    ],
+    "results": [
+      "Real bpy fixture is committed, but P10 owns adding this isolated file to the shared native Blender CI registry. Existing real-file fixture passing is not proof this test ran."
+    ]
+  },
+  "python_contract_tests": {
+    "state": "PASS",
+    "commands": [
+      "python3 -m unittest discover -s tools/omega -p test_phase01_contract.py -v"
+    ],
+    "results": [
+      "Triggered by Phase 01 PythonViewportContractTest from Gradle Android host unit tests (asserts four Python unittests pass)."
+    ]
+  },
+  "android_tests": {
+    "state": "PARTIAL",
+    "command": "gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug",
+    "result": "PASS in run 39789601223 build-and-test; actual full native app and Vulkan device tests NOT RUN",
+    "actual_device_test": "NOT RUN — phase APK not installed or remotely exercised"
+  },
+  "native_receipts": [],
+  "artifacts": [],
+  "quality_reduced": false,
+  "residual_blockers": [
+    "P10 must integrate new optional Python omega Phase 01 operations into the shared typed bpy startup registry and full native APK packaging",
+    "P10 or a native CI maintainer must execute the committed real Blender bpy fixture for this exact module; unit doubles alone are insufficient native GPU validation",
+    "Full native BlenderMobileControls.java / EditorLaunchActivity.java compilation in the signed integrated APK and ARM64 Vulkan device acceptance are not yet verified",
+    "Car z-fighting/driver shimmer has only truthful candidate diagnostics, not a proven driver-level fix"
+  ],
+  "unverified_claims": [
+    "First successfully presented real Vulkan frame",
+    "Device-driver-specific viewport artifact fixed",
+    "Real on-device post-upgrade project continuity and in-place installer certificate",
+    "Sustained production rendering at final desktop-equivalent settings"
+  ]
+}

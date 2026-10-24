@@ -1,0 +1,97 @@
+name: Render 0.36 Unified Blender Studio
+on:
+  pull_request:
+    branches: [upgrade/render-studio-035-multiview-fit-20261024]
+    paths:
+      - "full-app/scripts/**"
+      - "app/src/**"
+      - "tools/**"
+      - ".github/workflows/render-036-unified-studio.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contract-and-crash-recovery:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Compile all exact native modules
+        run: |
+          python -m py_compile full-app/scripts/render_unified_contract.py \
+            full-app/scripts/render_unified_queue.py \
+            full-app/scripts/render_unified_workspace.py \
+            full-app/scripts/render_production.py \
+            full-app/scripts/render_agent_startup.py
+      - name: Validate 9 disciplines and durable multi-plan replay protection
+        run: |
+          python -m unittest tools.test_unified_studio_contract -v
+      - name: Check deterministic native runtime packaging adapter
+        run: python3 tools/prepare_production_toolkit.py
+  actual-blender:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install genuine Blender bpy
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends blender
+          blender --version | head -2
+      - name: Create actual mesh and keyframes through durable queue
+        env:
+          PYTHONPATH: full-app/scripts
+          LIBGL_ALWAYS_SOFTWARE: "1"
+        run: |
+          blender -b -noaudio --python-exit-code 1 --python tools/test_real_unified_studio.py
+  windowed-blender-native-ui:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install genuine Blender GUI and virtual display
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends blender xvfb
+      - name: Verify visible native Render Studio tabs and real viewport orbit
+        env:
+          PYTHONPATH: full-app/scripts
+          LIBGL_ALWAYS_SOFTWARE: "1"
+        run: |
+          timeout 120 xvfb-run -a -s "-screen 0 1280x900x24" \
+            blender --factory-startup -noaudio --python-exit-code 1 \
+            --python tools/test_real_unified_ui.py
+          echo 'PASS: genuine desktop Blender viewport and native addon panel'
+  android-native-bridge:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+      - name: Install Android SDK, CMake and native NDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          MANAGER="$(find "$ANDROID_HOME/cmdline-tools" -path '*/bin/sdkmanager' -type f | sort -V | tail -1)"
+          test -x "$MANAGER"
+          yes | "$MANAGER" --licenses >/dev/null || true
+          "$MANAGER" --install "platforms;android-35" "build-tools;35.0.0" "cmake;3.22.1" "ndk;27.2.12479018"
+      - name: Validate authenticated Android ops and compile JNI
+        run: |
+          python3 tools/prepare_production_toolkit.py
+          gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: render-036-native-jvm-test-results
+          path: app/build/test-results/testDebugUnitTest/
+          if-no-files-found: ignore
