@@ -278,6 +278,7 @@ def motion_action(scene,p):
     prev_mode=pb.rotation_mode
     previous=pb.rotation_euler.copy()
     act=bpy.data.actions.new(name)
+    committed=False
     try:
         rig.animation_data.action=act
         pb.rotation_mode="XYZ"
@@ -290,9 +291,10 @@ def motion_action(scene,p):
         curves=getattr(act,"fcurves",None)
         count=len(curves) if curves is not None else None
         if count==0:raise RuntimeError("STUDIO_DCC_ACTION_NO_NATIVE_CURVES")
+        committed=True
         return {"action":act.name,"rig":rig.name,"bone":pb.name,
                 "key_poses":len(p["keys"]),"native_action_created":True,
-                "native_fcurves":count,
+                "native_fcurves":count,"rotation_mode":"XYZ",
                 "original_action_retained_in_data":existing is not None,
                 "contact_foot_drift_not_verified":True}
     except Exception:
@@ -300,10 +302,12 @@ def motion_action(scene,p):
         if act.users==0:bpy.data.actions.remove(act)
         raise
     finally:
-        scene.frame_set(prev)
-        pb.rotation_mode=prev_mode
-        if rig.animation_data.action is not act:
+        # Euler F-Curves are ignored if rotation_mode reverts to QUATERNION.
+        # Keep XYZ on a successful real keyed action; restore only on error.
+        if not committed:
+            pb.rotation_mode=prev_mode
             pb.rotation_euler=previous
+        scene.frame_set(prev)
 
 def motion_nla(scene,p):
     C.validate("studio.motion.nla.create",p)
