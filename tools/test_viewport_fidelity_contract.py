@@ -7,6 +7,7 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/"full-app/scripts"))
 import render_viewport_fidelity_contract as F
 import render_unified_contract as Studio
+import render_agent_fastlane_contract as Fast
 
 class ViewportPhase1ContractTests(unittest.TestCase):
     def test_complete_phase1_registry_is_native_and_bounded(self):
@@ -18,6 +19,20 @@ class ViewportPhase1ContractTests(unittest.TestCase):
             self.assertFalse(definitions[operation]["scene_quality_changed"])
         self.assertTrue(F.MUTATING.isdisjoint(F.READ_ONLY))
         self.assertFalse(Studio.catalog()["concurrent_scene_edits"])
+
+    def test_chatgpt_batch_reads_only_inspections_not_pixel_mutations(self):
+        for op in F.READ_ONLY:
+            self.assertIn(op,Fast.READS)
+        for op in F.MUTATING:
+            self.assertNotIn(op,Fast.READS)
+        calls={"reads":[
+            {"operation":"studio.preview.inspect","payload":{}},
+            {"operation":"studio.preview.diagnose","payload":{"object":"Head"}},
+            {"operation":"studio.preview.sampling.inspect","payload":{}}]}
+        self.assertEqual(len(Fast.batch(calls)),3)
+        with self.assertRaises(ValueError):
+            Fast.batch({"reads":[{"operation":"studio.preview.profile.apply",
+                                  "payload":{"profile":"CLEAN_SOLID"}}]})
 
     def test_expensive_preview_explicit_opt_in_and_safe_presets(self):
         for preset in F.PROFILES:
