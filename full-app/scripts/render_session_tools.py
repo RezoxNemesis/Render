@@ -535,6 +535,12 @@ def install():
         render_unified_workspace.install_ui()
     except Exception as error:
         print("Render unified Blender tabs unavailable:",type(error).__name__,flush=True)
+    try:
+        import render_viewport_fidelity_ui
+        render_viewport_fidelity_ui.install()
+    except Exception as error:
+        print("Render native viewport fidelity panel unavailable:",
+              type(error).__name__,flush=True)
     import render_v25_recovery
     render_v25_recovery.install()
     try:
