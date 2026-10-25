@@ -65,12 +65,18 @@ PROGRAM_OPS={
  "studio.reference.timeline.inspect":"assets",
  "studio.reference.timeline.scrub":"assets",
  "studio.timeline.scrub":"animation",
+ "studio.agent.bootstrap":"agent",
+ "studio.agent.batch.inspect":"agent",
+ "studio.agent.plan.preview":"agent",
+ "studio.agent.metrics":"agent",
 }
 MUTATING=frozenset(PROGRAM_OPS)-{
  "scene.inspect","animation.clip.inspect","animation.motion.audit",
  "reference.workspace.inspect","reference.compare.multiview",
  "studio.sculpt.inspect","studio.pose.inspect",
  "studio.ik.inspect","studio.reference.timeline.inspect",
+ "studio.agent.bootstrap","studio.agent.batch.inspect",
+ "studio.agent.plan.preview","studio.agent.metrics",
  "render.profile.inspect","render.quality.inspect"
 }
 READ_ONLY=frozenset(PROGRAM_OPS)-MUTATING

@@ -30,7 +30,10 @@ public final class ProductionBridge {
         "studio.pose.inspect","studio.pose.key","studio.timeline.scrub",
         "studio.ik.create","studio.ik.inspect","studio.ik.target","studio.ik.blend",
         "studio.reference.timeline.bind","studio.reference.timeline.inspect","studio.reference.timeline.scrub",
-        "studio.curve.inspect","studio.curve.adjust","studio.plan.submit","studio.plan.status",
+        "studio.curve.inspect","studio.curve.adjust",
+        "studio.agent.bootstrap","studio.agent.batch.inspect",
+        "studio.agent.plan.preview","studio.agent.metrics","studio.agent.status",
+        "studio.plan.submit","studio.plan.status",
         "studio.plan.list","studio.plan.pause","studio.plan.resume","studio.plan.cancel","studio.activity",
         "viewport.inspect","viewport.configure","viewport.focus","object.geometry","operator.describe","operator.execute","render.plan","render.step","render.batch","render.status","render.encode","drive.status","drive.backup",
         "render.storage.status","render.job.start","render.job.status","render.job.pause",
@@ -47,7 +50,7 @@ public final class ProductionBridge {
     static boolean outOfBand(JSONObject args){
         return StorageOperations.supports(args.optString("operation"))||Arrays.asList("ipc.command.status","ipc.command.cancel","native.command.status",
             "render.job.status","render.job.pause","render.job.cancel","render.queue.status",
-            "studio.plan.status","studio.plan.list",
+            "studio.plan.status","studio.plan.list","studio.agent.status",
             "device.profile","capabilities","connection.diagnose").contains(args.optString("operation"));
     }
     public static void fields(JSONObject p,String allowed)throws Exception {
@@ -129,6 +132,7 @@ public final class ProductionBridge {
         // Only the native timer may execute/modify work; no forced resume.
         if(operation.equals("studio.plan.status"))return NativeStudioPlanStatus.status(context,p);
         if(operation.equals("studio.plan.list"))return NativeStudioPlanStatus.list(context,p);
+        if(operation.equals("studio.agent.status"))return NativeAgentFastStatus.read(context,p);
         if(StorageOperations.supports(operation))return StorageOperations.execute(context,operation,p);
         if(operation.startsWith("render.scheduling."))return RenderScheduling.execute(context,p,operation.endsWith("configure"));
         if(operation.equals("native.command.status"))return BlenderSpool.inspect(context,p);

@@ -36,7 +36,10 @@ public class RenderInteractionCapabilitiesTest {
             "studio.pose.inspect","studio.pose.key","studio.timeline.scrub",
             "studio.ik.create","studio.ik.inspect","studio.ik.target","studio.ik.blend",
             "studio.reference.timeline.bind","studio.reference.timeline.inspect","studio.reference.timeline.scrub",
-            "studio.curve.inspect","studio.curve.adjust","studio.plan.submit","studio.plan.status",
+            "studio.curve.inspect","studio.curve.adjust",
+            "studio.agent.bootstrap","studio.agent.batch.inspect",
+            "studio.agent.plan.preview","studio.agent.metrics","studio.agent.status",
+            "studio.plan.submit","studio.plan.status",
             "studio.plan.list","studio.plan.pause","studio.plan.resume","studio.plan.cancel","studio.activity",
             "render.plan","render.batch","render.status","render.encode"})assertTrue(op,available.contains(op));
         assertTrue(report.getBoolean("requires_target_id"));assertFalse(report.getBoolean("cloud_rendering"));

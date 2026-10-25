@@ -292,49 +292,34 @@ def install_timer():
         bpy.app.timers.register(_tick,first_interval=.8,persistent=True)
     TIMER_INSTALLED=True
 
-def _tool_search(p):
-    _check(p,("query","workspace","limit"),("query",))
-    q=p["query"]
-    if not isinstance(q,str) or not 1<=len(q)<=64:
-        raise ValueError("STUDIO_TOOL_QUERY_INVALID")
-    work=p.get("workspace",None)
-    if work is not None and work not in {x[0] for x in C.WORKSPACES}:
-        raise ValueError("STUDIO_WORKSPACE_UNAVAILABLE")
-    limit=p.get("limit",15)
-    if type(limit) is not int or not 1<=limit<=30:
-        raise ValueError("STUDIO_TOOL_LIMIT_INVALID")
+# Static in-process command schemas are immutable for a specific packaged
+# runtime. Build once per running Blender, not once per assistant tool search.
+from functools import lru_cache
+
+@lru_cache(maxsize=1)
+def _tool_index():
     import render_production_contract
     native=set(render_production_contract.OPERATIONS)
     try:
         import render_artist_ops
         artist=render_artist_ops.SCHEMAS
     except ImportError:artist={}
-    try:
-        import render_reference_motion_contract
-        ref={entry["operation"]:entry.get("input_schema")
-             for entry in render_reference_motion_contract.capabilities()}
-    except ImportError:ref={}
-    try:
-        import render_unified_curves
-        ref.update({entry["operation"]:entry["input_schema"]
-                    for entry in render_unified_curves.capabilities()})
-    except ImportError:pass
-    try:
-        import render_live_gestures
-        ref.update({entry["operation"]:entry["input_schema"]
-                    for entry in render_live_gestures.capabilities()})
-    except ImportError:pass
-    try:
-        import render_ik_contract
-        ref.update({entry["operation"]:entry["input_schema"]
-                    for entry in render_ik_contract.capabilities()})
-    except ImportError:pass
-    try:
-        import render_reference_timeline
-        ref.update({entry["operation"]:entry["input_schema"]
-                    for entry in render_reference_timeline.capabilities()})
-    except ImportError:pass
-    result=[]
+    schemas={}
+    for module_name in ("render_reference_motion_contract",
+                        "render_unified_curves",
+                        "render_live_gestures",
+                        "render_ik_contract",
+                        "render_reference_timeline",
+                        "render_agent_fastlane"):
+        try:
+            import importlib
+            module=importlib.import_module(module_name)
+            definitions=module.capabilities()
+            for row in definitions:
+                schemas[row["operation"]]=row.get("input_schema",{})
+        except ImportError:
+            continue
+    rows=[]
     for op in sorted(native | set(C.PROGRAM_OPS)):
         group=C.PROGRAM_OPS.get(op)
         if group is None:
@@ -344,16 +329,36 @@ def _tool_search(p):
             elif op.startswith(("material.",)):group="materials"
             elif op.startswith(("mesh.","sculpt.")):group="sculpt"
             else:group="agent"
+        rows.append({"operation":op,"workspace":group,
+             "route":"production.execute","known_in_native_registry":op in native,
+             "batch_supported":op in C.PROGRAM_OPS,
+             "input_schema":schemas.get(op,{"fields":artist.get(op,[])})})
+    return tuple(rows)
+
+def _tool_search(p):
+    _check(p,("query","workspace","limit"),("query",))
+    q=p["query"]
+    if not isinstance(q,str) or not 1<=len(q)<=80:
+        raise ValueError("STUDIO_TOOL_QUERY_INVALID")
+    work=p.get("workspace",None)
+    if work is not None and work not in {x[0] for x in C.WORKSPACES}:
+        raise ValueError("STUDIO_WORKSPACE_UNAVAILABLE")
+    limit=p.get("limit",15)
+    if type(limit) is not int or not 1<=limit<=30:
+        raise ValueError("STUDIO_TOOL_LIMIT_INVALID")
+    import render_agent_fastlane_contract as Agent
+    scored=[]
+    for row in _tool_index():
+        group=row["workspace"]
         if work is not None and work!=group:continue
-        haystack=op.lower()+" "+group+" "+(" ".join(C.WORKSPACE_HINTS.get(group,()))).lower()
-        if q.lower() not in haystack:continue
-        result.append({"operation":op,"workspace":group,
-            "route":"production.execute","known_in_native_registry":op in native,
-            "batch_supported":op in C.PROGRAM_OPS,
-            "input_schema":ref.get(op,{"fields":artist.get(op,[])})})
-        if len(result)>=limit:break
-    return {"query":q,"matches":result,
-            "source":"current Blender runtime, not memory",
+        score=Agent.rank(q,row["operation"],group,C.WORKSPACE_HINTS.get(group,()))
+        if score>0:scored.append((score,row["operation"],row))
+    scored.sort(key=lambda item:(-item[0],item[1]))
+    return {"query":q,"matches":[dict(item[2],match_score=item[0])
+                                   for item in scored[:limit]],
+            "total_matches":len(scored),
+            "source":"current packaged Blender runtime, not memory",
+            "schema_cache":"one build per native Blender process",
             "arbitrary_remote_python_enabled":False}
 
 def execute(op,p,root,scene):
@@ -383,9 +388,15 @@ def execute(op,p,root,scene):
                           "studio.reference.timeline.scrub",
                           "studio.plan.submit","studio.plan.status","studio.plan.list",
                           "studio.plan.pause","studio.plan.resume","studio.plan.cancel",
-                          "studio.activity"])
+                          "studio.activity","studio.agent.bootstrap",
+                          "studio.agent.batch.inspect","studio.agent.plan.preview",
+                          "studio.agent.metrics","studio.agent.status"])
         return result
     if op=="studio.tool.search":return _tool_search(p)
+    if op in ("studio.agent.bootstrap","studio.agent.batch.inspect",
+              "studio.agent.plan.preview","studio.agent.metrics"):
+        import render_agent_fastlane
+        return render_agent_fastlane.execute(op,p,root,scene)
     if op in ("studio.curve.inspect","studio.curve.adjust"):
         import render_unified_curves
         return render_unified_curves.execute(op,p)
@@ -561,7 +572,20 @@ class RENDERSTUDIO_PT_unified(bpy.types.Panel):
             col.label(text="CC0 browser remains in Assets panel")
         else:
             col.label(text="ChatGPT actions execute in this Blender")
+            col.label(text="Fast start: studio.agent.bootstrap")
+            col.label(text="Batch: 1–6 safe native inspections")
             col.label(text="No synthetic pointer clicks")
+            try:
+                cache=Q.cache_stats()
+                col.label(text="Plan cache: "+str(cache["hits"])+
+                          " hits / "+str(cache["cached_receipts"])+" entries")
+                import render_agent_fastlane
+                events=render_agent_fastlane.metrics({"limit":1},_root(),scene)["measurements"]
+                if events:
+                    col.label(text="Last native inspect: "+
+                              str(events[-1]["elapsed_ms"])+" ms")
+            except (ValueError,ImportError,OSError,RuntimeError):
+                pass
             try:
                 state=Q.list_jobs(_root())
                 col.label(text="Queued plans: "+str(state["pending"]))

@@ -8,8 +8,8 @@ android {
         applicationId = "com.rezox.render"
         minSdk = 28
         targetSdk = 35
-        versionCode = 47
-        versionName = "0.38.0-native-ik-video-sync"
+        versionCode = 48
+        versionName = "0.39.0-agent-fastlane"
         ndk { abiFilters += listOf("arm64-v8a") }
         externalNativeBuild {
             cmake { cppFlags += listOf("-std=c++20", "-Wall", "-Wextra", "-Werror") }
