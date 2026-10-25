@@ -43,6 +43,48 @@ class RENDERSTUDIO_OT_direct_sculpt_brush(bpy.types.Operator):
         except (ValueError,RuntimeError,AttributeError) as error:
             self.report({"ERROR"},str(error));return {"CANCELLED"}
 
+class RENDERSTUDIO_OT_direct_connected_copy(bpy.types.Operator):
+    bl_idname="renderstudio.direct_connected_copy"
+    bl_label="Create Connected Sculpt Copy"
+    bl_description="Checkpoint then voxel-remesh a separate evaluated sculpt surface"
+    bl_options={"REGISTER"}
+    voxel_size_m:bpy.props.FloatProperty(
+        name="Voxel size (metres)",default=.014,min=.002,max=.05,precision=3)
+    offset_x:bpy.props.FloatProperty(
+        name="Place beside X (metres)",default=-1.8,min=-20,max=20)
+    max_voxels:bpy.props.IntProperty(
+        name="Maximum voxel cells",default=3000000,min=100000,max=16000000)
+    def invoke(self,context,event):
+        return context.window_manager.invoke_props_dialog(self,width=340)
+    def execute(self,context):
+        try:
+            obj=_selected_mesh(context)
+            if abs(self.offset_x)<.9:
+                raise ValueError("DIRECT_SCULPT_SURFACE_OFFSET_MUST_AVOID_OVERLAP")
+            import os
+            import uuid
+            spool=os.environ.get("RENDER_AGENT_SPOOL")
+            if not spool:raise ValueError("DIRECT_SCULPT_NO_NATIVE_CHECKPOINT_SPOOL")
+            name=(obj.name[:46]+"_JoinedSurface")
+            if name in bpy.data.objects:
+                raise ValueError("DIRECT_SCULPT_SURFACE_NAME_EXISTS")
+            world=obj.matrix_world.translation
+            location=[float(world.x+self.offset_x),float(world.y),float(world.z)]
+            import render_production
+            result=render_production.execute(
+                {"operation":"studio.artist.surface.clone","payload":{
+                    "object":obj.name,"name":name,
+                    "voxel_size_m":float(self.voxel_size_m),
+                    "max_voxels":int(self.max_voxels),
+                    "location":location}},
+                spool,uuid.uuid4().hex)
+            if not result["connected_mesh_verified"]:
+                raise ValueError("DIRECT_SCULPT_SURFACE_UNVERIFIED")
+            self.report({"INFO"},"Native connected sculpt copy: "+result["object"])
+            return {"FINISHED"}
+        except (ValueError,RuntimeError,OSError,AttributeError) as error:
+            self.report({"ERROR"},str(error));return {"CANCELLED"}
+
 class RENDERSTUDIO_OT_direct_sculpt_leave(bpy.types.Operator):
     bl_idname="renderstudio.direct_sculpt_leave"
     bl_label="Leave Sculpt Mode"
@@ -92,6 +134,8 @@ class RENDERSTUDIO_PT_direct_artist(bpy.types.Panel):
             button=col.operator("renderstudio.direct_sculpt_brush",text=label)
             button.brush=key
         col.operator("renderstudio.direct_sculpt_inspect",text="Inspect Mesh and Brush")
+        col.operator("renderstudio.direct_connected_copy",
+                     text="New Connected Sculpt Copy")
         col.operator("renderstudio.direct_sculpt_leave",text="Exit Sculpt")
         if ob and ob.type=="MESH":
             col.label(text="Target: "+ob.name[:28])
@@ -115,6 +159,7 @@ _CLASSES=(RENDERSTUDIO_OT_direct_sculpt_enter,
           RENDERSTUDIO_OT_direct_sculpt_brush,
           RENDERSTUDIO_OT_direct_sculpt_leave,
           RENDERSTUDIO_OT_direct_sculpt_inspect,
+          RENDERSTUDIO_OT_direct_connected_copy,
           RENDERSTUDIO_PT_direct_artist)
 
 def install():
