@@ -98,22 +98,32 @@ with tempfile.TemporaryDirectory() as temp:
     except ValueError as e:
         assert "STUDIO_POSE_EXISTING_ACTION_APPROVAL_REQUIRED" in str(e)
 
-    # Two additional real and visible sequential control commands in a
-    # persisted studio plan, not simultaneous unsafe scene mutation.
-    request={"plan_id":"3"*32,"name":"Inspect sculpt then watch acting",
-             "steps":[{"operation":"studio.sculpt.inspect",
-                       "payload":{"object":mesh.name}},
+    # Two independent real mesh mutations can stream consecutively only
+    # when the second uses the exact SHA from the preceding committed brush.
+    # It is not a blanket "use whatever mesh state exists" shortcut.
+    fresh=Gesture.mesh_inspect(scene,{"object":mesh.name})["mesh_revision_sha256"]
+    follow=dict(command,expected_sha256=fresh,strength=.04)
+    chain=dict(command,expected_sha256="$prev_mesh_sha256",strength=.03)
+    request={"plan_id":"3"*32,"name":"Sculpt two steps and inspect motion",
+             "steps":[{"operation":"studio.sculpt.brush","payload":follow},
+                      {"operation":"studio.sculpt.brush","payload":chain},
                       {"operation":"studio.timeline.scrub",
                        "payload":{"frame":12,"rig":rig.name,"bone":"Head"}}]}
     accepted=Studio.execute("studio.plan.submit",request,root,scene)
     assert accepted["state"]=="queued"
-    a=Queue.tick(root,Studio._execute_step,on_start=Studio._step_start,
-                 on_finish=Studio._step_end)
-    b=Queue.tick(root,Studio._execute_step,on_start=Studio._step_start,
-                 on_finish=Studio._step_end)
-    assert a["result"]=="succeeded" and b["result"]=="succeeded",(a,b)
+    results=[]
+    for unused in range(3):
+        result=Queue.tick(root,Studio._execute_step,on_start=Studio._step_start,
+                          on_finish=Studio._step_end)
+        results.append(result)
+        assert result["result"]=="succeeded",results
     assert scene.frame_current==12
-    assert Queue.get(root,"3"*32)["completed_steps"]==2
+    assert Queue.get(root,"3"*32)["completed_steps"]==3
+    raw=Queue._load_file(Queue._path(root,"3"*32))
+    assert raw["receipts"][0]["mesh_revision_after"]==raw["receipts"][1].get(
+        "mesh_revision_after", "MISSING") or raw["receipts"][0]["mesh_revision_after"]!=fresh
+    assert raw["receipts"][1]["mesh_revision_after"]!=raw["receipts"][0]["mesh_revision_after"]
+    assert raw["steps"][1]["payload"]["expected_sha256"]=="$prev_mesh_sha256"
     history=Studio.execute("studio.activity",{"limit":16},root,scene)
     assert any(x.get("operation")=="studio.timeline.scrub" for x in history["events"])
     checkpoints=list((root/"Projects").glob("*.blend"))
