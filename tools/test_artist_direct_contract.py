@@ -86,7 +86,9 @@ class ArtistDirectContractTests(unittest.TestCase):
             self.assertEqual(Native._components(obj)["connected_components"],1)
             data.vertices[2].co.x=3.
             self.assertNotEqual(a,Native._revision(obj))
-            data.vertices=types.SimpleNamespace(__len__=lambda self: Contract.MAX_HASH_VERTICES+1)
+            class Huge:
+                def __len__(self):return Contract.MAX_HASH_VERTICES+1
+            data.vertices=Huge()
             with self.assertRaisesRegex(ValueError,"TOO_DENSE"):
                 Native._revision(obj)
         finally:
