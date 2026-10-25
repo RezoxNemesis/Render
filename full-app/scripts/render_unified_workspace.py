@@ -407,6 +407,13 @@ def execute(op,p,root,scene):
     if op.startswith("studio.preview."):
         import render_viewport_fidelity
         return render_viewport_fidelity.execute(op,p,root,scene)
+    if op in C.PROGRAM_OPS and op.startswith((
+            "studio.benchmark.","studio.mesh.bridge_loops",
+            "studio.procedural.","studio.material.surface",
+            "studio.motion.action.","studio.motion.nla.",
+            "studio.compositor.","studio.sim.","studio.drawing.")):
+        import render_workflow_ops
+        return render_workflow_ops.execute(op,p,root,scene)
     if op in ("studio.agent.bootstrap","studio.agent.batch.inspect",
               "studio.agent.plan.preview","studio.agent.metrics"):
         import render_agent_fastlane
