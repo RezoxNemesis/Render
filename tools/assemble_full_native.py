@@ -219,6 +219,7 @@ def attach_bpy_agent(runtime_zip, source_py, scene_py=None, batch_py=None):
                      "render_ik_contract.py", "render_ik_control.py",
                      "render_agent_fastlane_contract.py", "render_agent_fastlane.py",
                      "render_viewport_fidelity_contract.py", "render_viewport_fidelity.py",
+                     "render_viewport_fidelity_ui.py",
                      "render_reference_timeline.py"):
             source = Path(source_py).with_name(name)
             if not source.is_file():
