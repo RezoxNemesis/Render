@@ -1,0 +1,73 @@
+{
+  "test_id": "aba78784-41a1-4139-b868-c339915c72ff",
+  "phase": "configuration",
+  "workspace_emulator_only": true,
+  "physical_phone_evidence": false,
+  "passed": true,
+  "stage": "passed_native_configuration",
+  "render_public_id": "95480b0f-5435-45e7-916c-62e50b0a9118",
+  "launch_id_before": "0c5cb0a7-b3b7-4203-bb02-23e5ece06ed8",
+  "launch_id_after": "0c5cb0a7-b3b7-4203-bb02-23e5ece06ed8",
+  "configuration_count_before": 0,
+  "configuration_count_after": 1,
+  "viewport": {
+    "viewports": [
+      {
+        "width_pixels": 360,
+        "height_pixels": 578,
+        "clip_start": 0.009999999776482582,
+        "clip_end": 1000,
+        "clip_ratio": 100000.00223517422,
+        "view_distance": 18.38804817199707,
+        "view_location": [
+          -0.020693248137831688,
+          -0.04602546989917755,
+          0.0006694307667203248
+        ],
+        "perspective": "PERSP",
+        "viewport_render_engine_unchanged": true
+      }
+    ],
+    "total_mesh_polygons": 6,
+    "native_artist_ui": {
+      "installed_in_blender_viewport": true,
+      "surface": "Blender SpaceView3D POST_PIXEL",
+      "status": {
+        "state": "running",
+        "action": "viewport inspect",
+        "stage": "Native command received",
+        "fraction": null,
+        "progress_label": "Waiting for native progress",
+        "object": null
+      },
+      "viewport_draw_observed": false,
+      "last_viewport_draw_age_ms": null,
+      "last_draw_error": null,
+      "pointer": null,
+      "pointer_source": "completed_native_object_projection",
+      "pointer_is_ui_input": false,
+      "fabricated_ui_taps": false,
+      "in_frame_sample_progress_available": false
+    },
+    "active_object": "Cube",
+    "render_quality_modified": false,
+    "driver_jitter_measured": false,
+    "viewport_clip_precision_is_not_texture_fidelity": true,
+    "bridge": "Render app-private bpy main-thread executor",
+    "native_execution_verified": true
+  },
+  "screenshot": {
+    "filename": "Capture_fa0090a2d0a64c67ab3ff0eebf82b9b1.png",
+    "category": "Captures",
+    "bytes": 201958,
+    "sha256": "566e1a679438b5be5ecadaa75529ada10180ac9bae004e42082f02d47875825e",
+    "width": 720,
+    "height": 1280,
+    "captured_surface": "Render native Android window",
+    "quality_reduced": false
+  },
+  "target_app": "Render Studio",
+  "target_package": "com.rezox.render",
+  "android_activity_asset_change_handling_declared": true,
+  "resource_update_command": "am update-appinfo 0 com.rezox.render"
+}

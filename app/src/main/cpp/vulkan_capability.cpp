@@ -51,13 +51,24 @@ std::string QueryVulkanCapabilities()
       get_proc(VK_NULL_HANDLE, "vkCreateInstance"));
   if (!create) return "Vulkan instance creation entry point unavailable.";
 
+  // A translated Android loader can expose a newer host driver's properties
+  // without exposing that version's entry points to this ARM64 process.
+  // Query the loader separately; a physical GPU's apiVersion is not enough.
+  uint32_t loader_version = VK_API_VERSION_1_0;
+  auto enumerate_version = reinterpret_cast<PFN_vkEnumerateInstanceVersion>(
+      get_proc(VK_NULL_HANDLE, "vkEnumerateInstanceVersion"));
+  if (enumerate_version) {
+    uint32_t reported_version = VK_API_VERSION_1_0;
+    if (enumerate_version(&reported_version) == VK_SUCCESS) loader_version = reported_version;
+  }
+
   VkApplicationInfo app_info{};
   app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
   app_info.pApplicationName = "Render Android hardware probe";
   app_info.applicationVersion = VK_MAKE_VERSION(0, 2, 0);
   app_info.pEngineName = "Blender port capability inventory (not a renderer)";
   app_info.engineVersion = VK_MAKE_VERSION(0, 0, 0);
-  app_info.apiVersion = VK_API_VERSION_1_0;
+  app_info.apiVersion = std::min(loader_version, uint32_t(VK_API_VERSION_1_3));
   VkInstanceCreateInfo create_info{};
   create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   create_info.pApplicationInfo = &app_info;
@@ -99,7 +110,13 @@ std::string QueryVulkanCapabilities()
   }
 
   std::ostringstream report;
-  report << "On-device Vulkan probe (NO scene renderer): ";
+  const bool timeline_core = get_proc(instance, "vkGetSemaphoreCounterValue") != nullptr;
+  const bool timeline_khr = get_proc(instance, "vkGetSemaphoreCounterValueKHR") != nullptr;
+  report << "On-device Vulkan probe (NO scene renderer): loader "
+         << VK_VERSION_MAJOR(loader_version) << "." << VK_VERSION_MINOR(loader_version)
+         << " timeline-counter dispatch core=" << (timeline_core ? "yes" : "no")
+         << " KHR=" << (timeline_khr ? "yes" : "no")
+         << ". Logical-device dispatch and Blender readiness remain unverified. ";
   for (uint32_t i = 0; i < count; ++i) {
     VkPhysicalDeviceProperties props{};
     VkPhysicalDeviceFeatures features{};
@@ -115,7 +132,7 @@ std::string QueryVulkanCapabilities()
     }
     if (i != 0) report << " | ";
     report << Printable(props.deviceName)
-           << " Vulkan " << VK_VERSION_MAJOR(props.apiVersion)
+           << " driver Vulkan " << VK_VERSION_MAJOR(props.apiVersion)
            << "." << VK_VERSION_MINOR(props.apiVersion)
            << " max2D=" << props.limits.maxImageDimension2D
            << " geometryShader=" << (features.geometryShader ? "yes" : "no")

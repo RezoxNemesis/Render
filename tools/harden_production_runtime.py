@@ -28,8 +28,10 @@ def _step(root,p):''')
           'result=_render_exact(scene,frame)\n        if \'FINISHED\' not in result or not tmp.is_file()')
     patch(runtime,"    elif hasattr(scene,'eevee') and hasattr(scene.eevee,'taa_render_samples'):scene.eevee.taa_render_samples=spec['samples']",
           "    elif hasattr(scene,'eevee') and hasattr(scene.eevee,'taa_render_samples'):scene.eevee.taa_render_samples=spec['samples']\n    elif hasattr(scene,'eevee') and hasattr(scene.eevee,'taa_samples'):scene.eevee.taa_samples=spec['samples']\n    else:raise ValueError('REQUESTED_SAMPLE_CONTROL_UNAVAILABLE')")
-    patch(runtime,"    spec=C.render_spec(p)\n    if scene.camera is None:",
-          "    spec=C.render_spec(p)\n    unpacked=[image for image in bpy.data.images if image.source=='FILE' and not image.packed_file]\n    if unpacked:raise ValueError('PACK_EXTERNAL_IMAGES_BEFORE_CHECKPOINT')\n    if scene.camera is None:")
+    # Keep the newer artist-setting-preserving plan builder. Anchor the asset
+    # admission guard to the camera check shared by both source generations.
+    patch(runtime,"    if scene.camera is None:raise ValueError('CAMERA_REQUIRED')",
+          "    unpacked=[image for image in bpy.data.images if image.source=='FILE' and not image.packed_file]\n    if unpacked:raise ValueError('PACK_EXTERNAL_IMAGES_BEFORE_CHECKPOINT')\n    if scene.camera is None:raise ValueError('CAMERA_REQUIRED')")
     detail="'project.list','project.restore','mesh.edit','curve.create','shape.create','shape.keys','rig.create','rig.bind','rig.keys'"
     patch(runtime,"    if operation=='scene.inspect':",'''    if operation in ('''+detail+'''):
         detail_path=Path(__file__).with_name('render_production_detail.py')
@@ -38,9 +40,12 @@ def _step(root,p):''')
         detail_spec.loader.exec_module(detail_module)
         return detail_module.execute(operation,p,root,scene,C)
     if operation=='scene.inspect':''')
+    contract_file=root/'full-app/scripts/render_production_contract.py'
+    asset_prefix="    'asset.create', 'project.create', 'project.checkpoint', 'scene.inspect', 'mesh.create',"
+    original_prefix="    'project.create', 'project.checkpoint', 'scene.inspect', 'mesh.create',"
+    prefix=asset_prefix if asset_prefix in contract_file.read_text() else original_prefix
     patch('full-app/scripts/render_production_contract.py',
-          "    'project.create', 'project.checkpoint', 'scene.inspect', 'mesh.create',",
-          "    'project.create', 'project.checkpoint', 'scene.inspect', 'mesh.create',\n    "+detail+",")
+          prefix, prefix+"\n    "+detail+",")
     patch('app/src/main/java/com/rezox/render/agent/ProductionBridge.java',
           '"project.create","project.checkpoint",',
           '"project.create","project.checkpoint","project.list","project.restore","mesh.edit","curve.create","shape.create","shape.keys","rig.create","rig.bind","rig.keys",')

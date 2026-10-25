@@ -22,7 +22,7 @@ public final class ProductionFiles {
         return root.getCanonicalFile();
     }
     public static File folder(Context context,String category)throws Exception {
-        if(category==null||!(category.matches("[a-f0-9]{32}")||category.equals("Assets")||category.equals("Captures")||category.equals("Projects")))
+        if(category==null||!(category.matches("[a-f0-9]{32}")||category.equals("Assets")||category.equals("Captures")||category.equals("Projects")||category.equals("Exports")||category.equals("Imports")))
             throw new IllegalArgumentException("INVALID_ARTIFACT_CATEGORY");
         File root=root(context),dir=new File(root,category);
         if(Files.isSymbolicLink(dir.toPath())||!root.equals(dir.getCanonicalFile().getParentFile()))throw new IOException("ARTIFACT_OUTSIDE_SCOPE");
@@ -36,9 +36,18 @@ public final class ProductionFiles {
         return f;
     }
     public static String sha(File file)throws Exception {
+        try(InputStream input=new FileInputStream(file)){return sha(input);}
+    }
+    private static String sha(InputStream input)throws Exception{
         MessageDigest digest=MessageDigest.getInstance("SHA-256");
-        try(InputStream input=new FileInputStream(file)){byte[] b=new byte[1048576];int n;while((n=input.read(b))!=-1)digest.update(b,0,n);}
+        byte[] b=new byte[1048576];int n;
+        while((n=input.read(b))!=-1)if(n>0)digest.update(b,0,n);
         return AgentPolicy.hex(digest.digest());
+    }
+    private static boolean verifiedOwnedDownload(Context context,String uri,String expected){
+        try(InputStream input=context.getContentResolver().openInputStream(Uri.parse(uri))){
+            return input!=null&&expected.equals(sha(input));
+        }catch(Exception ignored){return false;}
     }
     public static JSONObject receipt(File file,String category)throws Exception {
         if(!file.isFile())throw new IOException("ARTIFACT_NOT_FOUND");
@@ -63,14 +72,14 @@ public final class ProductionFiles {
     public static JSONObject writeReference(Context context,JSONObject p)throws Exception {
         ProductionBridge.fields(p,"sha256,extension,offset,total_bytes,base64,finish");
         String digest=p.getString("sha256"),ext=p.getString("extension").toLowerCase(java.util.Locale.ROOT);
-        if(!digest.matches("[a-f0-9]{64}")||!(ext.equals("png")||ext.equals("jpg")||ext.equals("jpeg")))throw new IllegalArgumentException("INVALID_REFERENCE_ID");
-        long total=ProductionBridge.integer(p,"total_bytes",1,100L*1024*1024,-1),offset=ProductionBridge.integer(p,"offset",0,total,0);
+        if(!digest.matches("[a-f0-9]{64}")||!(ext.equals("png")||ext.equals("jpg")||ext.equals("jpeg")||ext.equals("webp")||ext.equals("mp4")))throw new IllegalArgumentException("INVALID_REFERENCE_ID");
+        long total=ProductionBridge.integer(p,"total_bytes",1,(ext.equals("mp4")?512L:100L)*1024*1024,-1),offset=ProductionBridge.integer(p,"offset",0,total,0);
         String encoded=p.getString("base64");if(encoded.length()>32768)throw new IllegalArgumentException("REFERENCE_CHUNK_TOO_LARGE");
         byte[] data=Base64.decode(encoded,Base64.DEFAULT);if(data.length>24576||offset+data.length>total)throw new IllegalArgumentException("REFERENCE_CHUNK_TOO_LARGE");
         File dest=file(context,"Assets",digest+"."+ext),part=file(context,"Assets",digest+"."+ext+".partial");
         if(dest.isFile()){
             if(dest.length()!=total||!sha(dest).equals(digest))throw new IOException("REFERENCE_REVISION_CONFLICT");
-            return receipt(dest,"Assets").put("complete",true);
+            return receipt(dest,"Assets").put("complete",true).put("metadata",StudioReferenceInbox.indexStored(context,dest));
         }
         try(RandomAccessFile out=new RandomAccessFile(part,"rw")){
             if(out.length()>offset){
@@ -84,28 +93,89 @@ public final class ProductionFiles {
         if(p.optBoolean("finish",false)){
             if(part.length()!=total||!sha(part).equals(digest))throw new IOException("REFERENCE_HASH_MISMATCH");
             Files.move(part.toPath(),dest.toPath(),StandardCopyOption.ATOMIC_MOVE);
-            return receipt(dest,"Assets").put("complete",true);
+            return receipt(dest,"Assets").put("complete",true).put("metadata",StudioReferenceInbox.indexStored(context,dest));
         }
         return new JSONObject().put("complete",false).put("received_bytes",part.length()).put("total_bytes",total);
     }
     public static JSONObject export(Context context,JSONObject p)throws Exception {
         ProductionBridge.fields(p,"category,filename,expected_sha256");
-        String category=p.getString("category");File file=file(context,category,p.getString("filename"));
-        if(!file.isFile()||file.getName().contains("partial")||file.getName().endsWith(".tmp"))throw new IOException("ARTIFACT_INCOMPLETE");
-        String expected=p.getString("expected_sha256");if(!sha(file).equals(expected))throw new IOException("ARTIFACT_REVISION_CONFLICT");
-        String mime=file.getName().endsWith(".mp4")?"video/mp4":file.getName().endsWith(".png")?"image/png":file.getName().endsWith(".blend")?"application/x-blender":null;
+        String category=p.getString("category");
+        File source=file(context,category,p.getString("filename"));
+        if(!source.isFile()||source.getName().contains("partial")||
+            source.getName().endsWith(".tmp")||
+            source.getName().endsWith(".unverified.mp4"))
+            throw new IOException("ARTIFACT_INCOMPLETE");
+        // Check the complete native output itself before publishing it in
+        // Downloads; a matching caller-provided hash alone cannot prove MP4.
+        if(category.matches("[a-f0-9]{32}")&&
+            source.getName().matches("Production_"+category+
+                "(?:_part_[0-9]{5})?\\.mp4")&&
+            !ProductionSegmentedEncoder.hasCompleteMp4Container(source))
+            throw new IOException("VIDEO_CONTAINER_INCOMPLETE");
+        String expected=p.getString("expected_sha256");
+        if(!expected.matches("[a-f0-9]{64}")||!sha(source).equals(expected))
+            throw new IOException("ARTIFACT_REVISION_CONFLICT");
+        String mime=source.getName().endsWith(".mp4")?"video/mp4":
+            source.getName().endsWith(".png")?"image/png":
+            source.getName().endsWith(".blend")?"application/x-blender":
+            category.matches("[a-f0-9]{32}")&&
+            source.getName().endsWith("_segments.json")?"application/json":null;
         if(mime==null)throw new IllegalArgumentException("EXPORT_TYPE_UNAVAILABLE");
-        ContentValues values=new ContentValues();values.put(MediaStore.Downloads.DISPLAY_NAME,file.getName());values.put(MediaStore.Downloads.MIME_TYPE,mime);
-        values.put(MediaStore.Downloads.RELATIVE_PATH,Environment.DIRECTORY_DOWNLOADS+"/RenderStudio");values.put(MediaStore.Downloads.IS_PENDING,1);
-        Uri uri=context.getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI,values);
-        if(uri==null)throw new IOException("DOWNLOADS_UNAVAILABLE");boolean done=false;
+
+        // A user-approved export is content-addressed and idempotent. Checking
+        // the specific URI we created never requires Gallery enumeration.
+        android.content.SharedPreferences state=context.getSharedPreferences(
+            "render_verified_downloads_v1",Context.MODE_PRIVATE);
+        String receiptKey="sha_"+expected;
+        String existing=state.getString(receiptKey,null);
+        if(existing!=null&&verifiedOwnedDownload(context,existing,expected))
+            return receipt(source,category).put("downloads_uri",existing)
+                .put("downloads_directory","Download/RenderStudio")
+                .put("already_exported",true).put("readback_sha256_verified",true);
+
+        ContentValues values=new ContentValues();
+        values.put(MediaStore.Downloads.DISPLAY_NAME,source.getName());
+        values.put(MediaStore.Downloads.MIME_TYPE,mime);
+        values.put(MediaStore.Downloads.RELATIVE_PATH,
+            Environment.DIRECTORY_DOWNLOADS+"/RenderStudio");
+        values.put(MediaStore.Downloads.IS_PENDING,1);
+        Uri uri=context.getContentResolver().insert(
+            MediaStore.Downloads.EXTERNAL_CONTENT_URI,values);
+        if(uri==null)throw new IOException("DOWNLOADS_UNAVAILABLE");
+        boolean committed=false;
         try{
-            try(InputStream in=new FileInputStream(file);OutputStream out=context.getContentResolver().openOutputStream(uri,"w")){
-                if(out==null)throw new IOException("DOWNLOADS_UNAVAILABLE");byte[] b=new byte[1048576];int n;while((n=in.read(b))!=-1)out.write(b,0,n);
+            long copied=0;
+            try(InputStream in=new FileInputStream(source);
+                OutputStream out=context.getContentResolver().openOutputStream(uri,"w")){
+                if(out==null)throw new IOException("DOWNLOADS_UNAVAILABLE");
+                byte[] bytes=new byte[1024*1024];
+                int n;
+                while((n=in.read(bytes))!=-1){
+                    if(n>0){out.write(bytes,0,n);copied+=n;}
+                }
+                out.flush();
             }
-            ContentValues publish=new ContentValues();publish.put(MediaStore.Downloads.IS_PENDING,0);
-            if(context.getContentResolver().update(uri,publish,null,null)!=1)throw new IOException("EXPORT_COMMIT_FAILED");
-            done=true;return receipt(file,category).put("downloads_uri",uri.toString()).put("downloads_directory","Download/RenderStudio");
-        }finally{if(!done)context.getContentResolver().delete(uri,null,null);}
+            if(copied!=source.length())throw new IOException("DOWNLOADS_BYTE_COUNT_MISMATCH");
+            // Full readback, even for >4 GB: bounded 1 MiB buffer, 64-bit
+            // counters and an independent SHA prove the provider kept bytes.
+            if(!verifiedOwnedDownload(context,uri.toString(),expected))
+                throw new IOException("DOWNLOADS_READBACK_SHA256_MISMATCH");
+            ContentValues publish=new ContentValues();
+            publish.put(MediaStore.Downloads.IS_PENDING,0);
+            if(context.getContentResolver().update(uri,publish,null,null)!=1)
+                throw new IOException("DOWNLOADS_PUBLISH_FAILED");
+            committed=true;
+            state.edit().putString(receiptKey,uri.toString()).commit();
+            return receipt(source,category)
+                .put("downloads_uri",uri.toString())
+                .put("downloads_directory","Download/RenderStudio")
+                .put("bytes_written",copied)
+                .put("readback_sha256_verified",true)
+                .put("already_exported",false)
+                .put("owner_original_preserved",true);
+        }finally{
+            if(!committed)try{context.getContentResolver().delete(uri,null,null);}
+                catch(Exception ignored){}
+        }
     }
 }
