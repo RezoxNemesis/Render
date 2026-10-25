@@ -50,6 +50,14 @@ with tempfile.TemporaryDirectory() as temp:
     assert len(mesh.data.vertices)==count
     assert any((a-b.co).length>.01 for a,b in zip(initial,mesh.data.vertices))
     assert not applied["topology_changed"]
+    import render_native_hud as HUD
+    HUD.command_started({"args":{"operation":"studio.sculpt.brush",
+                                 "payload":command}})
+    HUD.command_finished({"state":"succeeded","result":applied})
+    marker=HUD.snapshot()["verified_sculpt_marker"]
+    assert marker and marker["object"]==mesh.name,marker
+    assert marker["local_center"]==command["center"],marker
+    assert HUD.snapshot()["fabricated_ui_taps"] is False
     try:
         Gesture.sculpt(scene,command)
         raise AssertionError("Stale mesh revision accepted")
