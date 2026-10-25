@@ -241,7 +241,11 @@ def _execute_step(op,payload,plan_id):
             "studio.reference.timeline.bind","studio.reference.timeline.scrub",
             "studio.preview.profile.apply","studio.preview.profile.restore",
             "studio.preview.aa.configure",
-            "studio.preview.sampling.configure"):
+            "studio.preview.sampling.configure",
+            "studio.mesh.bridge_loops","studio.procedural.scatter",
+            "studio.material.surface","studio.motion.action.create",
+            "studio.motion.nla.create","studio.compositor.grade",
+            "studio.sim.rigidbody","studio.drawing.strokes"):
         import render_artist_ops
         render_artist_ops.checkpoint(bpy.context.scene,_root(),"studio.plan."+op)
     import render_production
