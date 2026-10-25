@@ -319,8 +319,7 @@ def _tool_search(p):
     except ImportError:pass
     try:
         import render_live_gestures
-        ref.update({entry["operation"]:{"fields":entry["fields"],
-                                       "required":entry["required"]}
+        ref.update({entry["operation"]:entry["input_schema"]
                     for entry in render_live_gestures.capabilities()})
     except ImportError:pass
     result=[]
