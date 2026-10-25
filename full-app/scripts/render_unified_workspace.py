@@ -257,6 +257,8 @@ def _execute_step(op,payload,plan_id):
             "animation.clip.create","project.checkpoint","studio.curve.adjust",
             "studio.sculpt.brush","studio.artist.sculpt.enter",
             "studio.artist.sculpt.stroke","studio.artist.sculpt.leave",
+            "studio.artist.sculpt.brush.select",
+                          "studio.artist.sculpt.brush.select",
             "studio.pose.key","studio.timeline.scrub",
             "studio.ik.create","studio.ik.target","studio.ik.blend",
             "studio.reference.timeline.bind","studio.reference.timeline.scrub",
