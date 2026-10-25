@@ -57,8 +57,11 @@ def _movie(scene,name):
     return strip
 
 def _owner_movie(strip,root):
-    filename=Path(strip.filepath).name
-    _asset(root,filename,require_movie=True)
+    native_path=Path(bpy.path.abspath(strip.filepath)).resolve()
+    filename=native_path.name
+    owned=_asset(root,filename,require_movie=True)
+    if native_path!=owned.resolve():
+        raise ValueError("STUDIO_VIDEO_EXTERNAL_STRIP_NOT_OWNED")
     return filename
 
 def _metadata(strip,asset):
@@ -125,8 +128,7 @@ def bind(scene,root,p):
                   side_by_side_pixels_verified=False)
     if display!="NONE":
         params={"asset":original.name,
-                "mode":"SPLIT" if display=="SPLIT" else "CAMERA",
-                "name":"ReferenceVideoPreview"}
+                "mode":"SPLIT" if display=="SPLIT" else "CAMERA"}
         if "preview_asset" in p:params["preview_asset"]=p["preview_asset"]
         if "model" in p:params["model"]=p["model"]
         params["split_factor"]=factor
