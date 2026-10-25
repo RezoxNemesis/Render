@@ -349,7 +349,8 @@ def execute(args, spool, command_id):
     if operation.startswith('studio.'):
         # Direct curve edits receive the same atomic native BLEND checkpoint
         # as queued edits; no action can mutate another scene without review.
-        if operation=='studio.curve.adjust':
+        if operation in ("studio.curve.adjust","studio.sculpt.brush",
+                         "studio.pose.key") and not p.get("dry_run",False):
             import render_artist_ops
             render_artist_ops.checkpoint(scene,root,operation)
         import render_unified_workspace
