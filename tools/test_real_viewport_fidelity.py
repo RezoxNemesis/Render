@@ -70,7 +70,7 @@ with tempfile.TemporaryDirectory() as scratch:
     except ValueError as error:
         assert str(error)=="STUDIO_PREVIEW_NATIVE_3D_VIEW_UNAVAILABLE",error
     caps=Fidelity.capabilities({})
-    assert len(caps["operations"])==7
+    assert len(caps["operations"])==len(Contract.OPS)
     assert not caps["core_engine_replaced"]
     assert not caps["texture_or_mesh_reconstruction_available"]
     print("PASS: actual Blender detected a duplicate coplanar actor mesh, non-uniform scale,",flush=True)
