@@ -18,7 +18,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /** Stable typed envelope. New operations are validated by Render, not guessed from a version string. */
 public final class ProductionBridge {
     public static final String ACTION="production.execute";
-    private static final String[] OPS={"capabilities","device.profile","editor.open","screenshot.capture","file.importers","file.inspect","file.import",
+    private static final String[] OPS={"capabilities","device.profile","editor.open","screenshot.capture","screenshot.preview","file.importers","file.inspect","file.import",
         "artifact.read","artifact.export","reference.write","project.create","project.checkpoint","project.list","project.restore","mesh.edit","curve.create","shape.create","shape.keys","rig.create","rig.bind","rig.keys",
         "scene.inspect","mesh.create","body.blockout","camera.frame","viewport.orient","sculpt.prepare","asset.create","material.assign","group.create","animation.keys","camera.aim",
         "world.configure","instances.plan","instances.create","reference.attach",
@@ -258,6 +258,7 @@ public final class ProductionBridge {
                 .put("completed_editor_start",false).put("note","Android may require the owner to foreground Render; verify native heartbeat before editing.");
         }
         if(operation.equals("screenshot.capture")){fields(p,"");return ProductionCapture.capture(context);}
+        if(operation.equals("screenshot.preview"))return ProductionCapture.preview(context,p);
         if(operation.equals("artifact.read"))return ProductionFiles.read(context,p);
         if(operation.equals("artifact.export"))return ProductionFiles.export(context,p);
         if(operation.equals("reference.write"))return ProductionFiles.writeReference(context,p);
