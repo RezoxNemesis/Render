@@ -125,6 +125,12 @@ class ArtistDirectContractTests(unittest.TestCase):
         self.assertIn("render_artist_direct_ui.install()",session)
         self.assertIn('"studio.artist.sculpt.stroke"',dispatch)
         self.assertIn("render_artist_direct.execute",runtime)
+        self.assertIn('"screenshot.preview"',bridge)
+        capture=(ROOT/"app/src/main/java/com/rezox/render/agent/ProductionCapture.java").read_text()
+        self.assertIn("PixelCopy.request(",capture)
+        self.assertIn("preview_only",capture)
+        self.assertIn("final_render_quality_unchanged",capture)
+        self.assertIn("RENDER_WINDOW_NOT_VISIBLE",capture)
         self.assertIn("DIRECT_SCULPT_NO_MEASURED_MESH_CHANGE",
                       (ROOT/"full-app/scripts/render_artist_direct.py").read_text())
         self.assertNotIn("exec(",(ROOT/"full-app/scripts/render_artist_direct.py").read_text())
