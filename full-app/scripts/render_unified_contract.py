@@ -61,6 +61,9 @@ PROGRAM_OPS={
  "studio.ik.inspect":"characters",
  "studio.ik.target":"animation",
  "studio.ik.blend":"animation",
+ "studio.reference.timeline.bind":"assets",
+ "studio.reference.timeline.inspect":"assets",
+ "studio.reference.timeline.scrub":"assets",
  "studio.timeline.scrub":"animation",
 }
 MUTATING=frozenset(PROGRAM_OPS)-{
