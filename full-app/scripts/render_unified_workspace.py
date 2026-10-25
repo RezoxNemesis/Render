@@ -205,7 +205,8 @@ def _execute_step(op,payload,plan_id):
             "studio.workspace.activate","studio.view.orbit",
             "body.blockout","reference.workspace.open",
             "reference.fit.landmarks","reference.fit.multiview",
-            "animation.clip.create","project.checkpoint","studio.curve.adjust"):
+            "animation.clip.create","project.checkpoint","studio.curve.adjust",
+            "studio.sculpt.brush","studio.pose.key","studio.timeline.scrub"):
         import render_artist_ops
         render_artist_ops.checkpoint(bpy.context.scene,_root(),"studio.plan."+op)
     import render_production
@@ -289,6 +290,12 @@ def _tool_search(p):
         ref.update({entry["operation"]:entry["input_schema"]
                     for entry in render_unified_curves.capabilities()})
     except ImportError:pass
+    try:
+        import render_live_gestures
+        ref.update({entry["operation"]:{"fields":entry["fields"],
+                                       "required":entry["required"]}
+                    for entry in render_live_gestures.capabilities()})
+    except ImportError:pass
     result=[]
     for op in sorted(native | set(C.PROGRAM_OPS)):
         group=C.PROGRAM_OPS.get(op)
@@ -329,6 +336,8 @@ def execute(op,p,root,scene):
                           "studio.workspace.activate","studio.workspace.inspect",
                           "studio.view.orbit","studio.editor.open",
                           "studio.curve.inspect","studio.curve.adjust",
+                          "studio.sculpt.inspect","studio.sculpt.brush",
+                          "studio.pose.inspect","studio.pose.key","studio.timeline.scrub",
                           "studio.plan.submit","studio.plan.status","studio.plan.list",
                           "studio.plan.pause","studio.plan.resume","studio.plan.cancel",
                           "studio.activity"])
@@ -337,6 +346,10 @@ def execute(op,p,root,scene):
     if op in ("studio.curve.inspect","studio.curve.adjust"):
         import render_unified_curves
         return render_unified_curves.execute(op,p)
+    if op in ("studio.sculpt.inspect","studio.sculpt.brush",
+              "studio.pose.inspect","studio.pose.key","studio.timeline.scrub"):
+        import render_live_gestures
+        return render_live_gestures.execute(op,p,root,scene)
     if op=="studio.workspace.activate":return _activate(scene,p)
     if op=="studio.view.orbit":return _orbit(scene,p)
     if op=="studio.editor.open":return _editor(p)
