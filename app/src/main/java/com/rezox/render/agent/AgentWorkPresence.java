@@ -10,6 +10,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.os.Build;
+import org.json.JSONObject;
 
 /**
  * Honest local presence. A hand in the Render console and an Android notification
@@ -36,11 +37,30 @@ public final class AgentWorkPresence {
             this.startedAt=startedAt;this.updatedAt=updatedAt;this.progress=progress;
         }
         public boolean isWorking(){return "running".equals(state);}
+        public boolean isPaused(){return "paused".equals(state);}
+        public boolean hasPersistentNotice(){return isPaused()||needsRecovery();}
         public boolean needsRecovery(){return "recovery_required".equals(state);}
+        public String displayAction(){
+            if(action.endsWith("production.execute"))return "ChatGPT native action";
+            if(action.equals("render.batch")||action.endsWith("render_video")||action.endsWith("manual_animation"))
+                return "Rendering animation";
+            if(action.endsWith("render_still")||action.endsWith("manual_image"))return "Rendering image";
+            if(action.endsWith("engine.status"))return "Checking Blender engine";
+            String leaf=action.substring(action.lastIndexOf('.')+1).replace('_',' ');
+            return leaf.isEmpty()?"Native Blender action":Character.toUpperCase(leaf.charAt(0))+leaf.substring(1);
+        }
+        public String displayStage(){
+            return stage.replace("PAUSED_THERMAL_PRESSURE","Waiting for Android to cool")
+                .replace("PAUSED_MEMORY_PRESSURE","Waiting for available memory")
+                .replace("PAUSED_STORAGE_PRESSURE","Free storage to resume")
+                .replace("PAUSED_USER_STOP","Paused by owner")
+                .replace("PAUSED_ALREADY_RENDERING","Waiting for current render");
+        }
         public String description(){
             if(isWorking())return "Working in Blender • "+action+" • "+stage+
                     (progress>=0?" ("+progress+"%)":"");
             if(needsRecovery())return "Native command interrupted • inspect history before retrying";
+            if(isPaused())return "Render safely paused • "+displayStage()+" • resume from last verified frame";
             if("succeeded".equals(state))return "Last native command completed • "+action;
             if("failed".equals(state)||"cancelled".equals(state))
                 return "Last native command "+state+" • "+action;
@@ -74,6 +94,7 @@ public final class AgentWorkPresence {
                     .putString("action",action).putString("stage","Accepted by native executor")
                     .putString("source",source).putLong("started",now)
                     .putLong("updated",now).putInt("progress",-1).apply();
+            NativeBlenderUiStatus.write(ctx,snapshot(ctx));
             safeNotify(ctx,true,true);
         }
     }
@@ -85,6 +106,7 @@ public final class AgentWorkPresence {
             int value=percent<0?-1:Math.max(0,Math.min(100,percent));
             p.edit().putString("stage",stage).putInt("progress",value)
                     .putLong("updated",System.currentTimeMillis()).apply();
+            NativeBlenderUiStatus.write(ctx,snapshot(ctx));
             safeNotify(ctx,true,false);
         }
     }
@@ -92,14 +114,29 @@ public final class AgentWorkPresence {
     public static void finish(Context ctx,String state){
         synchronized(LOCK){
             if(!"succeeded".equals(state)&&!"failed".equals(state)&&
-               !"cancelled".equals(state)&&!"recovery_required".equals(state))
+               !"cancelled".equals(state)&&!"paused".equals(state)&&
+               !"recovery_required".equals(state))
                 state="recovery_required";
             SharedPreferences p=prefs(ctx);
             p.edit().putString("state",state)
-                    .putString("stage",state.equals("succeeded")?
-                        "Native result journaled":"Check native result journal")
+                    .putString("stage",state.equals("paused")?p.getString("stage","Paused at verified frame boundary"):
+                        state.equals("succeeded")?"Native result journaled":"Check native result journal")
                     .putLong("updated",System.currentTimeMillis()).apply();
+            NativeBlenderUiStatus.write(ctx,snapshot(ctx));
             safeNotify(ctx,false,true);
+        }
+    }
+
+    /** The command receipt can succeed while the render job is safely paused.
+     * Preserve that distinction in UI without changing journal terminal states. */
+    public static void finish(Context ctx,String commandState,JSONObject result){
+        synchronized(LOCK){
+            if("succeeded".equals(commandState)&&result!=null&&result.optBoolean("paused",false)){
+                String reason=result.optString("reason","Paused at verified frame boundary");
+                if(!reason.matches("[A-Za-z0-9 _.-]{1,100}"))reason="Paused at verified frame boundary";
+                stage(ctx,reason,prefs(ctx).getInt("progress",-1));
+                finish(ctx,"paused");
+            }else finish(ctx,commandState);
         }
     }
 

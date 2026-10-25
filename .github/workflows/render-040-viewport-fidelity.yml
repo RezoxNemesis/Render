@@ -1,0 +1,100 @@
+name: Render 0.40 Viewport Fidelity Phase 1
+on:
+  pull_request:
+    branches: [upgrade/render-studio-039-agent-fastlane-20261025]
+    paths:
+      - "full-app/scripts/**"
+      - "app/src/**"
+      - "tools/**"
+      - ".github/workflows/render-040-viewport-fidelity.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  host-and-packaging:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Compile typed fidelity profile, direct Blender preview and real artist UI
+        run: |
+          python -m compileall -q full-app/scripts/render_viewport_fidelity_contract.py \
+            full-app/scripts/render_viewport_fidelity.py \
+            full-app/scripts/render_viewport_fidelity_ui.py \
+            full-app/scripts/render_unified_workspace.py \
+            full-app/scripts/render_session_tools.py
+      - name: Host security and original Blender runtime pack
+        run: |
+          python -m unittest tools.test_viewport_fidelity_contract -v
+          python -m unittest tools.test_unified_studio_contract -v
+          python -m unittest tools.omega.test_phase10_packaging -v
+      - name: Verify original Android Blender build-adapter idempotence
+        run: |
+          python tools/prepare_production_toolkit.py
+          python tools/prepare_production_toolkit.py
+  real-blender-surface-diagnosis:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install genuine Blender bpy
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends blender
+          blender --version | head -2
+      - name: Diagnose actual overlapping surfaces, alpha and 128px textures
+        env:
+          PYTHONPATH: full-app/scripts
+          LIBGL_ALWAYS_SOFTWARE: "1"
+        run: |
+          blender -b -noaudio --python-exit-code 1 --python tools/test_real_viewport_fidelity.py
+      - name: Verify real Cycles viewport sampling never changes final-render quality
+        env:
+          PYTHONPATH: full-app/scripts
+          LIBGL_ALWAYS_SOFTWARE: "1"
+        run: |
+          blender -b -noaudio --python-exit-code 1 --python tools/test_real_viewport_sampling.py
+  real-blender-viewport-and-artist-ui:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install native Blender GUI and virtual display
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends blender xvfb
+      - name: Prove reversible Blender pixel profiles and exact original restore
+        env:
+          PYTHONPATH: full-app/scripts
+          LIBGL_ALWAYS_SOFTWARE: "1"
+        run: |
+          timeout 120 xvfb-run -a -s "-screen 0 1280x900x24" \
+            blender --factory-startup -noaudio --python-exit-code 1 \
+            --python tools/test_real_viewport_fidelity_ui.py
+  authenticated-android-native-bridge:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+      - name: Install Android SDK, NDK and CMake
+        shell: bash
+        run: |
+          set -euo pipefail
+          M="$(find "$ANDROID_HOME/cmdline-tools" -path '*/bin/sdkmanager' -type f | sort -V | tail -1)"
+          test -x "$M"
+          yes | "$M" --licenses >/dev/null || true
+          "$M" --install "platforms;android-35" "build-tools;35.0.0" "cmake;3.22.1" "ndk;27.2.12479018"
+      - name: Verify native scene operation registration and existing Android tests
+        run: |
+          python tools/prepare_production_toolkit.py
+          gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
