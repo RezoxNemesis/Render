@@ -120,8 +120,7 @@ with tempfile.TemporaryDirectory() as temp:
     assert scene.frame_current==12
     assert Queue.get(root,"3"*32)["completed_steps"]==3
     raw=Queue._load_file(Queue._path(root,"3"*32))
-    assert raw["receipts"][0]["mesh_revision_after"]==raw["receipts"][1].get(
-        "mesh_revision_after", "MISSING") or raw["receipts"][0]["mesh_revision_after"]!=fresh
+    assert raw["receipts"][0]["mesh_revision_after"]!=fresh
     assert raw["receipts"][1]["mesh_revision_after"]!=raw["receipts"][0]["mesh_revision_after"]
     assert raw["steps"][1]["payload"]["expected_sha256"]=="$prev_mesh_sha256"
     history=Studio.execute("studio.activity",{"limit":16},root,scene)
