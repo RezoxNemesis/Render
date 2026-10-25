@@ -34,6 +34,17 @@ class ArtistDirectContractTests(unittest.TestCase):
         self.assertFalse(fields[1]["is_start"])
         self.assertEqual(fields[0]["pressure"],.75)
 
+    def test_native_essentials_brush_allowlist(self):
+        for brush in Contract.BRUSH_PRESETS:
+            request={"object":"SculptedHero","brush":brush}
+            self.assertEqual(Contract.validate(Contract.OPS[4],request),request)
+        for brush in ("../path","bpy.ops.wm.open_mainfile","Unknown",3,["DRAW"],None):
+            with self.subTest(brush=brush):
+                with self.assertRaises(ValueError):
+                    Contract.validate(Contract.OPS[4],{"object":"SculptedHero","brush":brush})
+        self.assertEqual(Contract.BRUSH_PRESETS["CLAY_STRIPS"],"Clay Strips")
+        self.assertIn("brush",Contract.capabilities()[-1]["input_schema"]["required"])
+
     def test_rejects_unsafe_or_unverified_sculpt_requests(self):
         bad=[
             {"object":"SculptedHero","points":valid()["points"]},
