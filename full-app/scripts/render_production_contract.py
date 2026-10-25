@@ -24,6 +24,7 @@ OPERATIONS = frozenset((
     'studio.capabilities','studio.tool.search','studio.workspace.activate','studio.workspace.inspect',
     'studio.view.orbit','studio.editor.open','studio.sculpt.inspect','studio.sculpt.brush',
     'studio.pose.inspect','studio.pose.key','studio.timeline.scrub',
+    'studio.ik.create','studio.ik.inspect','studio.ik.target','studio.ik.blend',
     'studio.curve.inspect','studio.curve.adjust','studio.plan.submit','studio.plan.status',
     'studio.plan.list','studio.plan.pause','studio.plan.resume','studio.plan.cancel','studio.activity',
     'object.geometry','operator.describe','operator.execute',
