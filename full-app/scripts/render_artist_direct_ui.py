@@ -65,7 +65,7 @@ class RENDERSTUDIO_PT_direct_artist(bpy.types.Panel):
     def draw(self,context):
         layout=self.layout
         ob=context.view_layer.objects.active
-        layout.label(text="REAL BLENDER BRUSH",icon="BRUSH_DATA")
+        layout.label(text="REAL BLENDER BRUSH",icon="SCULPTMODE_HLT")
         layout.label(text="Select the character mesh first")
         col=layout.column(align=True)
         col.operator("renderstudio.direct_sculpt_enter",text="Enter Live Sculpt",icon="SCULPTMODE_HLT")
