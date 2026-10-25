@@ -456,7 +456,7 @@ def capabilities(p):
         if platform and hasattr(platform,"backend_type_get"):
             gpu={"backend":str(platform.backend_type_get()),
                  "probe_success":True}
-    except (ImportError,RuntimeError,AttributeError):pass
+    except (ImportError,RuntimeError,AttributeError,SystemError):pass
     return {"operations":C.capabilities(),
             "profiles":list(C.PROFILES),"blender_version":bpy.app.version_string,
             "gpu":gpu,"running_view3d_areas":len(_views()),
