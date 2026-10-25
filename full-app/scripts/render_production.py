@@ -349,7 +349,7 @@ def execute(args, spool, command_id):
     if operation.startswith('studio.'):
         # Direct curve edits receive the same atomic native BLEND checkpoint
         # as queued edits; no action can mutate another scene without review.
-        if operation in ("studio.artist.sculpt.stroke",
+        if operation in ("studio.artist.sculpt.stroke","studio.artist.surface.clone",
                          "studio.curve.adjust","studio.sculpt.brush",
                          "studio.pose.key","studio.ik.create",
                          "studio.ik.target","studio.ik.blend",
