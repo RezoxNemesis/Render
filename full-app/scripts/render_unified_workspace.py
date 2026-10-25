@@ -401,7 +401,13 @@ def execute(op,p,root,scene):
                           "studio.preview.profile.restore","studio.preview.aa.inspect",
                           "studio.preview.aa.configure",
                           "studio.preview.sampling.inspect",
-                          "studio.preview.sampling.configure"])
+                          "studio.preview.sampling.configure",
+                          "studio.benchmark.catalog","studio.benchmark.audit",
+                          "studio.mesh.bridge_loops","studio.procedural.scatter",
+                          "studio.material.surface","studio.motion.action.create",
+                          "studio.motion.nla.create","studio.compositor.grade",
+                          "studio.compositor.inspect","studio.sim.rigidbody",
+                          "studio.drawing.strokes"])
         return result
     if op=="studio.tool.search":return _tool_search(p)
     if op.startswith("studio.preview."):
