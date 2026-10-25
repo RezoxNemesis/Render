@@ -170,6 +170,8 @@ def sculpt(scene,p):
             "mirrored":mirror,"dry_run":dry,
             "mesh_revision_before":token,
             "mesh_revision_after":token if dry else _fingerprint(ob),
+            "sculpt_center_local":[float(v) for v in center],
+            "sculpt_radius_local":radius,
             "native_blender_vertex_coordinates_updated":not dry,
             "topology_changed":False,"materials_preserved":True,
             "actual_brush_kernel_in_sculpt_mode":False,
