@@ -1,0 +1,101 @@
+{
+  "contract": "RENDER-OMEGA-13P-20261022",
+  "phase": 5,
+  "title": "Anatomical character authoring, sculpt surface, hair and clothing",
+  "status": "Partial",
+  "seed_sha": "ed7ef34fa85d9e361bc9c92d554d8ec937755cc2",
+  "head_branch": "feature/omega-P05-human-character-20261022",
+  "head_sha": "ae022a7069a7f277b0dcce67b059b2fb0dee9b69",
+  "head_sha_note": "Previous verified branch commit; report cannot embed its own future Git commit SHA.",
+  "pr_url": "https://github.com/RezoxNemesis/Render/pull/15",
+  "owned_paths_changed": [
+    "full-app/scripts/omega/phase05_character.py",
+    "tools/omega/test_phase05_character.py",
+    "native-tests/omega/phase05/test_native_character.py",
+    "reports/omega/PHASE_05_RESULT.json"
+  ],
+  "host_tests": {
+    "state": "PASS",
+    "command": "python -m unittest discover -s tools/omega -p 'test_phase05_*.py' -v",
+    "results": [
+      "Ran 10 tests in 0.002s",
+      "OK"
+    ],
+    "compile": "python -m py_compile full-app/scripts/omega/phase05_character.py : PASS",
+    "test_environment": "Container Python 3; Blender/bpy absent",
+    "uploaded_blob_verified_against_tested_files": true
+  },
+  "real_bpy_tests": {
+    "state": "NOT_RUN",
+    "commands": [
+      "blender -b -noaudio --python-exit-code 1 --python native-tests/omega/phase05/test_native_character.py",
+      "OMEGA05_RENDER_IMAGES=1 blender -b -noaudio --python-exit-code 1 --python native-tests/omega/phase05/test_native_character.py"
+    ],
+    "results": [],
+    "reason": "No executable blender and no importable bpy available on the execution host; native fixture is committed but not executed."
+  },
+  "android_tests": {
+    "state": "NOT_RUN",
+    "reason": "No connected native Android Blender runtime or device evidence in this engineering session; Phase 10 registry/packaging remains separately owned."
+  },
+  "native_receipts": [],
+  "artifacts": [
+    {
+      "kind": "source",
+      "path": "full-app/scripts/omega/phase05_character.py",
+      "verified": "git_blob_sha_ca635927a2a150ecb2af7b21ac01a210941b73da"
+    },
+    {
+      "kind": "test",
+      "path": "tools/omega/test_phase05_character.py",
+      "verified": "git_blob_sha_148c93d35b0ea1978c2ab7ad45a805cc26bfdf7d"
+    },
+    {
+      "kind": "native_fixture_not_yet_executed",
+      "path": "native-tests/omega/phase05/test_native_character.py",
+      "verified": "git_blob_sha_33e0d1066b2319035244b88fd7fa593742646d2b"
+    }
+  ],
+  "scene_stage": "SCULPTED (provisional until real bpy fixture); never RIG_READY",
+  "native_data_contract": {
+    "operations": [
+      "omega.character.create",
+      "omega.character.audit"
+    ],
+    "editable_meshes": true,
+    "facial_relief": "analytic native mesh-vertex deformation",
+    "uv_mapping": "per-mesh generated Blender UV layers",
+    "hair": "Blender editable CURVE splines",
+    "views": [
+      "Front",
+      "Side",
+      "ThreeQuarter"
+    ],
+    "landmarks": "collection omega_landmarks_json",
+    "source_revision": "sha256 of normalized recipe incl. reference_sha256 when provided",
+    "acknowledged_seams": [
+      "shoulders",
+      "hips",
+      "fingers",
+      "shirt",
+      "shoes",
+      "eyes",
+      "ears",
+      "hair"
+    ],
+    "rigging": "not implemented (Phase 06 owner)",
+    "height_m": "Physical z=0 shoe sole to hair crown z=height_m; pure regression passed, native bounding test awaits bpy"
+  },
+  "quality_reduced": false,
+  "residual_blockers": [
+    "Required native Blender bpy and bmesh fixture has not run; topology, .blend save/reopen and render bytes remain unverified.",
+    "Native on-device Android build and exact packaged runtime operation registration are Phase 10 integration gates.",
+    "Actual three-view visual acceptance compared with 0.24 reference remains outstanding; no professional anatomical or likeness claim.",
+    "Seams require retopology; weights, IK and deforming rig remain Phase 06 work."
+  ],
+  "unverified_claims": [
+    "No native Blender execution success receipt or verified .blend artifact created in this session.",
+    "No native PNG or raytraced visual review, no Android render/device test.",
+    "No claim of photorealistic character, reference likeness or complete rig."
+  ]
+}

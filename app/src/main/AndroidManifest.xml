@@ -8,6 +8,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROCESSING" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <application android:allowBackup="false" android:label="Render" android:usesCleartextTraffic="false"
@@ -23,8 +25,15 @@
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="User-started visible remote-command session for this app's native project operations, with persistent notification and Stop control; no control of unrelated apps" />
         </service>
+        <service android:name=".agent.RenderLongForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProcessing|specialUse">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Owner-started native Blender animation rendering with a persistent notification, Pause control and checkpointed recovery" />
+        </service>
         <!-- Android work notification can only target this non-exported Stop receiver. -->
         <receiver android:name=".agent.NativeWorkStopReceiver" android:exported="false" />
+        <service android:name=".agent.FileTransferService" android:exported="false" android:foregroundServiceType="dataSync" />
         <!-- Cross-app native bridge. Messenger checks caller's kernel-supplied UID
              and local owner-enabled flag before accepting typed commands. -->
         <service

@@ -7,11 +7,31 @@ from pathlib import Path
 import re
 
 OPERATIONS = frozenset((
+    'file.importers','file.inspect','file.import',
+    'artist.capabilities','artist.inspect','body.blockout','camera.frame','viewport.orient','sculpt.prepare','object.duplicate','object.remove','sculpt.mask','sculpt.stroke','facial.expression','material.inspect','light.configure','camera.configure','media.import','project.export',
+    'asset.search','asset.details','asset.preview','asset.download','asset.download.status','asset.download.pause','asset.import',
+    'render.quality.inspect','render.quality.configure','render.performance.inspect','render.performance.configure',
+    'render.profile.inspect','render.profile.configure',
     'capabilities', 'device.profile', 'editor.open', 'screenshot.capture',
     'artifact.read', 'artifact.export', 'reference.write',
-    'project.create', 'project.checkpoint', 'scene.inspect', 'mesh.create',
+    'asset.create', 'project.create', 'project.checkpoint', 'scene.inspect', 'mesh.create',
+    'project.list','project.restore','mesh.edit','curve.create','shape.create','shape.keys','rig.create','rig.bind','rig.keys',
     'material.assign', 'group.create', 'animation.keys', 'camera.aim',
     'world.configure', 'instances.plan', 'instances.create', 'reference.attach',
+    'reference.bind','reference.landmarks','viewport.inspect','viewport.configure','viewport.focus',
+    'reference.workspace.open','reference.workspace.inspect','reference.compare.multiview','reference.fit.landmarks','reference.fit.multiview',
+    'animation.clip.create','animation.clip.inspect','animation.motion.audit',
+    'studio.capabilities','studio.tool.search','studio.workspace.activate','studio.workspace.inspect',
+    'studio.view.orbit','studio.editor.open','studio.sculpt.inspect','studio.sculpt.brush',
+    'studio.pose.inspect','studio.pose.key','studio.timeline.scrub',
+    'studio.ik.create','studio.ik.inspect','studio.ik.target','studio.ik.blend',
+    'studio.reference.timeline.bind','studio.reference.timeline.inspect','studio.reference.timeline.scrub',
+    'studio.curve.inspect','studio.curve.adjust',
+    'studio.agent.bootstrap','studio.agent.batch.inspect',
+    'studio.agent.plan.preview','studio.agent.metrics',
+    'studio.plan.submit','studio.plan.status',
+    'studio.plan.list','studio.plan.pause','studio.plan.resume','studio.plan.cancel','studio.activity',
+    'object.geometry','operator.describe','operator.execute',
     'render.plan', 'render.step', 'render.status', 'render.encode',
 ))
 NAME = re.compile(r'^[A-Za-z][A-Za-z0-9_-]{0,63}$')
@@ -94,19 +114,24 @@ def instance_plan(data, available_bytes):
             'estimate_is_guarantee': False}
 
 def render_spec(data):
-    fields(data, ('name','width','height','fps','start','end','samples','engine','bitrate'))
+    fields(data, ('name','width','height','fps','start','end','samples','engine','bitrate','output_kind'))
     result = {'width': integer(data.get('width',1280),16,8192),
               'height': integer(data.get('height',720),16,8192),
               'fps': integer(data.get('fps',24),1,120),
               'start': integer(data.get('start',1),1,100000),
               'end': integer(data.get('end',240),1,100000),
-              'samples': integer(data.get('samples',64),1,4096),
+              'samples': integer(data.get('samples',64),1,16_777_216),
               'bitrate': integer(data.get('bitrate',16000000),100000,200000000),
-              'engine': data.get('engine','BLENDER_EEVEE')}
+              'engine': data.get('engine','BLENDER_EEVEE'),
+              'output_kind': data.get('output_kind','ANIMATION')}
     if result['width']%2 or result['height']%2 or result['end']<result['start']:
         raise ValueError('INVALID_RENDER_RANGE_OR_DIMENSIONS')
-    if result['engine'] not in ('BLENDER_EEVEE','BLENDER_EEVEE_NEXT','CYCLES'):
+    if result['engine'] not in ('BLENDER_EEVEE','BLENDER_EEVEE_NEXT','CYCLES','BLENDER_WORKBENCH'):
         raise ValueError('INVALID_RENDER_ENGINE')
+    if result['output_kind'] not in ('STILL','ANIMATION'):
+        raise ValueError('INVALID_RENDER_OUTPUT_KIND')
+    if result['output_kind']=='STILL' and result['start']!=result['end']:
+        raise ValueError('STILL_RENDER_MUST_BE_SINGLE_FRAME')
     if 'name' in data: result['name']=safe_name(data['name'])
     result['frame_count']=result['end']-result['start']+1
     integer(result['frame_count'],1,100000)

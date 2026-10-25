@@ -21,7 +21,7 @@ public final class ProductionCapture {
     private static volatile WeakReference<Activity> active=new WeakReference<>(null);
     private ProductionCapture(){}
     public static void attach(Activity activity){active=new WeakReference<>(activity);}
-    public static boolean available(){Activity a=active.get();return a!=null&&!a.isDestroyed()&&!a.isFinishing()&&a.hasWindowFocus();}
+    public static boolean available(){Activity a=active.get();return a!=null&&!a.isDestroyed()&&!a.isFinishing()&&a.getWindow().getDecorView().isAttachedToWindow()&&a.getWindow().getDecorView().isShown();}
     private static final class Pending {
         boolean abandoned;Bitmap bitmap;Exception error;
         synchronized void complete(Bitmap value,Exception failure){
@@ -34,9 +34,9 @@ public final class ProductionCapture {
     public static JSONObject capture(Context context)throws Exception {
         if(Looper.myLooper()==Looper.getMainLooper())throw new IllegalStateException("CAPTURE_WORKER_REQUIRED");
         Activity activity=active.get();
-        if(activity==null||activity.isDestroyed()||activity.isFinishing()||!activity.hasWindowFocus())throw new IllegalStateException("RENDER_WINDOW_NOT_VISIBLE");
+        if(activity==null||activity.isDestroyed()||activity.isFinishing()||!activity.getWindow().getDecorView().isAttachedToWindow()||!activity.getWindow().getDecorView().isShown())throw new IllegalStateException("RENDER_WINDOW_NOT_VISIBLE");
         CountDownLatch latch=new CountDownLatch(1);Pending pending=new Pending();
-        new Handler(Looperoper()).post(()->{
+        new Handler(Looper.getMainLooper()).post(()->{
             if(pending.cancelled()){latch.countDown();return;}
             Bitmap bitmap=null;
             try{
@@ -66,5 +66,4 @@ public final class ProductionCapture {
         return ProductionFiles.receipt(file,"Captures").put("width",width).put("height",height)
             .put("captured_surface","Render native Android window").put("quality_reduced",false);
     }
-    private static Looper Looperoper(){return Looper.getMainLooper();}
 }

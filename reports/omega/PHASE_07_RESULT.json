@@ -1,0 +1,125 @@
+{
+  "contract": "RENDER-OMEGA-13P-20261022",
+  "phase": 7,
+  "title": "Root motion / gait / strikes / action curves / NLA",
+  "status": "Partial",
+  "seed_sha": "ed7ef34fa85d9e361bc9c92d554d8ec937755cc2",
+  "head_branch": "feature/omega-P07-motion-20261022",
+  "head_sha": "217c6c7a39fae08a30c10ef7b151f444afcd1a89",
+  "head_sha_note": "SHA of latest implementation/test/docs commit; final report-only commit is the branch head; refer to GitHub ref for its exact final value.",
+  "pr_url": "https://github.com/RezoxNemesis/Render/pull/13",
+  "target_branch": "integration/render-omega-ten-phases-20261022",
+  "owned_paths_changed": [
+    "full-app/scripts/omega/phase07_motion.py",
+    "native-tests/omega/phase07/README.md",
+    "native-tests/omega/phase07/test_native_motion.py",
+    "reports/omega/PHASE_07_RESULT.json",
+    "tools/omega/test_phase07_motion_contract.py"
+  ],
+  "implementation": {
+    "operations": [
+      "omega.motion.create_actions",
+      "omega.motion.audit"
+    ],
+    "native_code": "real bpy pose-bone keyframe insertion into Blender Action, NLA strip/retime and audit",
+    "first_slice": "bounded biped FK walk with seven native action F-curves (3 bone-space root location + 4 leg X rotation)",
+    "native_evidence": "not yet executed in Blender",
+    "assumptions": [
+      "straight-down biped leg armature",
+      "XYZ FK bone rotation",
+      "forward motion in local +Y",
+      "contact measured at shin tip, not skinned foot"
+    ],
+    "context_guards": [
+      "explicit dry-run refusal",
+      "cancellation checks at bounded keyframe boundaries",
+      "validated job-id replay protection"
+    ],
+    "root_motion_basis": "armature-local +Y converted through root rest bone matrix to pose-bone local XYZ",
+    "action_expected_keyframes_per_default_25_frame_clip": 175
+  },
+  "pure_python_tests": {
+    "state": "PASSED",
+    "command": "python -m unittest discover -s /mnt/data/phase07/tools/omega -p 'test_phase07_*.py' -v",
+    "results": [
+      "8 tests passed on 2026-10-22",
+      "strict bounded schema validation",
+      "2-segment FK contact math",
+      "cancellation and dry-run guards",
+      "action signature and idempotency fingerprint",
+      "fail-closed no-bpy operation"
+    ]
+  },
+  "python_compilation": {
+    "state": "PASSED",
+    "command": "python -m compileall -q /mnt/data/phase07/full-app/scripts/omega /mnt/data/phase07/tools/omega /mnt/data/phase07/native-tests/omega/phase07",
+    "note": "Run on staged Phase-07-owned files; no syntax errors"
+  },
+  "real_bpy_tests": {
+    "state": "NOT_RUN",
+    "commands": [
+      "blender -b -noaudio --python-exit-code 1 --python native-tests/omega/phase07/test_native_motion.py"
+    ],
+    "results": [],
+    "reason": "No blender binary (command -v blender returned no executable) and Python importlib.util.find_spec('bpy') returned None in this execution environment.",
+    "required_pass": [
+      "real Action/NLA and 125 keyed samples",
+      "planted shin-tip drift <0.035 m and penetration <0.025 m",
+      "two genuine Blender camera projections",
+      "exact FPS/base and render settings preserved",
+      "save/reopen and retime/reopen with original F-curve digest"
+    ]
+  },
+  "android_tests": {
+    "state": "NOT_RUN",
+    "reason": "No attached Android test device/runtime in this engineering context; phase owns no Java files."
+  },
+  "native_receipts": [],
+  "artifacts": [
+    {
+      "path": "native-tests/omega/phase07/test_native_motion.py",
+      "kind": "headless bpy fixture",
+      "verified": "compiled only, execution pending"
+    },
+    {
+      "path": "tools/omega/test_phase07_motion_contract.py",
+      "kind": "pure unit suite",
+      "verified": "7 tests passed"
+    },
+    {
+      "path": "full-app/scripts/omega/phase07_motion.py",
+      "kind": "phase-owned Blender Python module",
+      "verified": "compiled; actual bpy runtime pending"
+    },
+    {
+      "path": "native-tests/omega/phase07/README.md",
+      "kind": "operation schema and fixture instructions",
+      "verified": "committed, no native runtime execution"
+    }
+  ],
+  "quality_reduced": false,
+  "residual_blockers": [
+    "Execute real bpy fixture on pinned Blender runner and debug any action/armature compatibility or foot-contact failures; source-only compilation and math tests cannot satisfy native acceptance.",
+    "Run Android packaged startup/bridge and on-device motion smoke tests after Phase 10 registry integration.",
+    "Actual jab/cross/hook and quadruped gait are follow-up scope, not part of the proven 30-minute first slice."
+  ],
+  "unverified_claims": [
+    "Real Blender action, FCurves, NLA strip and evaluated foot contact are implemented but NOT executed in bpy here.",
+    "No actual .blend save/reopen artifact has been produced in Blender in this runtime.",
+    "Rigged mesh deformation, visually acceptable gait, quadruped/strikes and on-device animation/render quality are not claimed."
+  ],
+  "source_ownership_checked": true,
+  "unexpected_errors": [],
+  "last_word_status": "Partial",
+  "implementation_commits": [
+    "ef1663ef73f3057f6d4118cc0dde37e167818e25",
+    "6f68288ca1e6f8b0eb339d3152d1abf565e97b81",
+    "202673e07a90e1e07ace07141099ea29884f0515",
+    "5d6ee896b102642b561e866bd8a37f6a68f6b3e0",
+    "f6b6e6158bd000092132ae19c8ed5da9a52a84b2",
+    "c44f89e7160df715c1f805a34299c9e6be9e999b",
+    "eb9343b3cd35121c5f5d40a4bc80c2a2552fc900",
+    "217c6c7a39fae08a30c10ef7b151f444afcd1a89"
+  ],
+  "local_pure_test_count": 8
+}
