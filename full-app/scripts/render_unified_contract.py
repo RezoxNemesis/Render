@@ -53,6 +53,11 @@ PROGRAM_OPS={
  "project.checkpoint":"agent",
  "studio.workspace.activate":"agent",
  "studio.view.orbit":"sculpt",
+ "studio.sculpt.inspect":"sculpt",
+ "studio.sculpt.brush":"sculpt",
+ "studio.pose.inspect":"characters",
+ "studio.pose.key":"animation",
+ "studio.timeline.scrub":"animation",
 }
 MUTATING=frozenset(PROGRAM_OPS)-{
  "scene.inspect","animation.clip.inspect","animation.motion.audit",
