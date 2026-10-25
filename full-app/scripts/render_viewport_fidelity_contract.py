@@ -23,10 +23,12 @@ OPS=frozenset((
  "studio.preview.diagnose","studio.preview.profile.apply",
  "studio.preview.profile.restore","studio.preview.aa.inspect",
  "studio.preview.aa.configure",
+ "studio.preview.sampling.inspect","studio.preview.sampling.configure",
 ))
 READ_ONLY=frozenset((
  "studio.preview.capabilities","studio.preview.inspect",
  "studio.preview.diagnose","studio.preview.aa.inspect",
+ "studio.preview.sampling.inspect",
 ))
 MUTATING=OPS-READ_ONLY
 
@@ -90,6 +92,24 @@ def validate(op,p):
         if "expected_sha256" in p:
             if type(p["expected_sha256"]) is not str or not REV.fullmatch(p["expected_sha256"]):
                 raise ValueError("STUDIO_PREVIEW_REVISION_INVALID")
+    elif op=="studio.preview.sampling.inspect":
+        return fields(p,())
+    elif op=="studio.preview.sampling.configure":
+        fields(p,("samples","restore","allow_viewport_sample_change",
+                  "allow_high_gpu_load"),("allow_viewport_sample_change",))
+        boolean(p["allow_viewport_sample_change"])
+        if not p["allow_viewport_sample_change"]:
+            raise ValueError("STUDIO_PREVIEW_SAMPLING_EXPLICIT_OPT_IN_REQUIRED")
+        restoring=boolean(p.get("restore",False))
+        heavy=boolean(p.get("allow_high_gpu_load",False))
+        if restoring:
+            if "samples" in p:raise ValueError("STUDIO_PREVIEW_SAMPLING_RESTORE_CONFLICT")
+        else:
+            if "samples" not in p:raise ValueError("STUDIO_PREVIEW_SAMPLING_COUNT_REQUIRED")
+            integer(p["samples"],1,128)
+            if p["samples"]>32 and not heavy:
+                raise ValueError("STUDIO_PREVIEW_HIGH_SAMPLES_REQUIRES_OPT_IN")
+        return p
     elif op=="studio.preview.aa.inspect":
         return fields(p,())
     elif op=="studio.preview.aa.configure":
@@ -122,6 +142,9 @@ def capabilities():
         "allow_global_preferences":boolean_type,
         "restore":boolean_type,
         "level":{"enum":["BEST_SUPPORTED","OFF","FXAA","5","8","11","16","32"]},
+        "samples":{"type":"integer","minimum":1,"maximum":128},
+        "allow_viewport_sample_change":boolean_type,
+        "allow_high_gpu_load":boolean_type,
     }
     entries=(
         ("studio.preview.capabilities",True,(),()),
@@ -134,6 +157,9 @@ def capabilities():
         ("studio.preview.aa.inspect",True,(),()),
         ("studio.preview.aa.configure",False,("allow_global_preferences",),
          ("level","allow_global_preferences","restore")),
+        ("studio.preview.sampling.inspect",True,(),()),
+        ("studio.preview.sampling.configure",False,("allow_viewport_sample_change",),
+         ("samples","restore","allow_viewport_sample_change","allow_high_gpu_load")),
     )
     return [{
        "operation":op,"workspace":"sculpt" if op!="studio.preview.aa.configure" else "agent",
