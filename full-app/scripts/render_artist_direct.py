@@ -140,6 +140,38 @@ def leave(scene,p):
     area.tag_redraw()
     return {"object":obj.name,"mode":obj.mode,"mesh_preserved":True}
 
+def select_brush(scene,p):
+    """Activate a genuine installed Blender Sculpt Brush asset, never a proxy."""
+    Contract.validate(Contract.OPS[4],p)
+    obj=_mesh(scene,p["object"])
+    win,area,region,_=_view(p.get("viewport_index",0))
+    if obj.mode!="SCULPT" or bpy.context.view_layer.objects.active is not obj:
+        raise ValueError("DIRECT_SCULPT_ENTER_TARGET_FIRST")
+    if bpy.app.is_job_running("RENDER"):
+        raise ValueError("DIRECT_SCULPT_RENDER_BUSY")
+    name=Contract.BRUSH_PRESETS[p["brush"]]
+    path="brushes/essentials_brushes-mesh_sculpt.blend/Brush/"+name
+    from render_artist_ops import _operator
+    try:
+        activate=_operator("brush.asset_activate")
+    except (AttributeError,RuntimeError,KeyError):
+        raise ValueError("DIRECT_SCULPT_NATIVE_BRUSH_ASSETS_UNAVAILABLE")
+    with bpy.context.temp_override(window=win,area=area,region=region,scene=scene):
+        if not activate.poll():
+            raise ValueError("DIRECT_SCULPT_BRUSH_ASSET_CONTEXT_UNAVAILABLE")
+        result=activate(asset_library_type="ESSENTIALS",
+                        asset_library_identifier="",
+                        relative_asset_identifier=path)
+    brush=_brush_info()
+    if "FINISHED" not in result or brush["active_brush"]!=name:
+        raise ValueError("DIRECT_SCULPT_BRUSH_ACTIVATION_UNCONFIRMED")
+    area.tag_redraw()
+    return {"object":obj.name,"native_blender_brush_asset":name,
+            "installed_asset_activated":True,
+            "native_operator":"bpy.ops.brush.asset_activate",
+            "brush_source":"Blender Essentials",
+            "simulated_pointer_taps":False,"visual_outcome_verified":False}
+
 def stroke(scene,p):
     """Commit exactly one visible Blender brush stroke; reject unproven effects."""
     global _LAST_STROKE
@@ -204,6 +236,7 @@ def execute(op,p,root,scene):
     if op==Contract.OPS[1]:return enter(scene,p)
     if op==Contract.OPS[2]:return stroke(scene,p)
     if op==Contract.OPS[3]:return leave(scene,p)
+    if op==Contract.OPS[4]:return select_brush(scene,p)
     raise ValueError("DIRECT_SCULPT_OPERATION_UNAVAILABLE")
 
 def last_stroke():
