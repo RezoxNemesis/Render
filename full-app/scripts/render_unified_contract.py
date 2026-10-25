@@ -59,6 +59,8 @@ PROGRAM_OPS={
  "studio.pose.key":"animation",
  "studio.ik.create":"characters",
  "studio.ik.inspect":"characters",
+ "studio.character.qa.inspect":"characters",
+ "studio.character.qa.upright":"assets",
  "studio.ik.target":"animation",
  "studio.ik.blend":"animation",
  "studio.reference.timeline.bind":"assets",
