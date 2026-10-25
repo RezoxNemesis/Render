@@ -279,7 +279,7 @@ def execute(op,p,root,scene):
     raise ValueError("STUDIO_GESTURE_OPERATION_UNAVAILABLE")
 
 def capabilities():
-    return [
+    operations=[
       {"operation":"studio.sculpt.inspect","workspace":"sculpt","read_only":True,
        "fields":["object"],"required":["object"],
        "supports_real_bpy_geometry":True},
@@ -300,3 +300,30 @@ def capabilities():
       {"operation":"studio.timeline.scrub","workspace":"animation","read_only":False,
        "required":["frame"],"fields":["frame","rig","bone"]}
     ]
+    vector={"type":"array","minItems":3,"maxItems":3,
+            "items":{"type":"number"}}
+    title={"type":"string","minLength":1,"maxLength":80}
+    specs={
+      "object":title,"rig":title,"bone":title,
+      "expected_sha256":{"type":"string",
+        "description":"Exact 64-digit hash from studio.sculpt.inspect; chained plans can use $prev_mesh_sha256"},
+      "expected_vertices":{"type":"integer","minimum":1,"maximum":MAX_HOST_VERTICES},
+      "center":vector,"direction":vector,
+      "radius":{"type":"number","minimum":.0001,"maximum":100},
+      "strength":{"type":"number","minimum":.000001,"maximum":.75},
+      "mode":{"enum":["PUSH","INFLATE","SMOOTH","PINCH"]},
+      "falloff":{"enum":["SMOOTHSTEP","SHARP","FLAT"]},
+      "mirror_x":{"type":"boolean"},"dry_run":{"type":"boolean"},
+      "max_affected":{"type":"integer","minimum":1,"maximum":100000},
+      "bones":{"type":"array","minItems":1,"maxItems":32,
+               "items":title},
+      "frame":{"type":"integer","minimum":1,"maximum":100000},
+      "rotation_euler":vector,"location":vector,
+      "preview_frame":{"type":"boolean"},
+      "allow_existing_action":{"type":"boolean"},
+    }
+    for entry in operations:
+        entry["input_schema"]={
+            "type":"object","properties":{k:specs[k] for k in entry["fields"]},
+            "required":entry["required"],"additionalProperties":False}
+    return operations
