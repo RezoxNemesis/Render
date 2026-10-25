@@ -52,6 +52,23 @@ jobs:
           LIBGL_ALWAYS_SOFTWARE: "1"
         run: |
           blender -b -noaudio --python-exit-code 1 --python tools/test_real_workflow_benchmarks.py
+  live-blender-artist-ui:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install true Blender UI and virtual framebuffer
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends blender xvfb
+      - name: Use native N-panel and actually create four linked instances
+        env:
+          PYTHONPATH: full-app/scripts
+          LIBGL_ALWAYS_SOFTWARE: "1"
+        run: |
+          timeout 120 xvfb-run -a -s "-screen 0 1280x900x24" \
+            blender --factory-startup -noaudio --python-exit-code 1 \
+            --python tools/test_real_workflow_ui.py
   android-native-command-bridge:
     runs-on: ubuntu-24.04
     timeout-minutes: 40
