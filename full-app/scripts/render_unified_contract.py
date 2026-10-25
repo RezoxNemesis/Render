@@ -57,12 +57,20 @@ PROGRAM_OPS={
  "studio.sculpt.brush":"sculpt",
  "studio.pose.inspect":"characters",
  "studio.pose.key":"animation",
+ "studio.ik.create":"characters",
+ "studio.ik.inspect":"characters",
+ "studio.ik.target":"animation",
+ "studio.ik.blend":"animation",
+ "studio.reference.timeline.bind":"assets",
+ "studio.reference.timeline.inspect":"assets",
+ "studio.reference.timeline.scrub":"assets",
  "studio.timeline.scrub":"animation",
 }
 MUTATING=frozenset(PROGRAM_OPS)-{
  "scene.inspect","animation.clip.inspect","animation.motion.audit",
  "reference.workspace.inspect","reference.compare.multiview",
  "studio.sculpt.inspect","studio.pose.inspect",
+ "studio.ik.inspect","studio.reference.timeline.inspect",
  "render.profile.inspect","render.quality.inspect"
 }
 READ_ONLY=frozenset(PROGRAM_OPS)-MUTATING

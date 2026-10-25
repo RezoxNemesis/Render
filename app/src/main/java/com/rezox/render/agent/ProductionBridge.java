@@ -28,6 +28,8 @@ public final class ProductionBridge {
         "studio.capabilities","studio.tool.search","studio.workspace.activate","studio.workspace.inspect",
         "studio.view.orbit","studio.editor.open","studio.sculpt.inspect","studio.sculpt.brush",
         "studio.pose.inspect","studio.pose.key","studio.timeline.scrub",
+        "studio.ik.create","studio.ik.inspect","studio.ik.target","studio.ik.blend",
+        "studio.reference.timeline.bind","studio.reference.timeline.inspect","studio.reference.timeline.scrub",
         "studio.curve.inspect","studio.curve.adjust","studio.plan.submit","studio.plan.status",
         "studio.plan.list","studio.plan.pause","studio.plan.resume","studio.plan.cancel","studio.activity",
         "viewport.inspect","viewport.configure","viewport.focus","object.geometry","operator.describe","operator.execute","render.plan","render.step","render.batch","render.status","render.encode","drive.status","drive.backup",
@@ -332,6 +334,26 @@ public final class ProductionBridge {
             long available=device.optLong("available_memory_bytes",-1);
             if(!"mp4".equals(media.optString("extension"))&&available>=0&&pixels*16+RenderScheduling.reserve(context)>available)
                 throw new IllegalStateException("NATIVE_IMAGE_IMPORT_MEMORY_PRESSURE_KEEP_ORIGINAL_AND_RETRY");
+        }
+        if(operation.equals("studio.reference.timeline.bind")){
+            // A full-resolution movie is opened in native Blender, not decoded
+            // into Java memory. Still reject unsafe thermal/available-memory
+            // conditions before creating a VSE strip on the phone.
+            JSONObject video=StudioReferenceInbox.details(context,
+                new JSONObject().put("asset",p.getString("asset")));
+            long available=device.optLong("available_memory_bytes",-1L);
+            long reserve=RenderScheduling.reserve(context);
+            NativeVideoReferencePolicy.requireAllowed(
+                video.optString("extension"),gate.renderAllowed,
+                device.optBoolean("low_memory"),available,reserve);
+            if(p.has("preview_asset")){
+                JSONObject still=StudioReferenceInbox.details(context,
+                    new JSONObject().put("asset",p.getString("preview_asset")));
+                if("mp4".equals(still.optString("extension")))
+                    throw new IllegalArgumentException("NATIVE_REFERENCE_PREVIEW_STILL_REQUIRED");
+                NativeVideoReferencePolicy.requirePreviewFits(
+                    still.optInt("width"),still.optInt("height"),available,reserve);
+            }
         }
         if(operation.equals("instances.plan")||operation.equals("instances.create")){
             if(p.has("available_memory_bytes"))throw new IllegalArgumentException("DEVICE_MEMORY_IS_NATIVE_ONLY");

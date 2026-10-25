@@ -236,7 +236,9 @@ def _execute_step(op,payload,plan_id):
             "body.blockout","reference.workspace.open",
             "reference.fit.landmarks","reference.fit.multiview",
             "animation.clip.create","project.checkpoint","studio.curve.adjust",
-            "studio.sculpt.brush","studio.pose.key","studio.timeline.scrub"):
+            "studio.sculpt.brush","studio.pose.key","studio.timeline.scrub",
+            "studio.ik.create","studio.ik.target","studio.ik.blend",
+            "studio.reference.timeline.bind","studio.reference.timeline.scrub"):
         import render_artist_ops
         render_artist_ops.checkpoint(bpy.context.scene,_root(),"studio.plan."+op)
     import render_production
@@ -322,6 +324,16 @@ def _tool_search(p):
         ref.update({entry["operation"]:entry["input_schema"]
                     for entry in render_live_gestures.capabilities()})
     except ImportError:pass
+    try:
+        import render_ik_contract
+        ref.update({entry["operation"]:entry["input_schema"]
+                    for entry in render_ik_contract.capabilities()})
+    except ImportError:pass
+    try:
+        import render_reference_timeline
+        ref.update({entry["operation"]:entry["input_schema"]
+                    for entry in render_reference_timeline.capabilities()})
+    except ImportError:pass
     result=[]
     for op in sorted(native | set(C.PROGRAM_OPS)):
         group=C.PROGRAM_OPS.get(op)
@@ -364,6 +376,11 @@ def execute(op,p,root,scene):
                           "studio.curve.inspect","studio.curve.adjust",
                           "studio.sculpt.inspect","studio.sculpt.brush",
                           "studio.pose.inspect","studio.pose.key","studio.timeline.scrub",
+                          "studio.ik.create","studio.ik.inspect",
+                          "studio.ik.target","studio.ik.blend",
+                          "studio.reference.timeline.bind",
+                          "studio.reference.timeline.inspect",
+                          "studio.reference.timeline.scrub",
                           "studio.plan.submit","studio.plan.status","studio.plan.list",
                           "studio.plan.pause","studio.plan.resume","studio.plan.cancel",
                           "studio.activity"])
@@ -376,6 +393,14 @@ def execute(op,p,root,scene):
               "studio.pose.inspect","studio.pose.key","studio.timeline.scrub"):
         import render_live_gestures
         return render_live_gestures.execute(op,p,root,scene)
+    if op in ("studio.ik.create","studio.ik.inspect","studio.ik.target","studio.ik.blend"):
+        import render_ik_control
+        return render_ik_control.execute(op,p,root,scene)
+    if op in ("studio.reference.timeline.bind",
+              "studio.reference.timeline.inspect",
+              "studio.reference.timeline.scrub"):
+        import render_reference_timeline
+        return render_reference_timeline.execute(op,p,root,scene)
     if op=="studio.workspace.activate":return _activate(scene,p)
     if op=="studio.view.orbit":return _orbit(scene,p)
     if op=="studio.editor.open":return _editor(p)
@@ -489,7 +514,17 @@ class RENDERSTUDIO_PT_unified(bpy.types.Panel):
         elif section=="characters":
             a=col.operator("renderstudio.native_work_mode",text="Pose Active Armature",icon="ARMATURE_DATA");a.mode="POSE"
             a=col.operator("renderstudio.native_work_mode",text="Weight Paint",icon="WPAINT_HLT");a.mode="WEIGHT_PAINT"
-            col.label(text="Use landmark fitting and rig tools via agent")
+            col.label(text="Native IK/FK controllers are editable empties")
+            ob=context.active_object
+            if ob and ob.type=="ARMATURE":
+                found=[(pb,c) for pb in ob.pose.bones for c in pb.constraints
+                       if c.type=="IK" and c.name.startswith("RS_IK_")]
+                col.label(text=str(len(found))+" Render IK chains")
+                for pb,c in found[:6]:
+                    col.label(text=pb.name+" → "+(c.target.name if c.target else "No target"))
+            else:
+                col.label(text="Select the character armature to inspect IK")
+            col.label(text="ChatGPT: studio.ik.create / target / blend")
         elif section=="animation":
             _button(col,"Keyframe / Dope Sheet","DOPESHEET_EDITOR","ACTION")
             _button(col,"Animation Graph Curves","GRAPH_EDITOR","GRAPH")
@@ -516,6 +551,13 @@ class RENDERSTUDIO_PT_unified(bpy.types.Panel):
         elif section=="assets":
             _button(col,"Reference Image Editor","IMAGE_EDITOR","IMAGE_DATA")
             col.label(text="Authorized picker, no Gallery scraping")
+            editor=context.scene.sequence_editor
+            strips=(getattr(editor,"strips",None) if editor else None)
+            if strips is None and editor:strips=getattr(editor,"sequences",None)
+            count=sum(1 for s in strips if s.type=="MOVIE") if strips else 0
+            col.label(text=str(count)+" movie reference strips in timeline")
+            col.label(text="ChatGPT: studio.reference.timeline.bind")
+            col.label(text="Film scrub follows Blender's real frame")
             col.label(text="CC0 browser remains in Assets panel")
         else:
             col.label(text="ChatGPT actions execute in this Blender")
