@@ -29,6 +29,7 @@ public final class ProductionBridge {
         "studio.view.orbit","studio.editor.open","studio.sculpt.inspect","studio.sculpt.brush",
         "studio.pose.inspect","studio.pose.key","studio.timeline.scrub",
         "studio.ik.create","studio.ik.inspect","studio.ik.target","studio.ik.blend",
+        "studio.reference.timeline.bind","studio.reference.timeline.inspect","studio.reference.timeline.scrub",
         "studio.curve.inspect","studio.curve.adjust","studio.plan.submit","studio.plan.status",
         "studio.plan.list","studio.plan.pause","studio.plan.resume","studio.plan.cancel","studio.activity",
         "viewport.inspect","viewport.configure","viewport.focus","object.geometry","operator.describe","operator.execute","render.plan","render.step","render.batch","render.status","render.encode","drive.status","drive.backup",
