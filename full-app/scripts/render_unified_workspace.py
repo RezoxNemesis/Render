@@ -238,7 +238,9 @@ def _execute_step(op,payload,plan_id):
             "animation.clip.create","project.checkpoint","studio.curve.adjust",
             "studio.sculpt.brush","studio.pose.key","studio.timeline.scrub",
             "studio.ik.create","studio.ik.target","studio.ik.blend",
-            "studio.reference.timeline.bind","studio.reference.timeline.scrub"):
+            "studio.reference.timeline.bind","studio.reference.timeline.scrub",
+            "studio.preview.profile.apply","studio.preview.profile.restore",
+            "studio.preview.aa.configure"):
         import render_artist_ops
         render_artist_ops.checkpoint(bpy.context.scene,_root(),"studio.plan."+op)
     import render_production
@@ -310,7 +312,8 @@ def _tool_index():
                         "render_live_gestures",
                         "render_ik_contract",
                         "render_reference_timeline",
-                        "render_agent_fastlane"):
+                        "render_agent_fastlane",
+                        "render_viewport_fidelity_contract"):
         try:
             import importlib
             module=importlib.import_module(module_name)
@@ -390,9 +393,16 @@ def execute(op,p,root,scene):
                           "studio.plan.pause","studio.plan.resume","studio.plan.cancel",
                           "studio.activity","studio.agent.bootstrap",
                           "studio.agent.batch.inspect","studio.agent.plan.preview",
-                          "studio.agent.metrics","studio.agent.status"])
+                          "studio.agent.metrics","studio.agent.status",
+                          "studio.preview.capabilities","studio.preview.inspect",
+                          "studio.preview.diagnose","studio.preview.profile.apply",
+                          "studio.preview.profile.restore","studio.preview.aa.inspect",
+                          "studio.preview.aa.configure"])
         return result
     if op=="studio.tool.search":return _tool_search(p)
+    if op.startswith("studio.preview."):
+        import render_viewport_fidelity
+        return render_viewport_fidelity.execute(op,p,root,scene)
     if op in ("studio.agent.bootstrap","studio.agent.batch.inspect",
               "studio.agent.plan.preview","studio.agent.metrics"):
         import render_agent_fastlane
