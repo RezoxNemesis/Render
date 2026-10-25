@@ -78,6 +78,17 @@ PROGRAM_OPS={
  "studio.preview.aa.configure":"sculpt",
  "studio.preview.sampling.inspect":"sculpt",
  "studio.preview.sampling.configure":"sculpt",
+ "studio.benchmark.catalog":"agent",
+ "studio.benchmark.audit":"agent",
+ "studio.mesh.bridge_loops":"sculpt",
+ "studio.procedural.scatter":"simulation",
+ "studio.material.surface":"materials",
+ "studio.motion.action.create":"animation",
+ "studio.motion.nla.create":"animation",
+ "studio.compositor.grade":"cinema",
+ "studio.compositor.inspect":"cinema",
+ "studio.sim.rigidbody":"simulation",
+ "studio.drawing.strokes":"drawing",
 }
 MUTATING=frozenset(PROGRAM_OPS)-{
  "scene.inspect","animation.clip.inspect","animation.motion.audit",
