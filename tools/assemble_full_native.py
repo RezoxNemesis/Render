@@ -216,7 +216,8 @@ def attach_bpy_agent(runtime_zip, source_py, scene_py=None, batch_py=None):
                          compress_type=zipfile.ZIP_DEFLATED)
         for name in ("render_file_contract.py", "render_file_ops.py", "render_artist_ops.py", "render_body_blockout.py", "render_character_tools.py", "render_asset_sources.py", "render_production.py", "render_production_contract.py", "render_production_detail.py", "render_studio_ops.py", "render_studio_contract.py", "render_reference_motion.py", "render_reference_motion_contract.py",
                      "render_unified_contract.py", "render_unified_queue.py", "render_unified_workspace.py", "render_unified_curves.py", "render_live_gestures.py",
-                     "render_ik_contract.py", "render_ik_control.py"):
+                     "render_ik_contract.py", "render_ik_control.py",
+                     "render_reference_timeline.py"):
             source = Path(source_py).with_name(name)
             if not source.is_file():
                 raise ValueError("PRODUCTION_RUNTIME_NOT_PACKAGED")
