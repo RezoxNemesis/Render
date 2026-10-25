@@ -185,24 +185,78 @@ def validate(op,p):
     return p
 
 def capabilities():
-    # Deliberately supply bounded native schema hints; runtime validation is
-    # stricter and does not trust consumer-authored arbitrary JSON.
+    """Return exact discoverable input shapes for ordinary ChatGPT calls."""
+    ident={"type":"string","pattern":NAME.pattern}
+    num={"type":"number"}
+    vec3={"type":"array","minItems":3,"maxItems":3,"items":num}
+    vec2={"type":"array","minItems":2,"maxItems":2,"items":num}
+    flag={"type":"boolean"}
+    def integer_schema(lo,hi):
+        return {"type":"integer","minimum":lo,"maximum":hi}
+    props={
+      "object":ident,"name":ident,"source":ident,"rig":ident,"bone":ident,
+      "action":ident,"discipline":{"enum":["agent","sculpt","characters",
+          "simulation","animation","cinema","assets","materials","drawing"]},
+      "dry_run":flag,
+      "expected_vertices":integer_schema(6,1000000),
+      "expected_polygons":integer_schema(1,1000000),
+      "loops":{"type":"array","minItems":2,"maxItems":2,
+                "items":{"type":"array","minItems":3,"maxItems":64,
+                         "items":integer_schema(0,1000000)}},
+      "count":integer_schema(1,96),"seed":integer_schema(0,2**31-1),
+      "min":vec3,"max":vec3,"scale_min":num,"scale_max":num,
+      "yaw_random":flag,
+      "preset":{"enum":["SKIN","LEAF","CLOTH","STONE","METAL"]},
+      "color":vec3,"roughness":num,"detail_scale":num,"bump":num,
+      "replace_existing":flag,"allow_existing_action":flag,
+      "keys":{"type":"array","minItems":2,"maxItems":16,
+              "items":{"type":"object","additionalProperties":False,
+                       "required":["frame","rotation_euler"],
+                       "properties":{"frame":integer_schema(1,100000),
+                                     "rotation_euler":vec3}}},
+      "frame_start":integer_schema(1,100000),
+      "brightness":num,"contrast":num,"saturation":num,"hue":num,
+      "activate":flag,"type":{"enum":["ACTIVE","PASSIVE"]},
+      "mass":num,"friction":num,"bounce":num,
+      "strokes":{"type":"array","minItems":1,"maxItems":16,
+                 "items":{"type":"array","minItems":2,"maxItems":96,
+                          "items":vec2}},
+      "z":num,"thickness":num,
+    }
+    definitions={
+      "studio.benchmark.catalog":((),("discipline",)),
+      "studio.benchmark.audit":((),("object",)),
+      "studio.mesh.bridge_loops":(("object","loops","expected_vertices",
+           "expected_polygons"),("object","loops","expected_vertices",
+           "expected_polygons","dry_run")),
+      "studio.procedural.scatter":(("source","name","count","min","max"),
+          ("source","name","count","min","max","seed","scale_min",
+           "scale_max","yaw_random","dry_run")),
+      "studio.material.surface":(("object","name","preset"),
+          ("object","name","preset","color","roughness","detail_scale",
+           "bump","replace_existing","dry_run")),
+      "studio.motion.action.create":(("rig","bone","name","keys"),
+          ("rig","bone","name","keys","allow_existing_action","dry_run")),
+      "studio.motion.nla.create":(("rig","action","name","frame_start"),
+          ("rig","action","name","frame_start","dry_run")),
+      "studio.compositor.grade":(("name",),
+          ("name","brightness","contrast","saturation","hue","activate","dry_run")),
+      "studio.compositor.inspect":((),()),
+      "studio.sim.rigidbody":(("object",),
+          ("object","type","mass","friction","bounce","dry_run")),
+      "studio.drawing.strokes":(("name","strokes"),
+          ("name","strokes","z","thickness","color","dry_run")),
+    }
     entries=[]
     for op,group in OPS.items():
+        required,keys=definitions[op]
         entries.append({
           "operation":op,"workspace":group,"read_only":op in READ_ONLY,
           "benchmark_source":"external_desktop_workflows_not_render_app",
           "implemented_as":"editable_native_blender_operation" if op not in READ_ONLY else "actual_native_data_inspection",
           "guarantees_vendor_parity":False,"checkpoint_before_change":op not in READ_ONLY,
           "input_schema":{"type":"object","additionalProperties":False,
-               "properties":{
-                 "object":{"type":"string","pattern":NAME.pattern},
-                 "rig":{"type":"string","pattern":NAME.pattern},
-                 "source":{"type":"string","pattern":NAME.pattern},
-                 "name":{"type":"string","pattern":NAME.pattern},
-                 "preset":{"enum":["SKIN","LEAF","CLOTH","STONE","METAL"]},
-                 "count":{"type":"integer","minimum":1,"maximum":96},
-                 "dry_run":{"type":"boolean"},
-               }},
+               "required":list(required),
+               "properties":{k:props[k] for k in keys}},
         })
     return entries
