@@ -54,9 +54,17 @@ assert "FINISHED" in bpy.ops.renderstudio.direct_sculpt_inspect()
 assert "FINISHED" in bpy.ops.renderstudio.direct_sculpt_leave()
 assert obj.mode=="OBJECT"
 assert Artist._revision(obj)==initial
+copy=Artist.surface_clone(scene,{"object":obj.name,
+    "name":"SeparateConnectedSculptCopy","voxel_size_m":.035,
+    "max_voxels":1500000,"location":[2.3,0,0]})
+assert copy["connected_mesh_verified"] and copy["connected_components"]==1,copy
+assert copy["source_mesh_preserved"] and copy["source_animation_preserved"]
+assert scene.objects.get("SeparateConnectedSculptCopy") is not None
+assert Artist._revision(obj)==initial,"Sculpt copy damaged original mesh"
 assert previous==(scene.render.engine,scene.render.resolution_x,
                  scene.render.resolution_y,scene.render.fps)
 print("PASS: real Blender live Sculpt Mode, actual VIEW_3D, topology and revision protection",flush=True)
+print("PASS: actual native voxel-remeshed connected copy, original retained",flush=True)
 print("NOT YET VERIFIED: operator sculpt stroke changed mesh or Android touch mapping",flush=True)
 def close():
     bpy.ops.wm.quit_blender()
