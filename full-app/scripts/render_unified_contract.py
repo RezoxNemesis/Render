@@ -69,6 +69,15 @@ PROGRAM_OPS={
  "studio.agent.batch.inspect":"agent",
  "studio.agent.plan.preview":"agent",
  "studio.agent.metrics":"agent",
+ "studio.preview.capabilities":"sculpt",
+ "studio.preview.inspect":"sculpt",
+ "studio.preview.diagnose":"sculpt",
+ "studio.preview.profile.apply":"sculpt",
+ "studio.preview.profile.restore":"sculpt",
+ "studio.preview.aa.inspect":"sculpt",
+ "studio.preview.aa.configure":"sculpt",
+ "studio.preview.sampling.inspect":"sculpt",
+ "studio.preview.sampling.configure":"sculpt",
 }
 MUTATING=frozenset(PROGRAM_OPS)-{
  "scene.inspect","animation.clip.inspect","animation.motion.audit",
@@ -77,6 +86,9 @@ MUTATING=frozenset(PROGRAM_OPS)-{
  "studio.ik.inspect","studio.reference.timeline.inspect",
  "studio.agent.bootstrap","studio.agent.batch.inspect",
  "studio.agent.plan.preview","studio.agent.metrics",
+ "studio.preview.capabilities","studio.preview.inspect",
+ "studio.preview.diagnose","studio.preview.aa.inspect",
+ "studio.preview.sampling.inspect",
  "render.profile.inspect","render.quality.inspect"
 }
 READ_ONLY=frozenset(PROGRAM_OPS)-MUTATING

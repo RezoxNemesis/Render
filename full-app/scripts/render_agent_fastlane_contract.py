@@ -24,6 +24,9 @@ READS=frozenset((
     "studio.plan.status","render.profile.inspect","render.quality.inspect",
     "animation.clip.inspect","animation.motion.audit",
     "reference.workspace.inspect",
+    "studio.preview.capabilities","studio.preview.inspect",
+    "studio.preview.diagnose","studio.preview.aa.inspect",
+    "studio.preview.sampling.inspect",
 ))
 
 def _fields(data,allowed,required=()):

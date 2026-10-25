@@ -333,59 +333,52 @@ def queue_manual_render(resume=False, still=False):
             "render_resolution_preserved": True}
 
 def stabilize_viewport():
-    """Fix display-state precision where possible; never touch mesh data or render settings."""
-    changes = []
-    duplicates = {}
-    for obj in list(bpy.context.scene.objects)[:25000]:
-        if obj.type != "MESH":
-            continue
-        signature = (obj.data.name, tuple(round(v, 6) for row in obj.matrix_world for v in row))
-        duplicates.setdefault(signature, []).append(obj.name)
-    collisions = [names[:4] for names in duplicates.values() if len(names) > 1][:16]
-    window = bpy.context.window
-    if window is not None:
-        for area in window.screen.areas:
-            if area.type != "VIEW_3D":
-                continue
-            space = area.spaces.active
-            # Clip depth ratio, not render sample count, governs near-surface precision.
-            # Most wire shimmer is depth-precision limited: keep the actual
-            # near/far span <= 100,000 without touching camera render clipping.
-            # Explicit UI action, reversible via native Blender viewport fields.
-            far = min(float(space.clip_end), 2000.0)
-            near = max(float(space.clip_start), 0.02, far / 100000.0)
-            if abs(space.clip_start-near)>1e-6:
-                space.clip_start = near
-                changes.append("near_clip_precision")
-            if abs(space.clip_end-far)>1e-6:
-                space.clip_end = far
-                changes.append("far_clip_precision")
-            if space.shading.show_xray:
-                space.shading.show_xray = False
-                changes.append("xray_off")
-            if space.overlay.show_wireframes:
-                space.overlay.show_wireframes = False
-                changes.append("wire_overlay_off")
-            area.tag_redraw()
-    # Prefer real GPU viewport multisampling only when the Blender build
-    # explicitly reports the enum. Do not claim this repairs coplanar meshes.
+    """Compatibility for the legacy menu: reversible, evidence-driven.
+    
+    Previous adapter silently changed global viewport_aa and clipped all
+    scenes to 2000m. That could change other projects' UI or hide objects.
+    The Phase 1 native profile affects ONLY the currently visible 3D View.
+    """
     try:
-        system = bpy.context.preferences.system
-        if hasattr(system, "viewport_aa"):
-            enums = system.bl_rna.properties["viewport_aa"].enum_items
-            supported = {entry.identifier for entry in enums}
-            requested = next((value for value in ("32", "16", "8", "FXAA")
-                              if value in supported), None)
-            if requested and system.viewport_aa != requested:
-                system.viewport_aa = requested
-                changes.append("viewport_anti_alias_" + requested)
-    except (AttributeError, TypeError, ValueError, KeyError):
-        pass
-    return {"viewport_settings_changed": changes,
-            "possible_identical_overlapping_objects": collisions,
-            "mesh_geometry_modified": False,
-            "final_render_samples_modified": False,
-            "note": "Actual intersecting/coplanar meshes still require geometry inspection"}
+        import render_viewport_fidelity as Fidelity
+    except ModuleNotFoundError as error:
+        if error.name!="render_viewport_fidelity":
+            raise
+        # Old host/unit harnesses import only this single script and have no
+        # bundled phase modules. Report a truthful no-op; do not pretend UI
+        # repair happened or alter mesh/render settings.
+        return {"viewport_settings_changed":[],
+                "possible_identical_overlapping_objects":[],
+                "stabilization_available":False,
+                "reason":"NATIVE_FIDELITY_RUNTIME_NOT_LOADED",
+                "mesh_geometry_modified":False,
+                "final_render_samples_modified":False,
+                "global_viewport_aa_modified":False}
+    scene=bpy.context.scene
+    diag=Fidelity.diagnose(scene,{})
+    detected=diag.get("overlap_candidates",[])
+    try:
+        response=Fidelity.apply(scene,{"profile":"CLEAN_SOLID"})
+    except ValueError as err:
+        return {"viewport_settings_changed":[],
+                "possible_identical_overlapping_objects":[
+                    [diag.get("object",""),x.get("object","")]
+                    for x in detected],
+                "stabilization_available":False,
+                "reason":str(err),
+                "mesh_geometry_modified":False,
+                "final_render_samples_modified":False,
+                "global_viewport_aa_modified":False}
+    return {"viewport_settings_changed":response["changed_native_fields"],
+            "possible_identical_overlapping_objects":[
+                [diag.get("object",""),x.get("object","")]
+                for x in detected],
+            "stabilization_available":True,
+            "reversible_original_view_available":True,
+            "mesh_geometry_modified":False,
+            "final_render_samples_modified":False,
+            "global_viewport_aa_modified":False,
+            "note":"Coplanar mesh overlap/material alpha/driver artifacts require actual diagnosis; no geometry deleted"}
 
 def dispatch(action, args):
     if args:
@@ -535,6 +528,12 @@ def install():
         render_unified_workspace.install_ui()
     except Exception as error:
         print("Render unified Blender tabs unavailable:",type(error).__name__,flush=True)
+    try:
+        import render_viewport_fidelity_ui
+        render_viewport_fidelity_ui.install()
+    except Exception as error:
+        print("Render native viewport fidelity panel unavailable:",
+              type(error).__name__,flush=True)
     import render_v25_recovery
     render_v25_recovery.install()
     try:
