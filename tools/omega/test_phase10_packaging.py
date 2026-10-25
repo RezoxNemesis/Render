@@ -30,6 +30,8 @@ class OmegaPackagingTests(unittest.TestCase):
                      "render_unified_workspace.py", "render_unified_curves.py",
                      "render_live_gestures.py",
                      "render_ik_contract.py", "render_ik_control.py",
+                     "render_reference_timeline.py",
+                     "render_ik_contract.py", "render_ik_control.py",
                      "render_asset_library.py", "render_execution_settings.py"):
             (self.root / name).write_text("# test-only synthetic module\n")
         (self.root / "omega").mkdir()
