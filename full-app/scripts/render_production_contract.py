@@ -9,7 +9,7 @@ import re
 OPERATIONS = frozenset((
     'file.importers','file.inspect','file.import',
     'artist.capabilities','artist.inspect','body.blockout','camera.frame','viewport.orient','sculpt.prepare','object.duplicate','object.remove','sculpt.mask','sculpt.stroke','facial.expression','material.inspect','light.configure','camera.configure','media.import','project.export',
-    'studio.artist.sculpt.inspect','studio.artist.sculpt.enter','studio.artist.sculpt.stroke','studio.artist.sculpt.leave',
+    'studio.artist.sculpt.inspect','studio.artist.sculpt.enter','studio.artist.sculpt.stroke','studio.artist.sculpt.leave','studio.artist.sculpt.brush.select',
     'asset.search','asset.details','asset.preview','asset.download','asset.download.status','asset.download.pause','asset.import',
     'render.quality.inspect','render.quality.configure','render.performance.inspect','render.performance.configure',
     'render.profile.inspect','render.profile.configure',
