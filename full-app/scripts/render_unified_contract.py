@@ -67,6 +67,7 @@ MUTATING=frozenset(PROGRAM_OPS)-{
  "scene.inspect","animation.clip.inspect","animation.motion.audit",
  "reference.workspace.inspect","reference.compare.multiview",
  "studio.sculpt.inspect","studio.pose.inspect",
+ "studio.ik.inspect",
  "render.profile.inspect","render.quality.inspect"
 }
 READ_ONLY=frozenset(PROGRAM_OPS)-MUTATING
