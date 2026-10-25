@@ -314,7 +314,8 @@ def _tool_index():
                         "render_ik_contract",
                         "render_reference_timeline",
                         "render_agent_fastlane",
-                        "render_viewport_fidelity_contract"):
+                        "render_viewport_fidelity_contract",
+                        "render_workflow_contract"):
         try:
             import importlib
             module=importlib.import_module(module_name)
