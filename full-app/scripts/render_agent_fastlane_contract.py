@@ -27,6 +27,8 @@ READS=frozenset((
     "studio.preview.capabilities","studio.preview.inspect",
     "studio.preview.diagnose","studio.preview.aa.inspect",
     "studio.preview.sampling.inspect",
+    "studio.benchmark.catalog","studio.benchmark.audit",
+    "studio.compositor.inspect",
 ))
 
 def _fields(data,allowed,required=()):
