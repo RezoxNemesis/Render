@@ -100,6 +100,8 @@ MUTATING=frozenset(PROGRAM_OPS)-{
  "studio.preview.capabilities","studio.preview.inspect",
  "studio.preview.diagnose","studio.preview.aa.inspect",
  "studio.preview.sampling.inspect",
+ "studio.benchmark.catalog","studio.benchmark.audit",
+ "studio.compositor.inspect",
  "render.profile.inspect","render.quality.inspect"
 }
 READ_ONLY=frozenset(PROGRAM_OPS)-MUTATING
