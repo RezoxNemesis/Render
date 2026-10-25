@@ -231,12 +231,105 @@ def stroke(scene,p):
             "native_touch_replay_claimed":False,
             "photorealism_or_anatomical_quality_verified":False}
 
+def surface_clone(scene,p):
+    """Produce an independent sculpt candidate from evaluated, even rigged, geometry.
+
+    The original source mesh, rig, animation, materials and shape keys are never
+    removed or modified. Failed connectivity checks dispose only the new copy.
+    """
+    Contract.validate(Contract.OPS[5],p)
+    from mathutils import Vector
+    import render_character_tools as Tools
+    obj=_mesh(scene,p["object"])
+    name=p["name"]
+    if bpy.data.objects.get(name) is not None:
+        raise ValueError("DIRECT_SCULPT_SURFACE_NAME_EXISTS")
+    if bpy.app.is_job_running("RENDER"):
+        raise ValueError("DIRECT_SCULPT_RENDER_BUSY")
+    if bpy.context.object and bpy.context.object.mode!="OBJECT":
+        raise ValueError("DIRECT_SCULPT_SURFACE_EXIT_SCULPT_MODE_FIRST")
+    win,area,region,_=_view(0)
+    bpy.context.view_layer.update()
+    depsgraph=bpy.context.evaluated_depsgraph_get()
+    evaluated=obj.evaluated_get(depsgraph)
+    bounds=[evaluated.matrix_world@Vector(c) for c in evaluated.bound_box]
+    dimensions=[max(float(pt[i]) for pt in bounds)-min(float(pt[i]) for pt in bounds)
+                for i in range(3)]
+    available=Tools._available_memory()
+    if available is None:
+        raise ValueError("DIRECT_SCULPT_MEMORY_TELEMETRY_UNAVAILABLE")
+    plan=Tools.sculpt_plan(dimensions,scene.unit_settings.scale_length,
+        p["voxel_size_m"],p.get("max_voxels",6000000),available)
+    mesh=bpy.data.meshes.new_from_object(evaluated,
+        preserve_all_data_layers=True,depsgraph=depsgraph)
+    created=None;original_data=mesh
+    prior=bpy.context.view_layer.objects.active
+    selected=list(bpy.context.selected_objects)
+    try:
+        created=bpy.data.objects.new(name,mesh)
+        scene.collection.objects.link(created)
+        created.matrix_world=evaluated.matrix_world.copy()
+        created.location=p["location"]
+        created.color=obj.color
+        mesh.remesh_voxel_size=plan["voxel_size_scene_units"]
+        mesh.remesh_voxel_adaptivity=0
+        mesh.use_remesh_preserve_volume=True
+        with bpy.context.temp_override(window=win,area=area,region=region,scene=scene):
+            for old in selected:old.select_set(False)
+            created.select_set(True)
+            bpy.context.view_layer.objects.active=created
+            from render_artist_ops import _operator
+            native=_operator("object.voxel_remesh")
+            if not native.poll():
+                raise ValueError("DIRECT_SCULPT_NATIVE_REMESH_CONTEXT_UNAVAILABLE")
+            if "FINISHED" not in native():
+                raise ValueError("DIRECT_SCULPT_NATIVE_REMESH_FAILED")
+        if not len(created.data.vertices) or not len(created.data.polygons):
+            raise ValueError("DIRECT_SCULPT_SURFACE_EMPTY")
+        connected=Tools.mesh_components(len(created.data.vertices),
+                      (e.vertices for e in created.data.edges))
+        if connected!=1:
+            raise ValueError("DIRECT_SCULPT_SURFACE_STILL_DISCONNECTED")
+        for polygon in created.data.polygons:polygon.use_smooth=True
+        created["render_work_stage"]="connected_sculpt_copy"
+        created["render_source_object"]=obj.name
+        created["render_source_preserved"]=True
+        created["render_likeness_verified"]=False
+        area.tag_redraw()
+        return dict(plan,object=created.name,source_object=obj.name,
+                    source_mesh_preserved=True,source_rig_preserved=True,
+                    source_animation_preserved=True,
+                    evaluated_pose_baked_into_copy=True,
+                    copy_is_independent_unrigged_sculpt_surface=True,
+                    native_blender_voxel_remesh_completed=True,
+                    connected_components=connected,
+                    connected_mesh_verified=True,
+                    vertices=len(created.data.vertices),
+                    polygons=len(created.data.polygons),
+                    shape_keys_and_weight_maps_not_transferred_to_copy=True,
+                    UV_fidelity_on_new_sculpt_copy_unverified=True,
+                    visual_likeness_verified=False)
+    except Exception:
+        extra=created.data if created is not None else None
+        if created is not None:bpy.data.objects.remove(created,do_unlink=True)
+        if extra is not None and extra!=original_data and extra.users==0:
+            bpy.data.meshes.remove(extra)
+        if original_data.users==0:bpy.data.meshes.remove(original_data)
+        raise
+    finally:
+        for ob in list(bpy.context.selected_objects):ob.select_set(False)
+        for ob in selected:
+            if ob.name in bpy.context.view_layer.objects:ob.select_set(True)
+        if prior and prior.name in bpy.context.view_layer.objects:
+            bpy.context.view_layer.objects.active=prior
+
 def execute(op,p,root,scene):
     if op==Contract.OPS[0]:return inspect(scene,p)
     if op==Contract.OPS[1]:return enter(scene,p)
     if op==Contract.OPS[2]:return stroke(scene,p)
     if op==Contract.OPS[3]:return leave(scene,p)
     if op==Contract.OPS[4]:return select_brush(scene,p)
+    if op==Contract.OPS[5]:return surface_clone(scene,p)
     raise ValueError("DIRECT_SCULPT_OPERATION_UNAVAILABLE")
 
 def last_stroke():
