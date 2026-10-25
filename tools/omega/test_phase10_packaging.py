@@ -35,6 +35,7 @@ class OmegaPackagingTests(unittest.TestCase):
                      "render_viewport_fidelity_contract.py", "render_viewport_fidelity.py",
                      "render_viewport_fidelity_ui.py",
                      "render_workflow_contract.py", "render_workflow_ops.py",
+                     "render_workflow_ui.py",
                      "render_ik_contract.py", "render_ik_control.py",
                      "render_asset_library.py", "render_execution_settings.py"):
             (self.root / name).write_text("# test-only synthetic module\n")
