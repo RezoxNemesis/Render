@@ -26,6 +26,11 @@ _OVERLAY=("show_wireframes","show_relationship_lines","show_extras")
 _SPACE=("clip_start","clip_end","lens")
 
 def _views():
+    # Blender headless may expose a startup screen and 3D area even though
+    # no actual GPU viewport/window is ever drawn. Never claim visual
+    # success from that phantom context.
+    if getattr(bpy.app,"background",False):
+        return []
     window=bpy.context.window
     if window is None or not window.screen:return []
     return [a for a in window.screen.areas if a.type=="VIEW_3D"]
