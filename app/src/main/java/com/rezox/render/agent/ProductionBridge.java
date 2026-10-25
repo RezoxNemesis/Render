@@ -335,6 +335,21 @@ public final class ProductionBridge {
             if(!"mp4".equals(media.optString("extension"))&&available>=0&&pixels*16+RenderScheduling.reserve(context)>available)
                 throw new IllegalStateException("NATIVE_IMAGE_IMPORT_MEMORY_PRESSURE_KEEP_ORIGINAL_AND_RETRY");
         }
+        if(operation.equals("studio.reference.timeline.bind")){
+            // A full-resolution movie is opened in native Blender, not decoded
+            // into Java memory. Still reject unsafe thermal/available-memory
+            // conditions before creating a VSE strip on the phone.
+            JSONObject video=StudioReferenceInbox.details(context,
+                new JSONObject().put("asset",p.getString("asset")));
+            if(!"mp4".equals(video.optString("extension")))
+                throw new IllegalArgumentException("NATIVE_TIMELINE_REFERENCE_MP4_REQUIRED");
+            long available=device.optLong("available_memory_bytes",-1L);
+            long reserve=RenderScheduling.reserve(context)+192L*1024*1024;
+            if(!gate.renderAllowed||device.optBoolean("low_memory")||
+               (available>=0&&available<reserve))
+                throw new IllegalStateException(
+                    "NATIVE_VIDEO_REFERENCE_MEMORY_OR_THERMAL_PRESSURE_ORIGINAL_RETAINED");
+        }
         if(operation.equals("instances.plan")||operation.equals("instances.create")){
             if(p.has("available_memory_bytes"))throw new IllegalArgumentException("DEVICE_MEMORY_IS_NATIVE_ONLY");
             nativePayload.put("available_memory_bytes",device.getLong("available_memory_bytes"));
