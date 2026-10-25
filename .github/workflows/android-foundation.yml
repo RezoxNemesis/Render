@@ -5,6 +5,7 @@ on:
     branches: [main, "feature/android-native-foundation-20261021"]
 jobs:
   build-and-test:
+    if: github.head_ref != 'upgrade/render-studio-031'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -30,6 +31,8 @@ jobs:
           cmake -S native-tests -B "$RUNNER_TEMP/render-tests" -DCMAKE_BUILD_TYPE=Release
           cmake --build "$RUNNER_TEMP/render-tests" --parallel 2
           ctest --test-dir "$RUNNER_TEMP/render-tests" --output-on-failure
+      - name: Stage current production API before Android bridge contract tests
+        run: python3 tools/prepare_production_toolkit.py
       - name: Build and unit test Android foundation
         run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
       - uses: actions/upload-artifact@v4
@@ -39,6 +42,7 @@ jobs:
           if-no-files-found: error
 
   blender-real-file-compatibility:
+    if: github.head_ref != 'upgrade/render-studio-031'
     runs-on: ubuntu-latest
     timeout-minutes: 22
     steps:

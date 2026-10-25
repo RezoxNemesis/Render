@@ -12,6 +12,7 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import com.rezox.render.ui.StudioUi;
+import com.rezox.render.agent.ProductionDriveStorage;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.File;
@@ -84,6 +85,22 @@ public final class MainActivity extends Activity {
         StudioUi.add(files,StudioUi.text(this,
             "Save before switching signing certificates. ZIP includes saved .blend files, not separately linked external assets.",
             12,StudioUi.MUTED,false));
+        StudioUi.space(files,13);
+        TextView folder=StudioUi.action(this,
+            "GRANT PROJECT FOLDER ACCESS     ↗",StudioUi.PRIMARY);
+        StudioUi.add(files,folder);
+        folder.setOnClickListener(v->ProductionDriveStorage.chooseFolder(this));
+        StudioUi.space(files,9);
+        TextView sync=StudioUi.action(this,
+            "SAVE VERIFIED .BLEND COPIES TO FOLDER     ↗",StudioUi.SECONDARY);
+        StudioUi.add(files,sync);
+        sync.setOnClickListener(v->syncSavedProjects());
+        StudioUi.space(files,9);
+        StudioUi.add(files,StudioUi.text(this,
+            "Choose an Android Files folder once. Render remembers that specific folder, " +
+            "then saves checksum-verified project copies there. Completed MP4 videos go " +
+            "to Downloads/RenderStudio automatically. No Gallery permission is requested.",
+            12,StudioUi.MUTED,false));
         StudioUi.add(page,files);
         StudioUi.space(page,15);
 
@@ -114,6 +131,22 @@ public final class MainActivity extends Activity {
         StudioUi.add(page,StudioUi.text(this,
             "File introspection uses Blender's real low-level file readers. The complete Blender editor is a separate native activity inside the Full APK. Google Drive is optional asset storage, never a render server.",
             12,StudioUi.MUTED,false));
+    }
+
+    private void syncSavedProjects() {
+        status.setText("Copying saved .blend projects into your approved folder…");
+        new Thread(()->{
+            try{
+                org.json.JSONObject result=ProductionDriveStorage.exportSavedProjects(this);
+                runOnUiThread(()->status.setText(
+                    "Verified " + result.optInt("saved_projects_exported") +
+                    " .blend copies in your selected folder. Original projects remain unchanged."));
+            }catch(Exception error){
+                runOnUiThread(()->status.setText("Project folder save failed: "+
+                    error.getClass().getSimpleName()+" — "+
+                    (error.getMessage()==null?"unknown":error.getMessage())));
+            }
+        },"render-owner-folder-sync").start();
     }
 
     private void confirmBackup() {
@@ -159,6 +192,18 @@ public final class MainActivity extends Activity {
 
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
+        if(request==ProductionDriveStorage.REQUEST_PICK_FOLDER){
+            try{
+                if(ProductionDriveStorage.acceptFolderSelection(this,result,data)){
+                    status.setText("Folder access saved by Android. Syncing your Blender projects…");
+                    syncSavedProjects();
+                }else status.setText("Folder permission was not granted. Your projects remain safely in Render.");
+            }catch(Exception error){
+                status.setText("Folder permission failed: "+error.getClass().getSimpleName()+
+                    " — "+(error.getMessage()==null?"unknown":error.getMessage()));
+            }
+            return;
+        }
         if(request==REQUEST_BACKUP_ZIP){
             if(result!=RESULT_OK||data==null||data.getData()==null)return;
             final Uri destination=data.getData();

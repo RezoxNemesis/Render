@@ -55,7 +55,7 @@ public final class VideoStudioMcpTransport {
                 try(OutputStream out=c.getOutputStream()){out.write(data);}
             }
             int status=c.getResponseCode();
-            if(status!=200)throw new AgentHttp.RelayException(status);
+            if(status!=200)throw new AgentHttp.RelayException(status,c.getHeaderField("Retry-After"));
             try(InputStream in=c.getInputStream();ByteArrayOutputStream out=new ByteArrayOutputStream()){
                 byte[] buffer=new byte[8192];int read;
                 while((read=in.read(buffer))!=-1){
