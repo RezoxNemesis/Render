@@ -198,6 +198,28 @@ def observe_native(method,value):
     if method in ("command_started","command_finished"):_record(method,value)
 
 def _execute_step(op,payload,plan_id):
+    # Chained geometry operations derive the next SHA only from the immediately
+    # preceding verified brush receipt in this exact owner-private plan.
+    # No eval, arbitrary result substitutions or blind overwrite of other edits.
+    if op=="studio.sculpt.brush" and payload.get("expected_sha256")=="$prev_mesh_sha256":
+        plan=Q._load_file(Q._path(_root(),plan_id))
+        idx=plan["next"]
+        if idx<1 or not plan.get("receipts"):
+            raise ValueError("STUDIO_CHAIN_NO_PRIOR_BRUSH")
+        previous=plan["receipts"][-1]
+        ob=payload.get("object")
+        if (previous.get("index")!=idx-1 or
+            previous.get("operation")!="studio.sculpt.brush" or
+            previous.get("state")!="succeeded" or
+            previous.get("object")!=ob or
+            not previous.get("mesh_revision_after")):
+            raise ValueError("STUDIO_CHAIN_PRIOR_RECEIPT_MISMATCH")
+        import render_live_gestures
+        actual=render_live_gestures.mesh_inspect(
+            bpy.context.scene,{"object":ob})["mesh_revision_sha256"]
+        if actual!=previous["mesh_revision_after"]:
+            raise ValueError("STUDIO_CHAIN_MESH_REVISION_CONFLICT")
+        payload=dict(payload,expected_sha256=actual)
     # The real typed payload identifies the actual live Blender target on
     # screen before each serialized edit, never a fake mouse/tap path.
     start={"args":{"operation":op,"payload":payload}}
