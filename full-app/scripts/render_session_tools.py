@@ -534,6 +534,12 @@ def install():
     except Exception as error:
         print("Render native viewport fidelity panel unavailable:",
               type(error).__name__,flush=True)
+    try:
+        import render_workflow_ui
+        render_workflow_ui.install()
+    except Exception as error:
+        print("Render real DCC benchmark panel unavailable:",
+              type(error).__name__,flush=True)
     import render_v25_recovery
     render_v25_recovery.install()
     try:
