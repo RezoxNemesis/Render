@@ -161,8 +161,17 @@ def tick(root,executor,on_start=None,on_finish=None,render_busy=False):
         # A receipt only counts when native execution truly returned success.
         digest=hashlib.sha256(json.dumps(result,sort_keys=True,default=str,
                         allow_nan=False).encode("utf8")).hexdigest()
-        row["receipts"].append({"index":idx,"operation":op,"state":"succeeded",
-                                "result_sha256":digest})
+        receipt={"index":idx,"operation":op,"state":"succeeded",
+                 "result_sha256":digest}
+        # Preserve only this validated local mesh revision for the immediately
+        # following brush in the SAME plan. Not a generic variable evaluator.
+        if op=="studio.sculpt.brush" and isinstance(result,dict):
+            obj=result.get("object");rev=result.get("mesh_revision_after")
+            if type(obj) is str and 1<=len(obj)<=80 and type(rev) is str and (
+                    len(rev)==64 and all(ch in "0123456789abcdef" for ch in rev)):
+                receipt["object"]=obj
+                receipt["mesh_revision_after"]=rev
+        row["receipts"].append(receipt)
         row["next"]=idx+1
         row["state"]="completed" if row["next"]==len(row["steps"]) else "queued"
         row["started_step"]=None
