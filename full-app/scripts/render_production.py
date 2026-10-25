@@ -352,7 +352,9 @@ def execute(args, spool, command_id):
         if operation in ("studio.curve.adjust","studio.sculpt.brush",
                          "studio.pose.key","studio.ik.create",
                          "studio.ik.target","studio.ik.blend",
-                         "studio.reference.timeline.bind") and not p.get("dry_run",False):
+                         "studio.reference.timeline.bind",
+                         "studio.character.qa.upright") and not p.get(
+                             "dry_run",True if operation=="studio.character.qa.upright" else False):
             import render_artist_ops
             render_artist_ops.checkpoint(scene,root,operation)
         import render_unified_workspace
