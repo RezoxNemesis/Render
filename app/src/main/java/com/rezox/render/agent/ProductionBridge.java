@@ -341,14 +341,19 @@ public final class ProductionBridge {
             // conditions before creating a VSE strip on the phone.
             JSONObject video=StudioReferenceInbox.details(context,
                 new JSONObject().put("asset",p.getString("asset")));
-            if(!"mp4".equals(video.optString("extension")))
-                throw new IllegalArgumentException("NATIVE_TIMELINE_REFERENCE_MP4_REQUIRED");
             long available=device.optLong("available_memory_bytes",-1L);
-            long reserve=RenderScheduling.reserve(context)+192L*1024*1024;
-            if(!gate.renderAllowed||device.optBoolean("low_memory")||
-               (available>=0&&available<reserve))
-                throw new IllegalStateException(
-                    "NATIVE_VIDEO_REFERENCE_MEMORY_OR_THERMAL_PRESSURE_ORIGINAL_RETAINED");
+            long reserve=RenderScheduling.reserve(context);
+            NativeVideoReferencePolicy.requireAllowed(
+                video.optString("extension"),gate.renderAllowed,
+                device.optBoolean("low_memory"),available,reserve);
+            if(p.has("preview_asset")){
+                JSONObject still=StudioReferenceInbox.details(context,
+                    new JSONObject().put("asset",p.getString("preview_asset")));
+                if("mp4".equals(still.optString("extension")))
+                    throw new IllegalArgumentException("NATIVE_REFERENCE_PREVIEW_STILL_REQUIRED");
+                NativeVideoReferencePolicy.requirePreviewFits(
+                    still.optInt("width"),still.optInt("height"),available,reserve);
+            }
         }
         if(operation.equals("instances.plan")||operation.equals("instances.create")){
             if(p.has("available_memory_bytes"))throw new IllegalArgumentException("DEVICE_MEMORY_IS_NATIVE_ONLY");
