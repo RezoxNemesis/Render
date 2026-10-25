@@ -64,6 +64,35 @@ class RENDERSTUDIO_OT_fidelity_analyze(bpy.types.Operator):
         except (ValueError,RuntimeError,AttributeError) as err:
             self.report({"ERROR"},str(err));return {"CANCELLED"}
 
+class RENDERSTUDIO_OT_preview_sampling_apply(bpy.types.Operator):
+    bl_idname="renderstudio.preview_sampling_apply"
+    bl_label="Set Native Preview Samples"
+    bl_description="Change Cycles/Eevee viewport-only samples, not film samples"
+    def execute(self,context):
+        p={"samples":context.scene.render_studio_preview_samples,
+           "allow_viewport_sample_change":True,
+           "allow_high_gpu_load":context.scene.render_studio_allow_high_preview_samples}
+        try:
+            result=Native.sampling_configure(context.scene,p)
+            self.report({"INFO"},"Blender viewport samples "+
+                        str(result["samples_before"])+" -> "+
+                        str(result["samples_after"]))
+            return {"FINISHED"}
+        except (ValueError,RuntimeError,AttributeError) as err:
+            self.report({"ERROR"},str(err));return {"CANCELLED"}
+
+class RENDERSTUDIO_OT_preview_sampling_restore(bpy.types.Operator):
+    bl_idname="renderstudio.preview_sampling_restore"
+    bl_label="Restore Original Preview Samples"
+    def execute(self,context):
+        try:
+            Native.sampling_configure(context.scene,{
+                "restore":True,"allow_viewport_sample_change":True})
+            self.report({"INFO"},"Restored Blender viewport sampling")
+            return {"FINISHED"}
+        except (ValueError,RuntimeError,AttributeError) as err:
+            self.report({"ERROR"},str(err));return {"CANCELLED"}
+
 class RENDERSTUDIO_PT_viewport_fidelity(bpy.types.Panel):
     bl_idname="RENDERSTUDIO_PT_viewport_fidelity"
     bl_label="Viewport Fidelity / Phase 1"
@@ -90,11 +119,33 @@ class RENDERSTUDIO_PT_viewport_fidelity(bpy.types.Panel):
                                  icon="ERROR")
             else:layout.label(text="Select a Blender object",icon="INFO")
         layout.separator()
+        try:
+            sampling=Native.sampling_inspect(scene,{})
+            if sampling["native_preview_sample_setting_available"]:
+                layout.label(text="Native viewport samples: "+
+                             str(sampling["native_samples"]))
+                layout.prop(scene,"render_studio_preview_samples",text="Samples")
+                if scene.render_studio_preview_samples>32:
+                    layout.prop(scene,"render_studio_allow_high_preview_samples",
+                                text="Allow high GPU / heat")
+                layout.operator("renderstudio.preview_sampling_apply",
+                                text="Apply Preview Samples")
+                layout.operator("renderstudio.preview_sampling_restore",
+                                text="Restore Preview Samples")
+            else:
+                layout.label(text="Preview samples: native control unavailable",
+                             icon="INFO")
+        except (ValueError,RuntimeError,AttributeError):
+            pass
+        layout.separator()
         layout.label(text="No automatic geometry deletion")
         layout.label(text="Final render quality unchanged")
 
 _CLASSES=(RENDERSTUDIO_OT_fidelity_apply,RENDERSTUDIO_OT_fidelity_restore,
-          RENDERSTUDIO_OT_fidelity_analyze,RENDERSTUDIO_PT_viewport_fidelity)
+          RENDERSTUDIO_OT_fidelity_analyze,
+          RENDERSTUDIO_OT_preview_sampling_apply,
+          RENDERSTUDIO_OT_preview_sampling_restore,
+          RENDERSTUDIO_PT_viewport_fidelity)
 
 def install():
     global _INSTALLED
@@ -107,6 +158,10 @@ def install():
         default="CLEAN_SOLID")
     scene.render_studio_allow_expensive_material_preview=bpy.props.BoolProperty(
         name="Compile material preview",default=False)
+    scene.render_studio_preview_samples=bpy.props.IntProperty(
+        name="Viewport samples",default=16,min=1,max=128)
+    scene.render_studio_allow_high_preview_samples=bpy.props.BoolProperty(
+        name="Allow high GPU preview load",default=False)
     for cls in _CLASSES:bpy.utils.register_class(cls)
     _INSTALLED=True
 
