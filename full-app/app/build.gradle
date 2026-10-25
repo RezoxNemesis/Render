@@ -20,8 +20,8 @@ android {
         minSdk 31
         targetSdk 34
         testInstrumentationRunner 'com.rezox.render.qa.NativeStudioChecks'
-        versionCode 45
-        versionName '0.36.0-unified-blender-workspaces'
+        versionCode 46
+        versionName '0.37.0-live-sculpt-acting'
         ndk { abiFilters 'arm64-v8a' }
     }
     sourceSets {

@@ -21,6 +21,7 @@ _worker = None
 _event = {"state": "idle", "action": "", "object": None, "at": 0.0}
 _pointer = None
 _pointer_at = 0.0
+_verified_brush = None
 _last_draw_at = 0.0
 _draw_error = None
 _NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]{0,63}$")
@@ -42,7 +43,7 @@ def command_started(command):
 
 def command_finished(report):
     """Called only AFTER the native result was atomically written to the spool."""
-    global _event, _pointer
+    global _event, _pointer, _verified_brush
     result = report.get("result", {})
     if not isinstance(result, dict):
         result = {}
@@ -55,6 +56,14 @@ def command_finished(report):
     if state == "succeeded" and result.get("paused"):
         state = "paused"
     _event = dict(_event, state=state, object=name, at=time.monotonic())
+    if state=="succeeded" and result.get("native_blender_vertex_coordinates_updated") is True:
+        center=result.get("sculpt_center_local")
+        radius=result.get("sculpt_radius_local")
+        if (name and isinstance(center,list) and len(center)==3
+                and all(type(v) in (float,int) and math.isfinite(v) for v in center)
+                and type(radius) in (float,int) and math.isfinite(radius) and radius>0):
+            _verified_brush={"object":name,"center":list(center),
+                             "radius":float(radius),"at":time.monotonic()}
     _pointer = None
 
 
@@ -165,6 +174,25 @@ def _project_object(name):
     return x, y
 
 
+def _project_verified_sculpt():
+    if _verified_brush is None or time.monotonic()-_verified_brush["at"]>6:
+        return None
+    context=bpy.context
+    if context.region is None or context.region_data is None:return None
+    name=_verified_brush["object"]
+    ob=context.scene.objects.get(name)
+    if ob is None or not ob.visible_get():return None
+    from mathutils import Vector
+    from bpy_extras.view3d_utils import location_3d_to_region_2d
+    world=ob.matrix_world@Vector(_verified_brush["center"])
+    point=location_3d_to_region_2d(context.region,context.region_data,world)
+    if point is None:return None
+    x,y=map(float,point)
+    if not all(math.isfinite(v) for v in (x,y)) or not (
+            0<=x<context.region.width and 0<=y<context.region.height):
+        return None
+    return x,y,name
+
 def _draw():
     global _pointer, _pointer_at, _last_draw_at, _draw_error
     try:
@@ -208,6 +236,17 @@ def _draw():
                 text(min(x+25,region.width-140),max(12,y-24),label+value["object"][:18],11)
                 _pointer={"object":value["object"],"x":x,"y":y,"region_width":region.width,"region_height":region.height}
                 _pointer_at=time.monotonic()
+            # Only after an actual bpy vertex edit returned a verified
+            # success, project its true local sculpt center onto this view.
+            # This is neither a touch event nor a simulation of brush bristles.
+            center=_project_verified_sculpt()
+            if center is not None:
+                cx,cy,_=center
+                shape([(cx-11,cy),(cx+11,cy),
+                       (cx,cy-11),(cx,cy+11)],
+                      (0.21,0.91,1,1),"LINES")
+                text(min(cx+13,region.width-170),max(cy+13,14),
+                     "Verified vertex edit",10)
         finally:
             gpu.state.blend_set(previous)
     except Exception as error:
@@ -241,6 +280,12 @@ def snapshot():
             "last_draw_error": _draw_error,
             "pointer": _pointer if time.monotonic()-_pointer_at < 1 else None,
             "pointer_source": "actual_native_target_projection_not_touch_input",
+            "verified_sculpt_marker":(
+                {"object":_verified_brush["object"],
+                 "local_center":_verified_brush["center"],
+                 "radius":_verified_brush["radius"],
+                 "source":"native_bpy_vertex_edit"}
+                if _verified_brush and time.monotonic()-_verified_brush["at"]<6 else None),
             "pointer_is_ui_input": False, "fabricated_ui_taps": False,
             "in_frame_sample_progress_available": False}
 

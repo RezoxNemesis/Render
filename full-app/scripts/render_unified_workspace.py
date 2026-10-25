@@ -198,6 +198,36 @@ def observe_native(method,value):
     if method in ("command_started","command_finished"):_record(method,value)
 
 def _execute_step(op,payload,plan_id):
+    # Chained geometry operations derive the next SHA only from the immediately
+    # preceding verified brush receipt in this exact owner-private plan.
+    # No eval, arbitrary result substitutions or blind overwrite of other edits.
+    if op=="studio.sculpt.brush" and payload.get("expected_sha256")=="$prev_mesh_sha256":
+        plan=Q._load_file(Q._path(_root(),plan_id))
+        idx=plan["next"]
+        if idx<1 or not plan.get("receipts"):
+            raise ValueError("STUDIO_CHAIN_NO_PRIOR_BRUSH")
+        previous=plan["receipts"][-1]
+        ob=payload.get("object")
+        if (previous.get("index")!=idx-1 or
+            previous.get("operation")!="studio.sculpt.brush" or
+            previous.get("state")!="succeeded" or
+            previous.get("object")!=ob or
+            not previous.get("mesh_revision_after")):
+            raise ValueError("STUDIO_CHAIN_PRIOR_RECEIPT_MISMATCH")
+        import render_live_gestures
+        actual=render_live_gestures.mesh_inspect(
+            bpy.context.scene,{"object":ob})["mesh_revision_sha256"]
+        if actual!=previous["mesh_revision_after"]:
+            raise ValueError("STUDIO_CHAIN_MESH_REVISION_CONFLICT")
+        payload=dict(payload,expected_sha256=actual)
+    # The real typed payload identifies the actual live Blender target on
+    # screen before each serialized edit, never a fake mouse/tap path.
+    start={"args":{"operation":op,"payload":payload}}
+    try:
+        import render_native_hud
+        render_native_hud.command_started(start)
+    except (ImportError,AttributeError,RuntimeError):pass
+    observe_native("command_started",start)
     # Native Blender mutations run on this timer ONLY. Make a real .blend
     # checkpoint before a consequential step unless the existing operation
     # already checkpoints itself. No replay of an interrupted write.
@@ -205,7 +235,8 @@ def _execute_step(op,payload,plan_id):
             "studio.workspace.activate","studio.view.orbit",
             "body.blockout","reference.workspace.open",
             "reference.fit.landmarks","reference.fit.multiview",
-            "animation.clip.create","project.checkpoint","studio.curve.adjust"):
+            "animation.clip.create","project.checkpoint","studio.curve.adjust",
+            "studio.sculpt.brush","studio.pose.key","studio.timeline.scrub"):
         import render_artist_ops
         render_artist_ops.checkpoint(bpy.context.scene,_root(),"studio.plan."+op)
     import render_production
@@ -214,12 +245,9 @@ def _execute_step(op,payload,plan_id):
         os.environ["RENDER_AGENT_SPOOL"],plan_id)
 
 def _step_start(pid,index,operation):
-    try:
-        import render_native_hud
-        render_native_hud.command_started({"action":"blender.production.execute",
-                                          "args":{"operation":operation}})
-    except (ImportError,AttributeError,RuntimeError):pass
-    observe_native("command_started",{"args":{"operation":operation}})
+    # The actual target/payload is emitted by _execute_step immediately
+    # before bpy executes it, avoiding duplicate generic "started" events.
+    pass
 
 def _step_end(pid,index,operation,state,result):
     packet={"state":"succeeded" if state=="succeeded" else "failed",
@@ -289,6 +317,11 @@ def _tool_search(p):
         ref.update({entry["operation"]:entry["input_schema"]
                     for entry in render_unified_curves.capabilities()})
     except ImportError:pass
+    try:
+        import render_live_gestures
+        ref.update({entry["operation"]:entry["input_schema"]
+                    for entry in render_live_gestures.capabilities()})
+    except ImportError:pass
     result=[]
     for op in sorted(native | set(C.PROGRAM_OPS)):
         group=C.PROGRAM_OPS.get(op)
@@ -329,6 +362,8 @@ def execute(op,p,root,scene):
                           "studio.workspace.activate","studio.workspace.inspect",
                           "studio.view.orbit","studio.editor.open",
                           "studio.curve.inspect","studio.curve.adjust",
+                          "studio.sculpt.inspect","studio.sculpt.brush",
+                          "studio.pose.inspect","studio.pose.key","studio.timeline.scrub",
                           "studio.plan.submit","studio.plan.status","studio.plan.list",
                           "studio.plan.pause","studio.plan.resume","studio.plan.cancel",
                           "studio.activity"])
@@ -337,6 +372,10 @@ def execute(op,p,root,scene):
     if op in ("studio.curve.inspect","studio.curve.adjust"):
         import render_unified_curves
         return render_unified_curves.execute(op,p)
+    if op in ("studio.sculpt.inspect","studio.sculpt.brush",
+              "studio.pose.inspect","studio.pose.key","studio.timeline.scrub"):
+        import render_live_gestures
+        return render_live_gestures.execute(op,p,root,scene)
     if op=="studio.workspace.activate":return _activate(scene,p)
     if op=="studio.view.orbit":return _orbit(scene,p)
     if op=="studio.editor.open":return _editor(p)

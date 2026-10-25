@@ -28,6 +28,7 @@ class OmegaPackagingTests(unittest.TestCase):
                      "render_reference_motion.py", "render_reference_motion_contract.py",
                      "render_unified_contract.py", "render_unified_queue.py",
                      "render_unified_workspace.py", "render_unified_curves.py",
+                     "render_live_gestures.py",
                      "render_asset_library.py", "render_execution_settings.py"):
             (self.root / name).write_text("# test-only synthetic module\n")
         (self.root / "omega").mkdir()
