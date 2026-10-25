@@ -220,6 +220,25 @@ def _execute_step(op,payload,plan_id):
         if actual!=previous["mesh_revision_after"]:
             raise ValueError("STUDIO_CHAIN_MESH_REVISION_CONFLICT")
         payload=dict(payload,expected_sha256=actual)
+    if (op=="studio.artist.sculpt.stroke" and
+            payload.get("expected_mesh_sha256")=="$prev_mesh_sha256"):
+        plan=Q._load_file(Q._path(_root(),plan_id))
+        idx=plan["next"]
+        if idx<1 or not plan.get("receipts"):
+            raise ValueError("DIRECT_SCULPT_CHAIN_REQUIRES_PRIOR_STROKE")
+        prev=plan["receipts"][-1]
+        if (prev.get("index")!=idx-1 or prev.get("operation")!=op
+                or prev.get("state")!="succeeded"
+                or prev.get("object")!=payload.get("object")
+                or not prev.get("mesh_change_verified")
+                or not prev.get("geometry_revision_after")):
+            raise ValueError("DIRECT_SCULPT_CHAIN_PRIOR_RECEIPT_INVALID")
+        import render_artist_direct
+        obj=bpy.context.scene.objects.get(payload["object"])
+        actual=render_artist_direct._revision(obj) if obj and obj.type=="MESH" else None
+        if actual!=prev["geometry_revision_after"]:
+            raise ValueError("DIRECT_SCULPT_CHAIN_MESH_CHANGED")
+        payload=dict(payload,expected_mesh_sha256=actual)
     # The real typed payload identifies the actual live Blender target on
     # screen before each serialized edit, never a fake mouse/tap path.
     start={"args":{"operation":op,"payload":payload}}
@@ -236,7 +255,12 @@ def _execute_step(op,payload,plan_id):
             "body.blockout","reference.workspace.open",
             "reference.fit.landmarks","reference.fit.multiview",
             "animation.clip.create","project.checkpoint","studio.curve.adjust",
-            "studio.sculpt.brush","studio.pose.key","studio.timeline.scrub",
+            "studio.sculpt.brush","studio.artist.sculpt.enter",
+            "studio.artist.sculpt.stroke","studio.artist.sculpt.leave",
+            "studio.artist.sculpt.brush.select",
+            "studio.artist.surface.clone","studio.artist.surface.clone",
+                          "studio.artist.sculpt.brush.select",
+            "studio.pose.key","studio.timeline.scrub",
             "studio.ik.create","studio.ik.target","studio.ik.blend",
             "studio.reference.timeline.bind","studio.reference.timeline.scrub",
             "studio.preview.profile.apply","studio.preview.profile.restore",
@@ -315,6 +339,7 @@ def _tool_index():
     for module_name in ("render_reference_motion_contract",
                         "render_unified_curves",
                         "render_live_gestures",
+                        "render_artist_direct_contract",
                         "render_ik_contract",
                         "render_reference_timeline",
                         "render_agent_fastlane",
@@ -389,6 +414,8 @@ def execute(op,p,root,scene):
                           "studio.view.orbit","studio.editor.open",
                           "studio.curve.inspect","studio.curve.adjust",
                           "studio.sculpt.inspect","studio.sculpt.brush",
+                          "studio.artist.sculpt.inspect","studio.artist.sculpt.enter",
+                          "studio.artist.sculpt.stroke","studio.artist.sculpt.leave",
                           "studio.pose.inspect","studio.pose.key","studio.timeline.scrub",
                           "studio.ik.create","studio.ik.inspect",
                           "studio.ik.target","studio.ik.blend",
@@ -431,6 +458,9 @@ def execute(op,p,root,scene):
     if op in ("studio.curve.inspect","studio.curve.adjust"):
         import render_unified_curves
         return render_unified_curves.execute(op,p)
+    if op.startswith("studio.artist.sculpt.") or op=="studio.artist.surface.clone":
+        import render_artist_direct
+        return render_artist_direct.execute(op,p,root,scene)
     if op in ("studio.sculpt.inspect","studio.sculpt.brush",
               "studio.pose.inspect","studio.pose.key","studio.timeline.scrub"):
         import render_live_gestures

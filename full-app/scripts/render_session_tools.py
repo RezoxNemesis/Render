@@ -540,6 +540,12 @@ def install():
     except Exception as error:
         print("Render real DCC benchmark panel unavailable:",
               type(error).__name__,flush=True)
+    try:
+        import render_artist_direct_ui
+        render_artist_direct_ui.install()
+    except Exception as error:
+        print("Render direct native sculpt panel unavailable:",
+              type(error).__name__,flush=True)
     import render_v25_recovery
     render_v25_recovery.install()
     try:
