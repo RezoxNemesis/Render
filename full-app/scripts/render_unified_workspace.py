@@ -397,7 +397,9 @@ def execute(op,p,root,scene):
                           "studio.preview.capabilities","studio.preview.inspect",
                           "studio.preview.diagnose","studio.preview.profile.apply",
                           "studio.preview.profile.restore","studio.preview.aa.inspect",
-                          "studio.preview.aa.configure"])
+                          "studio.preview.aa.configure",
+                          "studio.preview.sampling.inspect",
+                          "studio.preview.sampling.configure"])
         return result
     if op=="studio.tool.search":return _tool_search(p)
     if op.startswith("studio.preview."):
