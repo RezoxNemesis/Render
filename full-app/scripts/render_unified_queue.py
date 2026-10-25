@@ -7,6 +7,8 @@ A started step with no receipt is NEVER replayed on process recovery.
 import hashlib
 import json
 import os
+import copy
+from collections import OrderedDict
 from pathlib import Path
 import time
 import uuid
@@ -16,6 +18,47 @@ ACTIVE=frozenset(("queued","running","paused","needs_review"))
 TERMINAL=frozenset(("completed","cancelled"))
 MAX_FILE=100000
 MAX_PLANS=4
+# In-process receipt cache. A checksum/fingerprint is STILL checked on every
+# actual file change. Storage on disk remains the authoritative queue.
+_CACHE=OrderedDict()
+_CACHE_HITS=0
+_CACHE_MISSES=0
+_CACHE_LIMIT=96
+_CACHE_MAX_BYTES=2*1024*1024
+_CACHE_BYTES=0
+
+def cache_stats():
+    return {"cached_receipts":len(_CACHE),"bytes":_CACHE_BYTES,
+            "hits":_CACHE_HITS,"misses":_CACHE_MISSES,
+            "disk_is_authoritative":True,"cache_not_persisted":True}
+
+def _stamp(stat):
+    return (stat.st_dev,stat.st_ino,stat.st_size,
+            stat.st_mtime_ns,stat.st_ctime_ns)
+
+def _remember(path,stamp,data,size):
+    global _CACHE_BYTES
+    if size>32768:return
+    key=str(path)
+    prior=_CACHE.pop(key,None)
+    if prior:_CACHE_BYTES-=prior[2]
+    # Prioritize the only plans which can run; don't thrash the cache loading
+    # enormous historical terminal receipts on every idle timer poll.
+    active=data.get("state") in ACTIVE
+    while (_CACHE_BYTES+size>_CACHE_MAX_BYTES or
+           len(_CACHE)>=_CACHE_LIMIT):
+        victim=next((k for k,v in _CACHE.items() if v[1].get("state") not in ACTIVE),None)
+        if victim is None:
+            if not active:return
+            victim=next(iter(_CACHE),None)
+            if victim is None:break
+        obsolete=_CACHE.pop(victim)
+        _CACHE_BYTES-=obsolete[2]
+    if not active and len(_CACHE)>=_CACHE_LIMIT//2:
+        return
+    _CACHE[key]=(stamp,copy.deepcopy(data),size)
+    _CACHE_BYTES+=size
+
 
 def _directory(root):
     root=Path(root)
@@ -35,8 +78,19 @@ def _path(root,id):
     return p
 
 def _load_file(path):
-    if path.is_symlink() or not path.is_file() or path.stat().st_size>MAX_FILE:
+    global _CACHE_HITS,_CACHE_MISSES
+    if path.is_symlink() or not path.is_file():
         raise ValueError("STUDIO_PLAN_RECEIPT_CORRUPT")
+    stat=path.stat()
+    if not 0<stat.st_size<=MAX_FILE:
+        raise ValueError("STUDIO_PLAN_RECEIPT_CORRUPT")
+    key=str(path);mark=_stamp(stat)
+    cached=_CACHE.get(key)
+    if cached is not None and cached[0]==mark:
+        _CACHE_HITS+=1
+        _CACHE.move_to_end(key)
+        return copy.deepcopy(cached[1])
+    _CACHE_MISSES+=1
     try:data=json.loads(path.read_bytes().decode("utf8"))
     except (OSError,ValueError,UnicodeError) as err:
         raise ValueError("STUDIO_PLAN_RECEIPT_CORRUPT") from err
@@ -47,9 +101,11 @@ def _load_file(path):
     if C.plan({"name":data.get("name"),"steps":data.get("steps")}).get("fingerprint")!=data.get("fingerprint"):
         raise ValueError("STUDIO_PLAN_REVISION_CONFLICT")
     C.public(data)
+    _remember(path,mark,data,stat.st_size)
     return data
 
 def _save(path,value):
+    global _CACHE_BYTES
     data=json.dumps(value,sort_keys=True,separators=(",",":"),allow_nan=False).encode("utf8")
     if len(data)>MAX_FILE:raise ValueError("STUDIO_PLAN_RECEIPT_OVERSIZE")
     temporary=path.with_name(path.stem+".writing")
@@ -59,6 +115,8 @@ def _save(path,value):
         with os.fdopen(fd,"wb") as out:
             out.write(data);out.flush();os.fsync(out.fileno())
         os.replace(temporary,path)
+        cached=_CACHE.pop(str(path),None)
+        if cached:_CACHE_BYTES-=cached[2]
         dfd=os.open(str(path.parent),os.O_RDONLY|getattr(os,"O_DIRECTORY",0))
         try:os.fsync(dfd)
         finally:os.close(dfd)
