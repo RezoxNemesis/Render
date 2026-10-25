@@ -69,6 +69,13 @@ PROGRAM_OPS={
  "studio.agent.batch.inspect":"agent",
  "studio.agent.plan.preview":"agent",
  "studio.agent.metrics":"agent",
+ "studio.preview.capabilities":"sculpt",
+ "studio.preview.inspect":"sculpt",
+ "studio.preview.diagnose":"sculpt",
+ "studio.preview.profile.apply":"sculpt",
+ "studio.preview.profile.restore":"sculpt",
+ "studio.preview.aa.inspect":"sculpt",
+ "studio.preview.aa.configure":"sculpt",
 }
 MUTATING=frozenset(PROGRAM_OPS)-{
  "scene.inspect","animation.clip.inspect","animation.motion.audit",
