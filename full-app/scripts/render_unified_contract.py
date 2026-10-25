@@ -59,6 +59,7 @@ PROGRAM_OPS={
  "studio.artist.sculpt.enter":"sculpt",
  "studio.artist.sculpt.stroke":"sculpt",
  "studio.artist.sculpt.leave":"sculpt",
+ "studio.artist.sculpt.brush.select":"sculpt",
  "studio.pose.inspect":"characters",
  "studio.pose.key":"animation",
  "studio.ik.create":"characters",
