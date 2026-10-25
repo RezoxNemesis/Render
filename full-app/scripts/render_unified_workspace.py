@@ -240,7 +240,8 @@ def _execute_step(op,payload,plan_id):
             "studio.ik.create","studio.ik.target","studio.ik.blend",
             "studio.reference.timeline.bind","studio.reference.timeline.scrub",
             "studio.preview.profile.apply","studio.preview.profile.restore",
-            "studio.preview.aa.configure"):
+            "studio.preview.aa.configure",
+            "studio.preview.sampling.configure"):
         import render_artist_ops
         render_artist_ops.checkpoint(bpy.context.scene,_root(),"studio.plan."+op)
     import render_production
