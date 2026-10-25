@@ -76,6 +76,8 @@ PROGRAM_OPS={
  "studio.preview.profile.restore":"sculpt",
  "studio.preview.aa.inspect":"sculpt",
  "studio.preview.aa.configure":"sculpt",
+ "studio.preview.sampling.inspect":"sculpt",
+ "studio.preview.sampling.configure":"sculpt",
 }
 MUTATING=frozenset(PROGRAM_OPS)-{
  "scene.inspect","animation.clip.inspect","animation.motion.audit",
