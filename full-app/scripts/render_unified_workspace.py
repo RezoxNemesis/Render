@@ -258,6 +258,7 @@ def _execute_step(op,payload,plan_id):
             "studio.sculpt.brush","studio.artist.sculpt.enter",
             "studio.artist.sculpt.stroke","studio.artist.sculpt.leave",
             "studio.artist.sculpt.brush.select",
+            "studio.artist.surface.clone","studio.artist.surface.clone",
                           "studio.artist.sculpt.brush.select",
             "studio.pose.key","studio.timeline.scrub",
             "studio.ik.create","studio.ik.target","studio.ik.blend",
@@ -457,7 +458,7 @@ def execute(op,p,root,scene):
     if op in ("studio.curve.inspect","studio.curve.adjust"):
         import render_unified_curves
         return render_unified_curves.execute(op,p)
-    if op.startswith("studio.artist.sculpt."):
+    if op.startswith("studio.artist.sculpt.") or op=="studio.artist.surface.clone":
         import render_artist_direct
         return render_artist_direct.execute(op,p,root,scene)
     if op in ("studio.sculpt.inspect","studio.sculpt.brush",
