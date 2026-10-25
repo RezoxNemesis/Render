@@ -75,6 +75,8 @@ MUTATING=frozenset(PROGRAM_OPS)-{
  "reference.workspace.inspect","reference.compare.multiview",
  "studio.sculpt.inspect","studio.pose.inspect",
  "studio.ik.inspect","studio.reference.timeline.inspect",
+ "studio.agent.bootstrap","studio.agent.batch.inspect",
+ "studio.agent.plan.preview","studio.agent.metrics",
  "render.profile.inspect","render.quality.inspect"
 }
 READ_ONLY=frozenset(PROGRAM_OPS)-MUTATING
