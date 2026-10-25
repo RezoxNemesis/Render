@@ -339,7 +339,21 @@ def stabilize_viewport():
     scenes to 2000m. That could change other projects' UI or hide objects.
     The Phase 1 native profile affects ONLY the currently visible 3D View.
     """
-    import render_viewport_fidelity as Fidelity
+    try:
+        import render_viewport_fidelity as Fidelity
+    except ModuleNotFoundError as error:
+        if error.name!="render_viewport_fidelity":
+            raise
+        # Old host/unit harnesses import only this single script and have no
+        # bundled phase modules. Report a truthful no-op; do not pretend UI
+        # repair happened or alter mesh/render settings.
+        return {"viewport_settings_changed":[],
+                "possible_identical_overlapping_objects":[],
+                "stabilization_available":False,
+                "reason":"NATIVE_FIDELITY_RUNTIME_NOT_LOADED",
+                "mesh_geometry_modified":False,
+                "final_render_samples_modified":False,
+                "global_viewport_aa_modified":False}
     scene=bpy.context.scene
     diag=Fidelity.diagnose(scene,{})
     detected=diag.get("overlap_candidates",[])
