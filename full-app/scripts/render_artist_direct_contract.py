@@ -15,7 +15,10 @@ OPS = (
     "studio.artist.sculpt.enter",
     "studio.artist.sculpt.stroke",
     "studio.artist.sculpt.leave",
+    "studio.artist.sculpt.brush.select",
 )
+BRUSH_PRESETS = {"DRAW":"Draw","SMOOTH":"Smooth","GRAB":"Grab",
+                 "CLAY_STRIPS":"Clay Strips","INFLATE":"Inflate","CREASE":"Crease"}
 
 def _real(value, lo, hi):
     if type(value) not in (int, float) or not math.isfinite(value) or not lo <= value <= hi:
@@ -38,6 +41,7 @@ def validate(op, data):
         OPS[2]: {"object", "viewport_index", "expected_mesh_sha256",
                  "expected_view_sha256", "points"},
         OPS[3]: {"object", "viewport_index"},
+        OPS[4]: {"object", "viewport_index", "brush"},
     }[op]
     if set(data) - allowed or "object" not in data:
         raise ValueError("DIRECT_SCULPT_FIELDS_INVALID")
@@ -45,6 +49,8 @@ def validate(op, data):
     index = data.get("viewport_index", 0)
     if type(index) is not int or not 0 <= index <= 7:
         raise ValueError("DIRECT_SCULPT_VIEWPORT_INVALID")
+    if op == OPS[4] and data.get("brush") not in BRUSH_PRESETS:
+        raise ValueError("DIRECT_SCULPT_BRUSH_NOT_ALLOWED")
     if op == OPS[2]:
         if not {"points", "expected_mesh_sha256", "expected_view_sha256"} <= set(data):
             raise ValueError("DIRECT_SCULPT_REVISION_REQUIRED")
@@ -107,9 +113,9 @@ def capabilities():
              "native_touch_event_fabricated":False,
              "actual_sculpt_operator_required":op == OPS[2],
              "input_schema":{"type":"object","additionalProperties":False,
-                "required":["object"] + (["expected_mesh_sha256","expected_view_sha256","points"] if op == OPS[2] else []),
+                "required":["object"] + (["expected_mesh_sha256","expected_view_sha256","points"] if op == OPS[2] else ["brush"] if op==OPS[4] else []),
                 "properties":dict({"object":obj,"viewport_index":viewport},
                     **({"expected_mesh_sha256":sha,"expected_view_sha256":sha,
                         "points":{"type":"array","minItems":2,"maxItems":MAX_POINTS,
-                                  "items":point}} if op == OPS[2] else {}))}}
+                                  "items":point}} if op == OPS[2] else {"brush":{"enum":list(BRUSH_PRESETS)}} if op==OPS[4] else {}))}}
             for op in OPS]
