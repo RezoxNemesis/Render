@@ -60,7 +60,7 @@ class ArtistDirectContractTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     Contract.validate(Contract.OPS[4],{"object":"SculptedHero","brush":brush})
         self.assertEqual(Contract.BRUSH_PRESETS["CLAY_STRIPS"],"Clay Strips")
-        self.assertIn("brush",Contract.capabilities()[-1]["input_schema"]["required"])
+        self.assertIn("brush",next(row for row in Contract.capabilities() if row["operation"]==Contract.OPS[4])["input_schema"]["required"])
 
     def test_rejects_unsafe_or_unverified_sculpt_requests(self):
         bad=[
