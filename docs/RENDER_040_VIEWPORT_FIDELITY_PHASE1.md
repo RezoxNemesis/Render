@@ -43,6 +43,8 @@ return these exact typed native operations, not remembered old commands:
 | studio.preview.profile.restore | Restore original per-view shading/overlays/clipping from this Blender window's in-memory snapshot |
 | studio.preview.aa.inspect | Read only real supported native viewport anti-aliasing values; does not silently change them |
 | studio.preview.aa.configure | Explicit owner permission required for GLOBAL viewport-AA preference change; checks real enum values and supports restore |
+| studio.preview.sampling.inspect | Discover exact current Cycles or Eevee **viewport-only** sample property where the bundled engine exposes one; no invented setting |
+| studio.preview.sampling.configure | Explicit owner operation to set 1–128 preview samples, requires extra opt-in above 32, and restores original preview sampling from this process. Cycles final samples and Eevee final render samples remain untouched |
 
 ### Profiles
 
