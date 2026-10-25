@@ -46,6 +46,23 @@ jobs:
           PYTHONPATH: full-app/scripts
         run: |
           blender -b -noaudio --python-exit-code 1 --python tools/test_real_live_gestures.py
+  windowed-sculpt-feedback:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install genuine Blender GUI and virtual framebuffer
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends blender xvfb
+      - name: Confirm Blender actually draws a verified edited mesh target
+        env:
+          PYTHONPATH: full-app/scripts
+          LIBGL_ALWAYS_SOFTWARE: "1"
+        run: |
+          timeout 75 xvfb-run -a -s "-screen 0 1280x900x24" \
+            blender --factory-startup -noaudio --python-exit-code 1 \
+            --python tools/test_real_live_sculpt_ui.py
   android-bridge:
     runs-on: ubuntu-24.04
     timeout-minutes: 38
