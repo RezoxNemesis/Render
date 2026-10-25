@@ -34,6 +34,23 @@ class ArtistDirectContractTests(unittest.TestCase):
         self.assertFalse(fields[1]["is_start"])
         self.assertEqual(fields[0]["pressure"],.75)
 
+    def test_connected_sculpt_copy_requires_safe_budget_and_distinct_target(self):
+        valid={"object":"SculptedHero","name":"ScupltCandidate002",
+               "voxel_size_m":.015,"max_voxels":1000000,
+               "location":[2.0,0.0,0.0]}
+        self.assertEqual(Contract.validate(Contract.OPS[5],valid),valid)
+        for change in (
+            {"name":"SculptedHero"},{"name":"../Unsafe"},
+            {"location":[0,0]},{"location":[0,0,float("nan")]},
+            {"voxel_size_m":.00001},{"max_voxels":100000000},
+            {"max_voxels":True},{"__arbitrary_bpy__":"bpy.ops.wm.quit_blender()"},
+        ):
+            with self.subTest(change=change):
+                with self.assertRaises(ValueError):
+                    Contract.validate(Contract.OPS[5],dict(valid,**change))
+        self.assertTrue(Contract.capabilities()[-1]["non_destructive_surface_copy"])
+        self.assertIn("location",Contract.capabilities()[-1]["input_schema"]["required"])
+
     def test_native_essentials_brush_allowlist(self):
         for brush in Contract.BRUSH_PRESETS:
             request={"object":"SculptedHero","brush":brush}
@@ -131,6 +148,8 @@ class ArtistDirectContractTests(unittest.TestCase):
         self.assertIn("preview_only",capture)
         self.assertIn("final_render_quality_unchanged",capture)
         self.assertIn("RENDER_WINDOW_NOT_VISIBLE",capture)
+        self.assertIn("DIRECT_SCULPT_SURFACE_STILL_DISCONNECTED",
+                      (ROOT/"full-app/scripts/render_artist_direct.py").read_text())
         self.assertIn("DIRECT_SCULPT_NO_MEASURED_MESH_CHANGE",
                       (ROOT/"full-app/scripts/render_artist_direct.py").read_text())
         self.assertNotIn("exec(",(ROOT/"full-app/scripts/render_artist_direct.py").read_text())
