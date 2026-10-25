@@ -43,6 +43,7 @@ public class RenderInteractionCapabilitiesTest {
             "studio.preview.diagnose","studio.preview.profile.apply",
             "studio.preview.profile.restore","studio.preview.aa.inspect",
             "studio.preview.aa.configure",
+            "studio.preview.sampling.inspect","studio.preview.sampling.configure",
             "studio.plan.submit","studio.plan.status",
             "studio.plan.list","studio.plan.pause","studio.plan.resume","studio.plan.cancel","studio.activity",
             "render.plan","render.batch","render.status","render.encode"})assertTrue(op,available.contains(op));
