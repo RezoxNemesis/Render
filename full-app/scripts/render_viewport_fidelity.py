@@ -15,6 +15,7 @@ import render_viewport_fidelity_contract as C
 
 _SAVED_VIEWS={}
 _SAVED_AA=None
+_SAVED_SAMPLING={}
 
 _SHADING=(
  "type","light","color_type","show_shadows","show_cavity",
@@ -447,6 +448,82 @@ def aa_configure(p):
             "final_render_samples_modified":False,
             "GPU_driver_compatibility_not_verified_on_Android":True}
 
+def _sampling_owner(scene):
+    engine=scene.render.engine
+    if engine=="CYCLES":
+        settings=getattr(scene,"cycles",None)
+        if settings is not None and hasattr(settings,"preview_samples"):
+            return settings,"preview_samples","CYCLES_VIEWPORT"
+    if engine in ("BLENDER_EEVEE","BLENDER_EEVEE_NEXT"):
+        settings=getattr(scene,"eevee",None)
+        if settings is not None and hasattr(settings,"taa_samples"):
+            return settings,"taa_samples","EEVEE_VIEWPORT_TAA"
+    return None,None,"UNSUPPORTED_NATIVE_ENGINE"
+
+def sampling_inspect(scene,p):
+    C.validate("studio.preview.sampling.inspect",p)
+    owner,field,mode=_sampling_owner(scene)
+    if owner is None:
+        return {"native_preview_sample_setting_available":False,
+                "mode":mode,"render_engine":scene.render.engine,
+                "reason":"NATIVE_VIEWPORT_SAMPLE_PROPERTY_NOT_EXPOSED",
+                "render_output_sample_setting_changed":False}
+    current=getattr(owner,field)
+    return {"native_preview_sample_setting_available":True,
+            "mode":mode,"render_engine":scene.render.engine,
+            "setting":field,
+            "native_samples":int(current),
+            "original_same_process_restore_available":scene.as_pointer() in _SAVED_SAMPLING,
+            "explicit_high_gpu_load_opt_in_required_above":32,
+            "final_render_sample_setting_unchanged":True}
+
+def sampling_configure(scene,p):
+    C.validate("studio.preview.sampling.configure",p)
+    owner,field,mode=_sampling_owner(scene)
+    if owner is None:
+        raise ValueError("STUDIO_PREVIEW_SAMPLING_NOT_SUPPORTED_BY_CURRENT_ENGINE")
+    key=scene.as_pointer()
+    old=_SAVED_SAMPLING.get(key)
+    if p.get("restore",False):
+        if old is None:
+            raise ValueError("STUDIO_PREVIEW_NO_SAVED_SAMPLING_PROFILE")
+        if old[0]!=mode or old[1]!=field:
+            raise ValueError("STUDIO_PREVIEW_SAMPLING_ENGINE_CHANGED")
+        value=old[2]
+    else:value=p["samples"]
+    prior=int(getattr(owner,field))
+    # A change to Cycles.preview_samples does not change Cycles.samples;
+    # Eevee.taa_samples does not change Eevee.taa_render_samples.
+    native_final=(getattr(scene.cycles,"samples",None)
+                  if mode=="CYCLES_VIEWPORT" else
+                  getattr(getattr(scene,"eevee",None),"taa_render_samples",None))
+    try:
+        setattr(owner,field,int(value))
+        actual=int(getattr(owner,field))
+        if actual!=int(value):
+            raise ValueError("STUDIO_PREVIEW_NATIVE_SAMPLES_CLAMPED")
+        post_final=(getattr(scene.cycles,"samples",None)
+                    if mode=="CYCLES_VIEWPORT" else
+                    getattr(getattr(scene,"eevee",None),"taa_render_samples",None))
+        if post_final!=native_final:
+            raise ValueError("STUDIO_PREVIEW_FINAL_SAMPLES_CHANGED")
+    except Exception:
+        try:setattr(owner,field,prior)
+        except Exception:pass
+        raise
+    if p.get("restore",False):
+        _SAVED_SAMPLING.pop(key,None)
+    elif old is None:
+        _SAVED_SAMPLING[key]=(mode,field,prior)
+    for area in _views():area.tag_redraw()
+    return {"mode":mode,"render_engine":scene.render.engine,
+            "sample_control":field,"samples_before":prior,"samples_after":actual,
+            "original_restored":bool(p.get("restore",False)),
+            "high_gpu_load_explicitly_approved":bool(p.get("allow_high_gpu_load",False)),
+            "scene_viewport_setting_modified":prior!=actual,
+            "final_render_samples_modified":False,
+            "actual_device_gpu_speed_not_verified":True}
+
 def capabilities(p):
     C.validate("studio.preview.capabilities",p)
     gpu={"backend":"unknown","probe_success":False}
@@ -461,6 +538,7 @@ def capabilities(p):
             "profiles":list(C.PROFILES),"blender_version":bpy.app.version_string,
             "gpu":gpu,"running_view3d_areas":len(_views()),
             "native_global_aa_available":_aa_info()["available"],
+            "native_viewport_sampling":sampling_inspect(bpy.context.scene,{}),
             "core_engine_replaced":False,
             "commercial_DCC_capability_parity_claimed":False,
             "texture_or_mesh_reconstruction_available":False,
@@ -474,4 +552,6 @@ def execute(op,p,root,scene):
     if op=="studio.preview.profile.restore":return restore(scene,p)
     if op=="studio.preview.aa.inspect":return aa_inspect(p)
     if op=="studio.preview.aa.configure":return aa_configure(p)
+    if op=="studio.preview.sampling.inspect":return sampling_inspect(scene,p)
+    if op=="studio.preview.sampling.configure":return sampling_configure(scene,p)
     raise ValueError("STUDIO_PREVIEW_OPERATION_UNAVAILABLE")
