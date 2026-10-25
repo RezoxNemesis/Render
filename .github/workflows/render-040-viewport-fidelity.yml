@@ -51,6 +51,12 @@ jobs:
           LIBGL_ALWAYS_SOFTWARE: "1"
         run: |
           blender -b -noaudio --python-exit-code 1 --python tools/test_real_viewport_fidelity.py
+      - name: Verify real Cycles viewport sampling never changes final-render quality
+        env:
+          PYTHONPATH: full-app/scripts
+          LIBGL_ALWAYS_SOFTWARE: "1"
+        run: |
+          blender -b -noaudio --python-exit-code 1 --python tools/test_real_viewport_sampling.py
   real-blender-viewport-and-artist-ui:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
