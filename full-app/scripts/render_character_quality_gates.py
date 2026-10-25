@@ -189,7 +189,7 @@ def upright(scene,p):
     # image sits upright in the XZ plane when using front viewport.
     saved=obj.get("render_qa_reference_original_euler")
     if restore:
-        if not isinstance(saved,list) or len(saved)!=3:
+        if saved is None or not hasattr(saved,"__len__") or len(saved)!=3:
             raise ValueError("STUDIO_CHARACTER_QA_NO_ORIGINAL_ROTATION")
         expected=[float(x) for x in saved]
     else:
