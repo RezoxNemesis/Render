@@ -65,6 +65,10 @@ PROGRAM_OPS={
  "studio.reference.timeline.inspect":"assets",
  "studio.reference.timeline.scrub":"assets",
  "studio.timeline.scrub":"animation",
+ "studio.agent.bootstrap":"agent",
+ "studio.agent.batch.inspect":"agent",
+ "studio.agent.plan.preview":"agent",
+ "studio.agent.metrics":"agent",
 }
 MUTATING=frozenset(PROGRAM_OPS)-{
  "scene.inspect","animation.clip.inspect","animation.motion.audit",
