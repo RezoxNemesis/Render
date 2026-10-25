@@ -26,6 +26,23 @@ class RENDERSTUDIO_OT_direct_sculpt_enter(bpy.types.Operator):
         except (ValueError,RuntimeError,AttributeError) as error:
             self.report({"ERROR"},str(error));return {"CANCELLED"}
 
+class RENDERSTUDIO_OT_direct_sculpt_brush(bpy.types.Operator):
+    bl_idname="renderstudio.direct_sculpt_brush"
+    bl_label="Choose Real Sculpt Brush"
+    bl_description="Activate an installed Blender Essentials sculpt brush asset"
+    bl_options={"REGISTER"}
+    brush:bpy.props.EnumProperty(
+        name="Real Blender brush",
+        items=[(key,name,name) for key,name in Native.Contract.BRUSH_PRESETS.items()])
+    def execute(self,context):
+        try:
+            obj=_selected_mesh(context)
+            result=Native.select_brush(context.scene,{"object":obj.name,"brush":self.brush})
+            self.report({"INFO"},"Active Blender brush: "+result["native_blender_brush_asset"])
+            return {"FINISHED"}
+        except (ValueError,RuntimeError,AttributeError) as error:
+            self.report({"ERROR"},str(error));return {"CANCELLED"}
+
 class RENDERSTUDIO_OT_direct_sculpt_leave(bpy.types.Operator):
     bl_idname="renderstudio.direct_sculpt_leave"
     bl_label="Leave Sculpt Mode"
@@ -69,6 +86,11 @@ class RENDERSTUDIO_PT_direct_artist(bpy.types.Panel):
         layout.label(text="Select the character mesh first")
         col=layout.column(align=True)
         col.operator("renderstudio.direct_sculpt_enter",text="Enter Live Sculpt",icon="SCULPTMODE_HLT")
+        col.label(text="Native Sculpt Brushes")
+        for key,label in (("DRAW","Draw"),("SMOOTH","Smooth"),("GRAB","Grab"),
+                          ("CLAY_STRIPS","Clay Strips")):
+            button=col.operator("renderstudio.direct_sculpt_brush",text=label)
+            button.brush=key
         col.operator("renderstudio.direct_sculpt_inspect",text="Inspect Mesh and Brush")
         col.operator("renderstudio.direct_sculpt_leave",text="Exit Sculpt")
         if ob and ob.type=="MESH":
@@ -90,6 +112,7 @@ class RENDERSTUDIO_PT_direct_artist(bpy.types.Panel):
         layout.label(text="Camera motion is not animation")
 
 _CLASSES=(RENDERSTUDIO_OT_direct_sculpt_enter,
+          RENDERSTUDIO_OT_direct_sculpt_brush,
           RENDERSTUDIO_OT_direct_sculpt_leave,
           RENDERSTUDIO_OT_direct_sculpt_inspect,
           RENDERSTUDIO_PT_direct_artist)
