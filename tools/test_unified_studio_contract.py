@@ -113,6 +113,30 @@ class UnifiedStudioTest(unittest.TestCase):
             Q.submit(d,self.sample("5"*32))
             with self.assertRaises(ValueError):Q.get(d,"../../secrets")
 
+    def test_sculpt_plan_receipt_retains_only_verified_mesh_revision(self):
+        with tempfile.TemporaryDirectory() as d:
+            first={"operation":"studio.sculpt.brush",
+                   "payload":{"object":"Face","expected_sha256":"a"*64}}
+            second={"operation":"studio.sculpt.brush",
+                    "payload":{"object":"Face","expected_sha256":"$prev_mesh_sha256"}}
+            accepted=Q.submit(d,{"plan_id":"6"*32,"name":"Staged sculpture",
+                                 "steps":[first,second]})
+            assert accepted["state"]=="queued"
+            once=Q.tick(d,lambda op,payload,pid:{
+                "object":"Face","mesh_revision_after":"b"*64,
+                "native_blender_vertex_coordinates_updated":True})
+            self.assertEqual(once["result"],"succeeded")
+            stored=Q._load_file(Q._path(d,"6"*32))
+            self.assertEqual(stored["receipts"][0]["mesh_revision_after"],"b"*64)
+            self.assertEqual(stored["steps"][1]["payload"]["expected_sha256"],
+                             "$prev_mesh_sha256")
+            self.assertNotIn("mesh_revision_after",str(Q.list_jobs(d)))
+            # A synthetic executor is not allowed to mark an unsuccessful step
+            # complete merely because it produces JSON.
+            stopped=Q.tick(d,lambda op,payload,pid:{"paused":True})
+            self.assertEqual(stopped["result"],"needs_review")
+            self.assertTrue(Q.get(d,"6"*32)["requires_manual_review"])
+
     def test_tampered_checkpoint_is_never_executed(self):
         with tempfile.TemporaryDirectory() as d:
             ref=Q.submit(d,self.sample("e"*32))
