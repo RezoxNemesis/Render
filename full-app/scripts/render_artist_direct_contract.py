@@ -16,6 +16,7 @@ OPS = (
     "studio.artist.sculpt.stroke",
     "studio.artist.sculpt.leave",
     "studio.artist.sculpt.brush.select",
+    "studio.artist.surface.clone",
 )
 BRUSH_PRESETS = {"DRAW":"Draw","SMOOTH":"Smooth","GRAB":"Grab",
                  "CLAY_STRIPS":"Clay Strips","INFLATE":"Inflate","CREASE":"Crease"}
@@ -42,6 +43,7 @@ def validate(op, data):
                  "expected_view_sha256", "points"},
         OPS[3]: {"object", "viewport_index"},
         OPS[4]: {"object", "viewport_index", "brush"},
+        OPS[5]: {"object", "name", "voxel_size_m", "max_voxels", "location"},
     }[op]
     if set(data) - allowed or "object" not in data:
         raise ValueError("DIRECT_SCULPT_FIELDS_INVALID")
@@ -51,6 +53,20 @@ def validate(op, data):
         raise ValueError("DIRECT_SCULPT_VIEWPORT_INVALID")
     if op == OPS[4] and (type(data.get("brush")) is not str or data["brush"] not in BRUSH_PRESETS):
         raise ValueError("DIRECT_SCULPT_BRUSH_NOT_ALLOWED")
+    if op == OPS[5]:
+        if not {"name", "voxel_size_m", "location"} <= set(data):
+            raise ValueError("DIRECT_SCULPT_SURFACE_FIELDS_REQUIRED")
+        _object(data["name"])
+        if data["name"] == data["object"]:
+            raise ValueError("DIRECT_SCULPT_SURFACE_NAME_MUST_DIFFER")
+        _real(data["voxel_size_m"],.002,.05)
+        maximum=data.get("max_voxels",6000000)
+        if type(maximum) is not int or not 100000 <= maximum <= 16000000:
+            raise ValueError("DIRECT_SCULPT_VOXEL_BUDGET_INVALID")
+        point=data["location"]
+        if not isinstance(point,list) or len(point)!=3:
+            raise ValueError("DIRECT_SCULPT_SURFACE_LOCATION_INVALID")
+        for number in point:_real(number,-10000,10000)
     if op == OPS[2]:
         if not {"points", "expected_mesh_sha256", "expected_view_sha256"} <= set(data):
             raise ValueError("DIRECT_SCULPT_REVISION_REQUIRED")
@@ -109,13 +125,25 @@ def capabilities():
              "properties":{"x":{"type":"number","minimum":0,"maximum":1},
                            "y":{"type":"number","minimum":0,"maximum":1},
                            "pressure":{"type":"number","minimum":.01,"maximum":1}}}
+    specs={
+       OPS[0]:([],{}),OPS[1]:([],{}),OPS[3]:([],{}),
+       OPS[2]:(["expected_mesh_sha256","expected_view_sha256","points"],
+               {"expected_mesh_sha256":sha,"expected_view_sha256":sha,
+                "points":{"type":"array","minItems":2,"maxItems":MAX_POINTS,"items":point}}),
+       OPS[4]:(["brush"],{"brush":{"enum":list(BRUSH_PRESETS)}}),
+       OPS[5]:(["name","voxel_size_m","location"],
+               {"name":obj,
+                "voxel_size_m":{"type":"number","minimum":.002,"maximum":.05},
+                "max_voxels":{"type":"integer","minimum":100000,"maximum":16000000},
+                "location":{"type":"array","minItems":3,"maxItems":3,
+                            "items":{"type":"number","minimum":-10000,"maximum":10000}}}),
+    }
     return [{"operation":op,"workspace":"sculpt","requires_native_blender":True,
              "native_touch_event_fabricated":False,
              "actual_sculpt_operator_required":op == OPS[2],
+             "non_destructive_surface_copy":op == OPS[5],
              "input_schema":{"type":"object","additionalProperties":False,
-                "required":["object"] + (["expected_mesh_sha256","expected_view_sha256","points"] if op == OPS[2] else ["brush"] if op==OPS[4] else []),
-                "properties":dict({"object":obj,"viewport_index":viewport},
-                    **({"expected_mesh_sha256":sha,"expected_view_sha256":sha,
-                        "points":{"type":"array","minItems":2,"maxItems":MAX_POINTS,
-                                  "items":point}} if op == OPS[2] else {"brush":{"enum":list(BRUSH_PRESETS)}} if op==OPS[4] else {}))}}
+                "required":["object"]+specs[op][0],
+                "properties":dict({"object":obj,"viewport_index":viewport} if op!=OPS[5] else {"object":obj},
+                                  **specs[op][1])}}
             for op in OPS]
