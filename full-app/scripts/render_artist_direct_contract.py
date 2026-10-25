@@ -49,7 +49,7 @@ def validate(op, data):
     index = data.get("viewport_index", 0)
     if type(index) is not int or not 0 <= index <= 7:
         raise ValueError("DIRECT_SCULPT_VIEWPORT_INVALID")
-    if op == OPS[4] and data.get("brush") not in BRUSH_PRESETS:
+    if op == OPS[4] and (type(data.get("brush")) is not str or data["brush"] not in BRUSH_PRESETS):
         raise ValueError("DIRECT_SCULPT_BRUSH_NOT_ALLOWED")
     if op == OPS[2]:
         if not {"points", "expected_mesh_sha256", "expected_view_sha256"} <= set(data):
