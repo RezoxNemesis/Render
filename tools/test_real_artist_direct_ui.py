@@ -61,10 +61,28 @@ assert copy["connected_mesh_verified"] and copy["connected_components"]==1,copy
 assert copy["source_mesh_preserved"] and copy["source_animation_preserved"]
 assert scene.objects.get("SeparateConnectedSculptCopy") is not None
 assert Artist._revision(obj)==initial,"Sculpt copy damaged original mesh"
+# Two disconnected, visibly overlapping closed volumes: an authentic
+# miniature of the old character's independent anatomical rings.
+bpy.ops.mesh.primitive_uv_sphere_add(segments=16,ring_count=8,radius=.5,location=(0,0,0))
+a=bpy.context.object;a.name="DetachedBodyRings"
+bpy.ops.mesh.primitive_uv_sphere_add(segments=16,ring_count=8,radius=.5,location=(.45,0,0))
+b=bpy.context.object
+bpy.ops.object.select_all(action="DESELECT")
+a.select_set(True);b.select_set(True);bpy.context.view_layer.objects.active=a
+assert "FINISHED" in bpy.ops.object.join()
+assert Artist._components(a)["connected_components"]==2
+original_rings=Artist._revision(a)
+merged=Artist.surface_clone(scene,{"object":a.name,
+    "name":"RealMergedAnatomyCopy","voxel_size_m":.04,
+    "max_voxels":1500000,"location":[4,0,0]})
+assert merged["connected_components"]==1,merged
+assert Artist._components(a)["connected_components"]==2
+assert Artist._revision(a)==original_rings
 assert previous==(scene.render.engine,scene.render.resolution_x,
                  scene.render.resolution_y,scene.render.fps)
 print("PASS: real Blender live Sculpt Mode, actual VIEW_3D, topology and revision protection",flush=True)
 print("PASS: actual native voxel-remeshed connected copy, original retained",flush=True)
+print("PASS: two disconnected anatomical volumes genuinely united in a separate surface",flush=True)
 print("NOT YET VERIFIED: operator sculpt stroke changed mesh or Android touch mapping",flush=True)
 def close():
     bpy.ops.wm.quit_blender()
