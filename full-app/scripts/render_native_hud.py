@@ -21,6 +21,7 @@ _worker = None
 _event = {"state": "idle", "action": "", "object": None, "at": 0.0}
 _pointer = None
 _pointer_at = 0.0
+_verified_brush = None
 _last_draw_at = 0.0
 _draw_error = None
 _NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]{0,63}$")
@@ -42,7 +43,7 @@ def command_started(command):
 
 def command_finished(report):
     """Called only AFTER the native result was atomically written to the spool."""
-    global _event, _pointer
+    global _event, _pointer, _verified_brush
     result = report.get("result", {})
     if not isinstance(result, dict):
         result = {}
@@ -55,6 +56,14 @@ def command_finished(report):
     if state == "succeeded" and result.get("paused"):
         state = "paused"
     _event = dict(_event, state=state, object=name, at=time.monotonic())
+    if state=="succeeded" and result.get("native_blender_vertex_coordinates_updated") is True:
+        center=result.get("sculpt_center_local")
+        radius=result.get("sculpt_radius_local")
+        if (name and isinstance(center,list) and len(center)==3
+                and all(type(v) in (float,int) and math.isfinite(v) for v in center)
+                and type(radius) in (float,int) and math.isfinite(radius) and radius>0):
+            _verified_brush={"object":name,"center":list(center),
+                             "radius":float(radius),"at":time.monotonic()}
     _pointer = None
 
 
