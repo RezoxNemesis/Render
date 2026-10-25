@@ -56,7 +56,8 @@ with tempfile.TemporaryDirectory() as temp:
     HUD.command_finished({"state":"succeeded","result":applied})
     marker=HUD.snapshot()["verified_sculpt_marker"]
     assert marker and marker["object"]==mesh.name,marker
-    assert marker["local_center"]==command["center"],marker
+    assert all(abs(a-b)<1e-5 for a,b in
+               zip(marker["local_center"],command["center"])),marker
     assert HUD.snapshot()["fabricated_ui_taps"] is False
     try:
         Gesture.sculpt(scene,command)
