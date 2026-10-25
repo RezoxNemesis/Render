@@ -26,6 +26,7 @@ READS=frozenset((
     "reference.workspace.inspect",
     "studio.preview.capabilities","studio.preview.inspect",
     "studio.preview.diagnose","studio.preview.aa.inspect",
+    "studio.character.qa.inspect",
     "studio.preview.sampling.inspect",
 ))
 
