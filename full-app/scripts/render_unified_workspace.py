@@ -241,7 +241,8 @@ def _execute_step(op,payload,plan_id):
             "studio.reference.timeline.bind","studio.reference.timeline.scrub",
             "studio.preview.profile.apply","studio.preview.profile.restore",
             "studio.preview.aa.configure",
-            "studio.preview.sampling.configure"):
+            "studio.preview.sampling.configure",
+            "studio.character.qa.upright"):
         import render_artist_ops
         render_artist_ops.checkpoint(bpy.context.scene,_root(),"studio.plan."+op)
     import render_production
@@ -314,7 +315,8 @@ def _tool_index():
                         "render_ik_contract",
                         "render_reference_timeline",
                         "render_agent_fastlane",
-                        "render_viewport_fidelity_contract"):
+                        "render_viewport_fidelity_contract",
+                        "render_character_quality_gates"):
         try:
             import importlib
             module=importlib.import_module(module_name)
@@ -400,12 +402,17 @@ def execute(op,p,root,scene):
                           "studio.preview.profile.restore","studio.preview.aa.inspect",
                           "studio.preview.aa.configure",
                           "studio.preview.sampling.inspect",
-                          "studio.preview.sampling.configure"])
+                          "studio.preview.sampling.configure",
+                          "studio.character.qa.inspect",
+                          "studio.character.qa.upright"])
         return result
     if op=="studio.tool.search":return _tool_search(p)
     if op.startswith("studio.preview."):
         import render_viewport_fidelity
         return render_viewport_fidelity.execute(op,p,root,scene)
+    if op.startswith("studio.character.qa."):
+        import render_character_quality_gates
+        return render_character_quality_gates.execute(op,p,root,scene)
     if op in ("studio.agent.bootstrap","studio.agent.batch.inspect",
               "studio.agent.plan.preview","studio.agent.metrics"):
         import render_agent_fastlane
