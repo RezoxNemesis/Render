@@ -572,7 +572,20 @@ class RENDERSTUDIO_PT_unified(bpy.types.Panel):
             col.label(text="CC0 browser remains in Assets panel")
         else:
             col.label(text="ChatGPT actions execute in this Blender")
+            col.label(text="Fast start: studio.agent.bootstrap")
+            col.label(text="Batch: 1–6 safe native inspections")
             col.label(text="No synthetic pointer clicks")
+            try:
+                cache=Q.cache_stats()
+                col.label(text="Plan cache: "+str(cache["hits"])+
+                          " hits / "+str(cache["cached_receipts"])+" entries")
+                import render_agent_fastlane
+                events=render_agent_fastlane.metrics({"limit":1},_root(),scene)["measurements"]
+                if events:
+                    col.label(text="Last native inspect: "+
+                              str(events[-1]["elapsed_ms"])+" ms")
+            except (ValueError,ImportError,OSError,RuntimeError):
+                pass
             try:
                 state=Q.list_jobs(_root())
                 col.label(text="Queued plans: "+str(state["pending"]))
