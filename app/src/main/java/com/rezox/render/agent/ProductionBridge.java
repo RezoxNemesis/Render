@@ -35,6 +35,7 @@ public final class ProductionBridge {
         "studio.agent.plan.preview","studio.agent.metrics","studio.agent.status",
         "studio.preview.capabilities","studio.preview.inspect",
         "studio.preview.diagnose","studio.preview.profile.apply",
+        "studio.character.qa.inspect","studio.character.qa.upright",
         "studio.preview.profile.restore","studio.preview.aa.inspect",
         "studio.preview.aa.configure",
         "studio.preview.sampling.inspect","studio.preview.sampling.configure",
