@@ -27,7 +27,7 @@ public final class ProductionBridge {
         "animation.clip.create","animation.clip.inspect","animation.motion.audit",
         "studio.capabilities","studio.tool.search","studio.workspace.activate","studio.workspace.inspect",
         "studio.view.orbit","studio.editor.open","studio.sculpt.inspect","studio.sculpt.brush",
-        "studio.artist.sculpt.inspect","studio.artist.sculpt.enter","studio.artist.sculpt.stroke","studio.artist.sculpt.leave","studio.artist.sculpt.brush.select",
+        "studio.artist.sculpt.inspect","studio.artist.sculpt.enter","studio.artist.sculpt.stroke","studio.artist.sculpt.leave","studio.artist.sculpt.brush.select","studio.artist.surface.clone",
         "studio.pose.inspect","studio.pose.key","studio.timeline.scrub",
         "studio.ik.create","studio.ik.inspect","studio.ik.target","studio.ik.blend",
         "studio.reference.timeline.bind","studio.reference.timeline.inspect","studio.reference.timeline.scrub",
@@ -320,7 +320,7 @@ public final class ProductionBridge {
                 return ProductionVideoEncoder.encode(context,p.getString("job_id"),cancelled);
             }
         }
-        if(operation.equals("render.step")||operation.equals("instances.create")){
+        if(operation.equals("render.step")||operation.equals("instances.create")||operation.equals("studio.artist.surface.clone")){
             if(!gate.renderAllowed){
                 if(operation.equals("render.step")){
                     fields(p,"job_id");
