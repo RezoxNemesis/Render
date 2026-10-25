@@ -198,6 +198,14 @@ def observe_native(method,value):
     if method in ("command_started","command_finished"):_record(method,value)
 
 def _execute_step(op,payload,plan_id):
+    # The real typed payload identifies the actual live Blender target on
+    # screen before each serialized edit, never a fake mouse/tap path.
+    start={"args":{"operation":op,"payload":payload}}
+    try:
+        import render_native_hud
+        render_native_hud.command_started(start)
+    except (ImportError,AttributeError,RuntimeError):pass
+    observe_native("command_started",start)
     # Native Blender mutations run on this timer ONLY. Make a real .blend
     # checkpoint before a consequential step unless the existing operation
     # already checkpoints itself. No replay of an interrupted write.
@@ -215,12 +223,9 @@ def _execute_step(op,payload,plan_id):
         os.environ["RENDER_AGENT_SPOOL"],plan_id)
 
 def _step_start(pid,index,operation):
-    try:
-        import render_native_hud
-        render_native_hud.command_started({"action":"blender.production.execute",
-                                          "args":{"operation":operation}})
-    except (ImportError,AttributeError,RuntimeError):pass
-    observe_native("command_started",{"args":{"operation":operation}})
+    # The actual target/payload is emitted by _execute_step immediately
+    # before bpy executes it, avoiding duplicate generic "started" events.
+    pass
 
 def _step_end(pid,index,operation,state,result):
     packet={"state":"succeeded" if state=="succeeded" else "failed",
