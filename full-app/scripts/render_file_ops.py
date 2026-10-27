@@ -2,6 +2,7 @@
 """Structured import of owner-staged originals, executed only by Android Blender."""
 import json
 import contextlib
+import struct
 from pathlib import Path
 import uuid
 import bpy
@@ -97,14 +98,48 @@ def inspect(root,p):
     return base
 
 
+def _gltf_document(path):
+    """Read only bounded JSON, including external URIs inside binary GLB files.
+
+    The native importer sniffs the magic rather than trusting the extension.
+    Do the same here so renaming .gltf to .glb cannot skip dependency admission.
+    The binary payload stays untouched and is never read by this preflight.
+    """
+    maximum=64*1024*1024
+    with path.open('rb') as stream:
+        header=stream.read(20)
+        if header[:4]==b'glTF':
+            if len(header)!=20:raise ValueError('GLB_HEADER_INVALID')
+            _,version,total,length,kind=struct.unpack('<4sIII4s',header)
+            if version!=2 or total!=path.stat().st_size or kind!=b'JSON' or length%4 or length>total-20:
+                raise ValueError('GLB_HEADER_INVALID')
+            if length>maximum:raise ValueError('GLTF_JSON_TOO_LARGE_USE_GLB')
+            content=stream.read(length)
+            if len(content)!=length:raise ValueError('GLB_HEADER_INVALID')
+        else:
+            if path.stat().st_size>maximum:raise ValueError('GLTF_JSON_TOO_LARGE_USE_GLB')
+            stream.seek(0);content=stream.read(maximum+1)
+            if len(content)>maximum:raise ValueError('GLTF_JSON_TOO_LARGE_USE_GLB')
+    try:data=json.loads(content.decode('utf8'))
+    except (ValueError,UnicodeError,RecursionError):raise ValueError('GLTF_JSON_INVALID') from None
+    if not isinstance(data,dict):raise ValueError('GLTF_JSON_INVALID')
+    return data
+
+
 def _gltf_dependencies(path,directory):
-    if path.suffix.lower()!='.gltf':return
-    if path.stat().st_size>64*1024*1024:raise ValueError('GLTF_JSON_TOO_LARGE_USE_GLB')
-    data=json.loads(path.read_text())
+    if path.suffix.lower() not in ('.gltf','.glb'):return
+    data=_gltf_document(path)
     from urllib.parse import unquote, urlsplit
-    for item in data.get('buffers',[])+data.get('images',[]):
+    buffers,images=data.get('buffers',[]),data.get('images',[])
+    if not isinstance(buffers,list) or not isinstance(images,list):raise ValueError('GLTF_DEPENDENCIES_INVALID')
+    for item in buffers+images:
+        if not isinstance(item,dict):raise ValueError('GLTF_DEPENDENCIES_INVALID')
         uri=item.get('uri','')
-        if not uri or uri.startswith('data:'):continue
+        if not isinstance(uri,str):raise ValueError('GLTF_DEPENDENCIES_INVALID')
+        if not uri:continue
+        if uri.startswith('data:'):
+            if ';base64,' not in uri:raise ValueError('GLTF_DATA_URI_INVALID')
+            continue
         parts=urlsplit(uri)
         if parts.scheme or parts.netloc or parts.query or parts.fragment:raise ValueError('GLTF_EXTERNAL_URL_REQUIRES_EXPLICIT_BUNDLE')
         import posixpath

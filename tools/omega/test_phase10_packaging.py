@@ -16,29 +16,11 @@ class OmegaPackagingTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
         self.script = self.root / "render_agent_startup.py"
-        for name in ("render_agent_startup.py", "render_lively_scene.py",
-                     "render_batch_assembly.py", "render_session_tools.py",
-                     "render_v25_recovery.py", "render_assets.py", "render_native_hud.py",
-                     "render_production.py", "render_production_contract.py",
-                     "render_production_detail.py", "render_studio_ops.py",
-                     "render_studio_contract.py", "omega_registry.py",
-                     "render_file_contract.py", "render_file_ops.py",
-                     "render_artist_ops.py", "render_body_blockout.py",
-                     "render_character_tools.py", "render_asset_sources.py",
-                     "render_reference_motion.py", "render_reference_motion_contract.py",
-                     "render_unified_contract.py", "render_unified_queue.py",
-                     "render_unified_workspace.py", "render_unified_curves.py",
-                     "render_live_gestures.py",
-                     "render_ik_contract.py", "render_ik_control.py",
-                     "render_reference_timeline.py",
-                     "render_agent_fastlane_contract.py", "render_agent_fastlane.py",
-                     "render_viewport_fidelity_contract.py", "render_viewport_fidelity.py",
-                     "render_viewport_fidelity_ui.py",
-                     "render_workflow_contract.py", "render_workflow_ops.py",
-                     "render_workflow_ui.py",
-                     "render_ik_contract.py", "render_ik_control.py",
-                     "render_asset_library.py", "render_execution_settings.py"):
-            (self.root / name).write_text("# test-only synthetic module\n")
+        # Give the archive adapter a complete source tree. The behavior under
+        # test is registry uniqueness and refusing unowned Omega phases; an
+        # unrelated newly shipped startup module must not break that fixture.
+        for source in (ROOT / "full-app/scripts").glob("*.py"):
+            (self.root / source.name).write_text("# test-only synthetic module\n")
         (self.root / "omega").mkdir()
         (self.root / "omega/__init__.py").write_text("# init\n")
         (self.root / "omega/phase04_geometry.py").write_text("# phase test fixture\n")

@@ -71,6 +71,36 @@ class BlenderBridgeTests(unittest.TestCase):
         self.assertEqual("Starter", report["result"]["sample_objects"][0]["name"])
         self.assertEqual(1, report["result"]["total_objects"])
 
+    def test_native_startup_disables_embedded_script_auto_execution_in_memory(self):
+        self.context.preferences.filepaths=types.SimpleNamespace(use_scripts_auto_execute=True)
+        self.module._disable_script_auto_execution()
+        self.assertIs(False,self.context.preferences.filepaths.use_scripts_auto_execute)
+        # The bpy fixture deliberately has no save_userpref operator: this
+        # startup policy must never persistently rewrite the owner's settings.
+        self.module._disable_script_auto_execution()
+
+    def test_native_startup_rejects_missing_or_unenforceable_script_policy(self):
+        with self.assertRaisesRegex(RuntimeError,'NATIVE_SCRIPT_AUTO_EXECUTION_POLICY_UNAVAILABLE'):
+            self.module._disable_script_auto_execution()
+        class Unchanged:
+            @property
+            def use_scripts_auto_execute(self):return True
+            @use_scripts_auto_execute.setter
+            def use_scripts_auto_execute(self,value):pass
+        self.context.preferences.filepaths=Unchanged()
+        with self.assertRaisesRegex(RuntimeError,'NATIVE_SCRIPT_AUTO_EXECUTION_POLICY_UNAVAILABLE'):
+            self.module._disable_script_auto_execution()
+
+    def test_unsafe_real_runtime_cannot_register_command_timer(self):
+        fake=sys.modules['bpy'];fake.types=types.SimpleNamespace(Operator=object)
+        registrations=[]
+        fake.app.timers.register=lambda *a,**k:registrations.append(a)
+        spec=importlib.util.spec_from_file_location('render_agent_unsafe_test',MODULE)
+        module=importlib.util.module_from_spec(spec)
+        with self.assertRaisesRegex(RuntimeError,'NATIVE_SCRIPT_AUTO_EXECUTION_POLICY_UNAVAILABLE'):
+            spec.loader.exec_module(module)
+        self.assertEqual([],registrations)
+
     def test_long_command_refreshes_native_liveness_before_receipt_publication(self):
         ready=Path(self.tmp.name)/"ready"
         writer=self.module._write_result
@@ -110,6 +140,18 @@ class BlenderBridgeTests(unittest.TestCase):
         self.assertEqual(str(files / "render_bpy_jobs"), root)
         self.assertEqual("landscape", mode)
         self.assertFalse((files / "render_bpy_jobs/ready").exists())
+
+    def test_creator_focus_is_boolean_scoped_to_current_native_launch(self):
+        _,script=self.launch_fixture(creator_focus=True)
+        env={}
+        self.module._launch_settings(env,script)
+        self.assertEqual("1",env["RENDER_CREATOR_FOCUS"])
+        _,script=self.launch_fixture(creator_focus=False)
+        self.module._launch_settings(env,script)
+        self.assertNotIn("RENDER_CREATOR_FOCUS",env)
+        _,script=self.launch_fixture(creator_focus="true")
+        with self.assertRaisesRegex(ValueError,"INVALID_CREATOR_FOCUS"):
+            self.module._launch_settings({},script)
     def test_handoff_must_bind_readiness_to_a_real_launch_identity(self):
         for ident in ('', 'invalid', 'a'*35):
             _,script=self.launch_fixture(native_activity_launch_id=ident)

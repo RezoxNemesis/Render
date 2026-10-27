@@ -12,6 +12,7 @@ from collections import OrderedDict
 from pathlib import Path
 import time
 import uuid
+import re
 import render_unified_contract as C
 
 ACTIVE=frozenset(("queued","running","paused","needs_review"))
@@ -241,8 +242,10 @@ def tick(root,executor,on_start=None,on_finish=None,render_busy=False):
         return {"executed_steps":1,"result":"succeeded","job":C.public(row)}
     except Exception as exc:
         # No implicit retry/rollback of a side-effectful object edit.
+        message=str(exc)
+        code=message if re.fullmatch(r"[A-Z_]{3,96}",message) else "NATIVE_STEP_REQUIRES_INSPECTION"
         row["receipts"].append({"index":idx,"operation":op,"state":"needs_review",
-                                "error_type":type(exc).__name__})
+                                "error_type":type(exc).__name__,"error_code":code})
         row["state"]="needs_review"
         row["updated_epoch_ms"]=int(time.time()*1000)
         _save(path,row)
@@ -250,4 +253,4 @@ def tick(root,executor,on_start=None,on_finish=None,render_busy=False):
             try:on_finish(row["plan_id"],idx,op,"failed",None)
             except Exception:pass
         return {"executed_steps":1,"result":"needs_review",
-                "job":C.public(row),"error_code":"NATIVE_STEP_REQUIRES_INSPECTION"}
+                "job":C.public(row),"error_code":code}

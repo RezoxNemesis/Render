@@ -15,6 +15,22 @@ import static org.junit.Assert.*;
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk=33,manifest=Config.NONE)
 public class NativeEditorConfigurationTest {
+    @Test public void creatorLaunchRequestIsConsumedOnceWithoutChangingMobileMode()throws Exception{
+        Context app=RuntimeEnvironment.getApplication();
+        app.getSharedPreferences("render_mobile_ui",Context.MODE_PRIVATE).edit()
+            .putBoolean("creator_focus",true).putString("mode","landscape").commit();
+        NativeEditorConfiguration.publish(app);
+        File file=new File(app.getFilesDir(),"render_native_launch.json");
+        JSONObject first=new JSONObject(Files.readString(file.toPath()));
+        assertTrue(first.getBoolean("creator_focus"));
+        assertEquals("landscape",first.getString("mobile_mode"));
+        assertFalse(app.getSharedPreferences("render_mobile_ui",Context.MODE_PRIVATE)
+            .getBoolean("creator_focus",false));
+        NativeEditorConfiguration.publish(app);
+        JSONObject second=new JSONObject(Files.readString(file.toPath()));
+        assertFalse(second.getBoolean("creator_focus"));
+        assertEquals("landscape",second.getString("mobile_mode"));
+    }
     @Test public void launchIdentityChangesOnlyOnPublicationAndDoesNotCreateReadiness()throws Exception{
         Context app=RuntimeEnvironment.getApplication();File file=new File(app.getFilesDir(),"render_native_launch.json");
         File ready=new File(app.getFilesDir(),"render_bpy_jobs/ready");ready.getParentFile().mkdirs();

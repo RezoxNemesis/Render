@@ -1,5 +1,29 @@
 # Render — Native Blender for Android
 
+## Creator Studio 0.50
+
+The `upgrade/render-studio-050-creator-suite-20261028` candidate adds a guided
+**Create** workspace inside real Blender: editable props, seeded terrain,
+Geometry Nodes scattering, procedural materials, animation presets, camera
+shots and a deform-chain rig builder. The Android home screen opens this
+workspace directly and keeps full Blender, project recovery and ChatGPT
+connection controls accessible.
+
+ChatGPT discovers eleven new typed operations through the existing authenticated
+bridge. The offline brief planner offers ten documented recipes with a visible
+preview, scene checks and a digest-bound submission. Plans execute one native
+step at a time, checkpoint changes, and stop for review if the active scene or
+native session changes. It is a local recipe compiler, not an embedded language
+model; ChatGPT can compose the broader existing typed tool set.
+
+See [features and usage](docs/CREATOR_STUDIO_050.md),
+[release notes](docs/RELEASE_NOTES_050.md) and the
+[security review](docs/SECURITY_REVIEW_050.md).
+The build workflow verifies the complete ARM64 APK, historical signing identity
+and embedded Python sources. This candidate retains the existing pinned native
+Blender engine; it does **not** claim fivefold Blender performance or capability,
+full desktop parity, or a malware-free certification.
+
 **Goal:** bring Blender's real feature set to a phone-native Android application, with on-device computation and rendering. This project is separate from VideoStudio.
 
 ## Non-negotiable product contract
@@ -16,7 +40,7 @@ including the existing VideoStudio native Binder connection. The `app/` project
 also supplies the JNI bridge and project inspector; building only that module
 emits the smaller foundation APK, not the full editor.
 
-The 0.32.1 candidate retains the native-control, durable rendering and character
+The earlier 0.32.1 candidate retains the native-control, durable rendering and character
 review improvements. It adds artist-granted folders, durable original-file
 transfers, dependency bundles and discoverable native model/media import through
 the existing VideoStudio connection. See [release notes](docs/RELEASE_NOTES_0320.md),

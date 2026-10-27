@@ -158,7 +158,13 @@ class RenderSessionTests(unittest.TestCase):
 
     def test_viewport_stabilize_does_not_modify_geometry_or_render(self):
         size=(self.fake.scene.render.resolution_x,self.fake.scene.render.resolution_y)
-        audit=self.module.stabilize_viewport()
+        # This fixture deliberately has no native mathutils/viewport. Keep its
+        # legacy-runtime boundary explicit even when other tests add startup
+        # scripts to sys.path. Genuine viewport behavior has real bpy tests.
+        with patch.dict(sys.modules,{"render_viewport_fidelity":None}):
+            audit=self.module.stabilize_viewport()
+        self.assertFalse(audit["stabilization_available"])
+        self.assertEqual("NATIVE_FIDELITY_RUNTIME_NOT_LOADED",audit["reason"])
         self.assertFalse(audit["mesh_geometry_modified"])
         self.assertFalse(audit["final_render_samples_modified"])
         self.assertEqual(size,(self.fake.scene.render.resolution_x,self.fake.scene.render.resolution_y))

@@ -191,7 +191,7 @@ def restore_session(force=False):
         return {"restored": False, "reason": "NO_VALID_SAVED_SESSION"}
     if bpy.data.filepath and Path(bpy.data.filepath) == candidate:
         return {"restored": True, "already_open": True}
-    result = bpy.ops.wm.open_mainfile(filepath=str(candidate), load_ui=False)
+    result = bpy.ops.wm.open_mainfile(filepath=str(candidate), load_ui=False, use_scripts=False)
     if "FINISHED" not in result:
         raise RuntimeError("SESSION_RESTORE_FAILED")
     return {"restored": True, "filename": candidate.name}
@@ -228,7 +228,7 @@ def _restore_at_start():
         return None
     try:
         result = bpy.ops.wm.open_mainfile(
-            filepath=str(_RESTORE_RESULT), load_ui=False)
+            filepath=str(_RESTORE_RESULT), load_ui=False, use_scripts=False)
         if "FINISHED" not in result:
             print("Render session requires explicit manual recovery")
     except Exception as error:
@@ -548,6 +548,11 @@ def install():
               type(error).__name__,flush=True)
     import render_v25_recovery
     render_v25_recovery.install()
+    try:
+        import render_creator_ui
+        render_creator_ui.install()
+    except Exception as error:
+        print("Render Creator panel unavailable:", type(error).__name__, flush=True)
     try:
         import render_native_hud
         render_native_hud.install(render_progress)

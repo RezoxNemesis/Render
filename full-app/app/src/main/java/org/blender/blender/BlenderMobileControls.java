@@ -81,6 +81,10 @@ public final class BlenderMobileControls {
              .putString(MODE,mode).apply();
     }
 
+    public static void openCreator(Activity owner) {
+        send(owner,"blender.creator.open",new JSONObject());
+    }
+
     public static void applySafeInsets(Activity owner) {
         // NativeActivity's original LAYOUT_FULLSCREEN flags place the first
         // row of tiny Blender icons under display notches and status cutouts.
@@ -215,6 +219,7 @@ public final class BlenderMobileControls {
         });
 
         add(activity,tools,"⌂  Render Home",()->confirmHome(activity));
+        add(activity,tools,"＋  Creator · models, worlds & motion",()->openCreator(activity));
         add(activity,tools,"File browser access",()->{
             if(Build.VERSION.SDK_INT<30||android.os.Environment.isExternalStorageManager()){
                 toast(activity,"File browser access is already available");return;

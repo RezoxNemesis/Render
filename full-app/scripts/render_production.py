@@ -346,6 +346,24 @@ def execute(args, spool, command_id):
     operation,p=C.validate_envelope(args);root=_root(spool)
     scene=bpy.context.scene
     if scene is None:raise RuntimeError('NO_ACTIVE_SCENE')
+    if operation.startswith('studio.create.'):
+        import render_creator_contract as Creator
+        import render_creator_ops
+        # Reject malformed requests before writing a checkpoint. Each actual
+        # edit has one recoverable .blend copy, including queued recipe steps.
+        p=Creator.validate(operation,p)
+        receipt=None
+        if operation not in Creator.READ_ONLY:
+            _editable(scene)
+            import render_artist_ops
+            receipt=render_artist_ops.checkpoint(scene,root,operation)
+        result=render_creator_ops.execute(operation,p,root,scene)
+        if receipt is not None:result['checkpoint_before_change']=receipt
+        return result
+    if operation.startswith('studio.command.'):
+        import render_command_planner
+        if operation=='studio.command.submit':_editable(scene)
+        return render_command_planner.execute(operation,p,root,scene)
     if operation.startswith('studio.'):
         # Direct curve edits receive the same atomic native BLEND checkpoint
         # as queued edits; no action can mutate another scene without review.

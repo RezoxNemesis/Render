@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 
-const VERSION = "1.0.1";
+const VERSION = "1.0.2";
 const PROTOCOLS = ["2026-07-28", "2025-11-25", "2025-06-18", "2025-03-26"];
 const TERMINAL = new Set(["succeeded", "failed", "cancelled", "recovery_required"]);
 const enc = new TextEncoder();
@@ -99,18 +99,41 @@ function extractBearer(req) {
   if (!/^Bearer [A-Za-z0-9_-]{32,256}$/.test(a)) fail("AUTH_REQUIRED",401);
   return a.slice(7);
 }
+async function boundedBodyText(req, maximum) {
+  const declared=req.headers.get("content-length");
+  if (declared!==null && /^[0-9]+$/.test(declared) && Number(declared)>maximum) {
+    try { await req.body?.cancel(); } catch { /* Keep the size-limit response. */ }
+    fail("BODY_TOO_LARGE",413);
+  }
+  if (!req.body) return "";
+  const reader=req.body.getReader(),decoder=new TextDecoder();
+  let bytes=0,text="";
+  try {
+    while (true) {
+      const {done,value}=await reader.read();
+      if (done) break;
+      bytes+=value.byteLength;
+      // Bound bytes before decoding or retaining the chunk, including requests
+      // with missing/false Content-Length. req.text() would buffer it all first.
+      if (bytes>maximum) {
+        try { await reader.cancel(); } catch { /* Keep the size-limit response. */ }
+        fail("BODY_TOO_LARGE",413);
+      }
+      text+=decoder.decode(value,{stream:true});
+    }
+    return text+decoder.decode();
+  } finally { reader.releaseLock(); }
+}
 async function bodyJson(req, allowed) {
   if (!/application\/json/i.test(req.headers.get("content-type") || "")) fail("JSON_REQUIRED",415);
-  const txt = await req.text();
-  if (enc.encode(txt).byteLength > 524288) fail("BODY_TOO_LARGE",413);
+  const txt = await boundedBodyText(req,524288);
   let v; try { v=JSON.parse(txt); } catch { fail("INVALID_JSON"); }
   exactKeys(v,allowed);
   return v;
 }
 async function bodyForm(req, allowed) {
   if (!/application\/x-www-form-urlencoded/i.test(req.headers.get("content-type") || "")) fail("FORM_REQUIRED",415);
-  const txt = await req.text();
-  if (txt.length > 16384) fail("BODY_TOO_LARGE",413);
+  const txt = await boundedBodyText(req,16384);
   const p = new URLSearchParams(txt),out={};
   for (const [k,v] of p) {
     if (!allowed.includes(k) || Object.prototype.hasOwnProperty.call(out,k)) fail("INVALID_FORM");

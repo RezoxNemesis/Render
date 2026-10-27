@@ -17,6 +17,7 @@ HASH=re.compile(r"^[a-f0-9]{64}$")
 # Explicit allowlist, not a prefix or a heuristic about command names.
 # All implementations are owned by Render's current native bpy source.
 READS=frozenset((
+    "studio.create.catalog","studio.command.catalog","studio.command.preview",
     "scene.inspect","artist.inspect","material.inspect",
     "studio.sculpt.inspect","studio.pose.inspect","studio.ik.inspect",
     "studio.curve.inspect","studio.reference.timeline.inspect",

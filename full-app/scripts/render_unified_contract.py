@@ -29,6 +29,14 @@ WORKSPACES=(
 # Only exact existing approved production actions are allowed in an agent
 # multi-step plan. No arbitrary source code, bpy expression or file paths.
 PROGRAM_OPS={
+ "studio.create.catalog":"assets",
+ "studio.create.model":"assets",
+ "studio.create.terrain":"simulation",
+ "studio.create.scatter":"simulation",
+ "studio.create.material":"materials",
+ "studio.create.motion":"animation",
+ "studio.create.camera":"cinema",
+ "studio.create.rig":"characters",
  "scene.inspect":"agent",
  "mesh.create":"sculpt",
  "material.assign":"materials",
@@ -97,6 +105,7 @@ PROGRAM_OPS={
  "studio.drawing.strokes":"drawing",
 }
 MUTATING=frozenset(PROGRAM_OPS)-{
+ "studio.create.catalog",
  "scene.inspect","animation.clip.inspect","animation.motion.audit",
  "reference.workspace.inspect","reference.compare.multiview",
  "studio.sculpt.inspect","studio.artist.sculpt.inspect","studio.pose.inspect",
@@ -119,11 +128,11 @@ WORKSPACE_HINTS={
  "characters":("Armatures","Weight Paint","Shape Keys","Reference Fit"),
  "animation":("Action Editor","Graph Editor","NLA","Keyframes","Motion Audit"),
  "cinema":("Cameras","Lights","Compositor","Render Jobs"),
- "simulation":("Geometry Nodes","Rigid Body","Cloth","Particles"),
+ "simulation":("Geometry Nodes","Rigid Body","Cloth","Particles","Terrain","Maps","Forests","Scatter"),
  "materials":("Shader Editor","UV Editing","Texture Paint","PBR"),
  "drawing":("Grease Pencil","2D Camera","Dope Sheet","Onion Skin"),
- "assets":("Asset Browser","Reference Media","CC0 Catalog","Downloads"),
- "agent":("Plan Queue","Live Native Action","Recovery Ledger","Scene Checkpoint"),
+ "assets":("Asset Browser","Reference Media","CC0 Catalog","Downloads","Creator Models","Props"),
+ "agent":("Plan Queue","Live Native Action","Recovery Ledger","Scene Checkpoint","Command Preview","Recipes"),
 }
 
 def plan(request):
@@ -188,5 +197,9 @@ def public(record):
             "last_workspace":record.get("last_workspace",None),
             "updated_epoch_ms":record.get("updated_epoch_ms",0),
             "requires_manual_review":record.get("state")=="needs_review",
+            "bound_scene":record.get("execution_scope",{}).get("scene"),
+            "scene_binding_requires_current_native_session":bool(record.get("execution_scope")),
+            "last_error_code":next((r.get("error_code") for r in reversed(record.get("receipts",[]))
+                                    if r.get("state")=="needs_review"),None),
             "results":[{"index":x.get("index"),"operation":x.get("operation"),
                         "state":x.get("state")} for x in record.get("receipts",[])[-16:]]}

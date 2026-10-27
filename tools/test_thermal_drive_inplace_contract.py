@@ -8,14 +8,18 @@ def source(p):return (BASE/p).read_text()
 
 class ThermalDriveInplaceTests(unittest.TestCase):
     def test_no_release_signer_rotation_or_force_uninstall(self):
-        ci=source('.github/workflows/full-native-apk.yml')
+        ci=source('.github/workflows/render-050-creator-suite.yml')
         self.assertIn('fail-on-cache-miss: true',ci)
         self.assertIn('f3d63fb20be25ca0be8aa6a161d5cf13cd98ba2fa300c7a604cce35131b9eb30',ci.lower())
         self.assertNotIn('keytool -genkeypair',ci)
         self.assertNotIn('adb uninstall',ci)
         current=re.search(r"new='versionCode = ([0-9]+)'",source("tools/prepare_production_toolkit.py"))
         self.assertIsNotNone(current)
-        self.assertIn("versionCode='"+current.group(1)+"'",ci)
+        from tools.verify_creator_apk import VERSION_CODE, SIGNER_SHA256
+        self.assertEqual(current.group(1),VERSION_CODE)
+        self.assertIn('tools/verify_creator_apk.py',ci)
+        self.assertIn('--source-sha "$SOURCE_SHA"',ci)
+        self.assertIn(SIGNER_SHA256,ci.lower())
         prep=source('tools/prepare_production_toolkit.py')
         self.assertIn('versionCode = 24',prep)
         self.assertIn('versionCode = 25',(ROOT/'tools/prepare_v23_reference.py').read_text())

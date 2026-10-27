@@ -15,6 +15,25 @@ import time
 
 import bpy
 
+
+def _disable_script_auto_execution():
+    """Keep imported .blend text/drivers from opting into Python at startup.
+
+    This changes only this Blender session. Trusted scripts can still be run
+    explicitly by the owner; no saved preference file is rewritten here.
+    A real runtime without the security switch must not start the executor.
+    """
+    try:
+        filepaths = bpy.context.preferences.filepaths
+        if not hasattr(filepaths, "use_scripts_auto_execute"):
+            raise AttributeError("missing auto-execution preference")
+        filepaths.use_scripts_auto_execute = False
+        if filepaths.use_scripts_auto_execute is not False:
+            raise RuntimeError("auto-execution preference did not change")
+    except Exception:
+        raise RuntimeError("NATIVE_SCRIPT_AUTO_EXECUTION_POLICY_UNAVAILABLE") from None
+
+
 def _launch_settings(environ, script_file):
     """Read Java's private handoff when native-bridge environ is a snapshot.
 
@@ -47,6 +66,11 @@ def _launch_settings(environ, script_file):
             if not isinstance(launch, str) or not re.fullmatch(r"[a-f0-9-]{36}", launch):
                 raise ValueError("INVALID_NATIVE_LAUNCH_ID")
             environ["RENDER_NATIVE_LAUNCH_ID"] = launch
+            focus=settings.get("creator_focus",False)
+            if type(focus) is not bool:
+                raise ValueError("INVALID_CREATOR_FOCUS")
+            if focus:environ["RENDER_CREATOR_FOCUS"]="1"
+            else:environ.pop("RENDER_CREATOR_FOCUS",None)
     return root, mode
 
 
@@ -84,6 +108,7 @@ except (OSError, ValueError) as error:
     print("Render native thumbnail cache unavailable:", type(error).__name__, flush=True)
 # Real native Blender has bpy.types.Operator; host protocol tests use bpy doubles.
 if getattr(getattr(bpy, "types", None), "Operator", None) is not None:
+    _disable_script_auto_execution()
     import sys as _render_sys
     _native_startup_dir = str(Path(__file__).resolve().parent)
     if _native_startup_dir not in _render_sys.path:
@@ -459,6 +484,10 @@ def _dispatch(command):
         import render_production
         return render_production.execute(args, ROOT, command.get("id"))
     # Local touch-overlay UI operations; NOT remotely registered agent actions.
+    if action == "blender.creator.open":
+        if args:raise ValueError("UNEXPECTED_ARGUMENT")
+        import render_creator_ui
+        return render_creator_ui.open_creator_workspace()
     if action == "blender.ui.adjust_scale":
         if set(args) != {"delta"} or not _number(args.get("delta"), -.25, .25):
             raise ValueError("INVALID_UI_SCALE_STEP")

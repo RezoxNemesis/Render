@@ -2,6 +2,7 @@
 import importlib.util
 from pathlib import Path
 import json
+import struct
 import sys
 import tempfile
 from types import SimpleNamespace as N
@@ -39,6 +40,49 @@ class FileOpsTests(unittest.TestCase):
             for uri in ('../../outside','/private','https://example.com/a','../textures/missing.bin'):
                 model.write_text(json.dumps({'buffers':[{'uri':uri}]}))
                 with self.assertRaises(ValueError):O._gltf_dependencies(model,root)
+    def glb(self,data):
+        content=json.dumps(data).encode('utf8')
+        content+=b' '*((-len(content))%4)
+        return struct.pack('<4sII',b'glTF',2,20+len(content))+struct.pack('<I4s',len(content),b'JSON')+content
+    def test_glb_external_dependencies_use_same_scope_checks_as_gltf(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);directory=root/'bundle';directory.mkdir()
+            (directory/'models').mkdir();(directory/'textures').mkdir()
+            (directory/'textures/data.bin').write_bytes(b'fixture')
+            outside=root/'private.bin';outside.write_bytes(b'private fixture')
+            (directory/'textures/link.bin').symlink_to(outside)
+            model=directory/'models/scene.glb'
+            for field in ('buffers','images'):
+                model.write_bytes(self.glb({field:[{'uri':'../textures/data.bin'}]}))
+                O._gltf_dependencies(model,directory)
+                for uri in ('../../private.bin',str(outside),'%2e%2e/%2e%2e/private.bin',
+                            '../textures/link.bin','https://example.com/remote.bin'):
+                    with self.subTest(field=field,uri=uri):
+                        model.write_bytes(self.glb({field:[{'uri':uri}]}))
+                        with self.assertRaises(ValueError):O._gltf_dependencies(model,directory)
+            self.assertEqual(b'private fixture',outside.read_bytes())
+    def test_gltf_sniffs_format_like_native_importer_instead_of_trusting_suffix(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)
+            malicious={'buffers':[{'uri':'../private.bin'}]}
+            for suffix,data in (('.glb',json.dumps(malicious).encode()),('.gltf',self.glb(malicious))):
+                model=root/('scene'+suffix);model.write_bytes(data)
+                with self.assertRaises(ValueError):O._gltf_dependencies(model,root)
+    def test_glb_embedded_buffers_and_images_need_no_external_files(self):
+        with tempfile.TemporaryDirectory() as temp:
+            model=Path(temp)/'embedded.glb'
+            model.write_bytes(self.glb({'buffers':[{'byteLength':0}],
+                'images':[{'uri':'data:image/png;base64,AA=='}]}))
+            O._gltf_dependencies(model,Path(temp))
+    def test_glb_bad_lengths_and_unbounded_json_fail_before_native_import(self):
+        with tempfile.TemporaryDirectory() as temp:
+            model=Path(temp)/'malformed.glb';valid=self.glb({'buffers':[]})
+            for data in (b'glTF',valid[:-1],valid[:4]+struct.pack('<I',1)+valid[8:],
+                         valid[:12]+struct.pack('<I4s',64*1024*1024+4,b'JSON')+valid[20:],
+                         valid[:16]+b'BIN\0'+valid[20:]):
+                with self.subTest(header=data[:20]):
+                    model.write_bytes(data)
+                    with self.assertRaises(ValueError):O._gltf_dependencies(model,Path(temp))
     def test_blend_selection_rejects_duplicates_non_names_and_unbounded_sets(self):
         for values in (['a','a'],[{}],[''],['a']*129):
             with self.assertRaises(ValueError):O._names({'objects':values},'objects')

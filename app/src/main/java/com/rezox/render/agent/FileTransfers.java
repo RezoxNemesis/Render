@@ -90,13 +90,7 @@ public final class FileTransfers {
         if(kind.equals("import")||kind.equals("export"))p.getString("location_id");
     }
     private static URL url(String raw)throws Exception{
-        URL result=new URL(raw);
-        if(!result.getProtocol().equals("https")||result.getHost().isEmpty()||result.getUserInfo()!=null||raw.length()>8192)
-            throw new IllegalArgumentException("TRANSFER_REQUIRES_HTTPS_FILE_REFERENCE");
-        String host=result.getHost().toLowerCase(java.util.Locale.ROOT);
-        if(host.equals("localhost")||host.endsWith(".localhost")||host.equals("::1")||host.startsWith("127.")||host.equals("0.0.0.0"))
-            throw new IllegalArgumentException("LOCAL_NETWORK_SOURCE_UNAVAILABLE");
-        return result;
+        return FileTransferSources.checked(raw);
     }
     public static JSONObject enqueue(Context c,String kind,JSONObject p)throws Exception{
         validate(kind,p);

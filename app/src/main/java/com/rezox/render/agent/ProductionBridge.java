@@ -19,6 +19,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class ProductionBridge {
     public static final String ACTION="production.execute";
     private static final String[] OPS={"capabilities","device.profile","editor.open","screenshot.capture","screenshot.preview","file.importers","file.inspect","file.import",
+        "studio.create.catalog","studio.create.model","studio.create.terrain","studio.create.scatter","studio.create.material","studio.create.motion","studio.create.camera","studio.create.rig",
+        "studio.command.catalog","studio.command.preview","studio.command.submit",
         "artifact.read","artifact.export","reference.write","project.create","project.checkpoint","project.list","project.restore","mesh.edit","curve.create","shape.create","shape.keys","rig.create","rig.bind","rig.keys",
         "scene.inspect","mesh.create","body.blockout","camera.frame","viewport.orient","sculpt.prepare","asset.create","material.assign","group.create","animation.keys","camera.aim",
         "world.configure","instances.plan","instances.create","reference.attach",
@@ -117,6 +119,11 @@ public final class ProductionBridge {
                 .put("supports_readonly_ui_state",true)
                 .put("viewport_precision_controls_available",true)
                 .put("native_operator_coverage","explicit allowlist, not arbitrary Python").put("free_procedural_asset_presets",17).put("free_assets_native_editable",true)
+                .put("creator_suite", "0.50.0")
+                .put("creator_catalog_operation", "studio.create.catalog")
+                .put("command_preview_operation", "studio.command.preview")
+                .put("command_submit_requires_preview_sha256", true)
+                .put("offline_brief_planner", "bounded recipes, not a language model")
                 .put("thermal_severe_is_safely_paused",true)
                 .put("drive_backup_via","user-granted Android Storage Access Framework; cloud storage only")
                 .put("drive_folder_granted",ProductionDriveStorage.status(context).getBoolean("folder_granted"))

@@ -10,6 +10,7 @@ import math
 import os
 from pathlib import Path
 import time
+import uuid
 
 import bpy
 from mathutils import Quaternion, Vector
@@ -22,6 +23,8 @@ TIMER_INSTALLED=False
 _LAST_EDITOR_AREA=0
 _ACTIVITY=deque(maxlen=64)
 _LAST_TIMER_ERROR=""
+_PLAN_SESSION=uuid.uuid4().hex
+_PLAN_SCENES={}
 SECTIONS=tuple((row[0],row[1],"Native Blender: "+row[3]) for row in C.WORKSPACES)
 
 def _root():
@@ -198,6 +201,19 @@ def observe_native(method,value):
     if method in ("command_started","command_finished"):_record(method,value)
 
 def _execute_step(op,payload,plan_id):
+    # A queue is durable, but an active Blender scene is not an implicit target.
+    # Hold the real ID reference for this native session. Switching/reopening
+    # a project or restarting the process requires a fresh reviewed plan.
+    record=Q._load_file(Q._path(_root(),plan_id))
+    scope=record.get("execution_scope",{})
+    if scope.get("session")!=_PLAN_SESSION:
+        raise ValueError("STUDIO_PLAN_SESSION_CHANGED")
+    bound=_PLAN_SCENES.get(plan_id)
+    try:
+        valid=bound is not None and bound==bpy.context.scene and bool(bound.name)
+    except ReferenceError:
+        valid=False
+    if not valid:raise ValueError("STUDIO_PLAN_SCENE_CHANGED")
     # Chained geometry operations derive the next SHA only from the immediately
     # preceding verified brush receipt in this exact owner-private plan.
     # No eval, arbitrary result substitutions or blind overwrite of other edits.
@@ -250,7 +266,7 @@ def _execute_step(op,payload,plan_id):
     # Native Blender mutations run on this timer ONLY. Make a real .blend
     # checkpoint before a consequential step unless the existing operation
     # already checkpoints itself. No replay of an interrupted write.
-    if op in C.MUTATING and op not in (
+    if op in C.MUTATING and not op.startswith("studio.create.") and op not in (
             "studio.workspace.activate","studio.view.orbit",
             "body.blockout","reference.workspace.open",
             "reference.fit.landmarks","reference.fit.multiview",
@@ -290,6 +306,8 @@ def _step_end(pid,index,operation,state,result):
         render_native_hud.command_finished(packet)
     except (ImportError,AttributeError,RuntimeError):pass
     observe_native("command_finished",packet)
+    if state=="succeeded" and Q.get(_root(),pid)["state"]=="completed":
+        _PLAN_SCENES.pop(pid,None)
 
 def _tick():
     global _LAST_TIMER_ERROR
@@ -336,6 +354,7 @@ def _tool_index():
         artist=render_artist_ops.SCHEMAS
     except ImportError:artist={}
     schemas={}
+    descriptors={}
     for module_name in ("render_reference_motion_contract",
                         "render_unified_curves",
                         "render_live_gestures",
@@ -343,6 +362,8 @@ def _tool_index():
                         "render_ik_contract",
                         "render_reference_timeline",
                         "render_agent_fastlane",
+                        "render_creator_contract",
+                        "render_command_contract",
                         "render_viewport_fidelity_contract",
                         "render_workflow_contract"):
         try:
@@ -351,6 +372,7 @@ def _tool_index():
             definitions=module.capabilities()
             for row in definitions:
                 schemas[row["operation"]]=row.get("input_schema",{})
+                descriptors[row["operation"]]=row
         except ImportError:
             continue
     rows=[]
@@ -363,9 +385,12 @@ def _tool_index():
             elif op.startswith(("material.",)):group="materials"
             elif op.startswith(("mesh.","sculpt.")):group="sculpt"
             else:group="agent"
+        descriptor=descriptors.get(op,{})
         rows.append({"operation":op,"workspace":group,
              "route":"production.execute","known_in_native_registry":op in native,
              "batch_supported":op in C.PROGRAM_OPS,
+             "description":descriptor.get("description",""),
+             "read_only":descriptor.get("read_only",op in C.READ_ONLY),
              "input_schema":schemas.get(op,{"fields":artist.get(op,[])})})
     return tuple(rows)
 
@@ -385,7 +410,8 @@ def _tool_search(p):
     for row in _tool_index():
         group=row["workspace"]
         if work is not None and work!=group:continue
-        score=Agent.rank(q,row["operation"],group,C.WORKSPACE_HINTS.get(group,()))
+        hints=(*C.WORKSPACE_HINTS.get(group,()),row.get("description",""))
+        score=Agent.rank(q,row["operation"],group,hints)
         if score>0:scored.append((score,row["operation"],row))
     scored.sort(key=lambda item:(-item[0],item[1]))
     return {"query":q,"matches":[dict(item[2],match_score=item[0])
@@ -439,8 +465,18 @@ def execute(op,p,root,scene):
                           "studio.motion.nla.create","studio.compositor.grade",
                           "studio.compositor.inspect","studio.sim.rigidbody",
                           "studio.drawing.strokes"])
+        import render_creator_contract as Creator
+        import render_command_contract as Commands
+        result["api_supported_ops"].extend(sorted(set(Creator.OPS)|set(Commands.OPS)))
+        result["creator_suite_contract"]=Creator.VERSION
         return result
     if op=="studio.tool.search":return _tool_search(p)
+    if op.startswith(("studio.create.","studio.command.")):
+        # Keep the public route identical for UI, ChatGPT and queued edits.
+        # The production dispatcher owns validation and checkpoints.
+        import render_production
+        return render_production.execute({"operation":op,"payload":p},
+                                         str(Path(root).parent/"render_bpy_jobs"),None)
     if op.startswith("studio.preview."):
         import render_viewport_fidelity
         return render_viewport_fidelity.execute(op,p,root,scene)
@@ -495,8 +531,18 @@ def execute(op,p,root,scene):
                 "live_pointer_is_real_input":False}
     if op=="studio.plan.submit":
         _check(p,("plan_id","name","steps"),("steps",))
+        if scene!=bpy.context.scene:raise ValueError("STUDIO_PLAN_ACTIVE_SCENE_REQUIRED")
         install_timer()
-        return Q.submit(root,p)
+        accepted=Q.submit(root,p)
+        if not accepted["idempotent"]:
+            pid=accepted["plan_id"]
+            path=Q._path(root,pid)
+            record=Q._load_file(path)
+            record["execution_scope"]={"session":_PLAN_SESSION,"scene":scene.name}
+            Q._save(path,record)
+            _PLAN_SCENES[pid]=scene
+            accepted=dict(Q.get(root,pid),idempotent=False)
+        return accepted
     if op=="studio.plan.list":
         _check(p,())
         return Q.list_jobs(root)
@@ -506,7 +552,9 @@ def execute(op,p,root,scene):
         if op=="studio.plan.status":return Q.get(root,job)
         if op=="studio.plan.pause":return Q.pause(root,job)
         if op=="studio.plan.resume":return Q.resume(root,job)
-        return Q.cancel(root,job)
+        result=Q.cancel(root,job)
+        _PLAN_SCENES.pop(job,None)
+        return result
     raise ValueError("STUDIO_OPERATION_UNAVAILABLE")
 
 class RENDERSTUDIO_OT_open_native_editor(bpy.types.Operator):

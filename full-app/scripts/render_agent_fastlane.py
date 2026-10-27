@@ -66,6 +66,7 @@ def bootstrap(p,root,scene):
         "remote_eval_enabled":False,
         "same_call_can_create_objects":False,
         "recommended_next_operations":[
+            "studio.command.catalog","studio.command.preview","studio.create.catalog",
             "studio.agent.batch.inspect","studio.agent.plan.preview",
             "studio.tool.search","studio.plan.submit"]
     }

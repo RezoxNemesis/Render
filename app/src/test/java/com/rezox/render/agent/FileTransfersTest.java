@@ -98,6 +98,24 @@ public class FileTransfersTest {
         assertTrue(refreshed.getBoolean("digest_and_size_unchanged"));assertFalse(refreshed.toString().contains("token="));
         assertTrue(FileTransfers.enqueue(c,"fetch",payload).getBoolean("already_requested"));
     }
+    @Test public void fetchAndRefreshRejectLiteralLocalSourcesBeforeQueueing()throws Exception{
+        Context c=RuntimeEnvironment.getApplication();
+        JSONObject payload=new JSONObject().put("request_id","source-boundary-0001")
+            .put("url","https://never-resolve-this.invalid/asset")
+            .put("name","asset.glb").put("expected_sha256","a".repeat(64)).put("expected_bytes",100);
+        String id=FileTransfers.enqueue(c,"fetch",payload).getString("transfer_id");
+        FileTransfers.control(c,id,"pause");
+        for(String url:new String[]{"https://[::1]/asset","https://localhost./asset",
+                "https://10.0.0.1/asset","https://169.254.169.254/asset",
+                "https://[fd00::1]/asset","https://2130706433/asset"}){
+            try{FileTransfers.enqueue(c,"fetch",new JSONObject(payload.toString())
+                .put("request_id","rejected-source-0001").put("url",url));fail();}
+            catch(IllegalArgumentException expected){assertEquals("LOCAL_NETWORK_SOURCE_UNAVAILABLE",expected.getMessage());}
+            try{FileTransfers.refresh(c,id,url);fail();}
+            catch(IllegalArgumentException expected){assertEquals("LOCAL_NETWORK_SOURCE_UNAVAILABLE",expected.getMessage());}
+        }
+        assertEquals("paused",FileTransfers.status(c,id).getString("state"));
+    }
     @Test public void resumingAnUncommittedExportRefusesAnArtistEditedDestination()throws Exception{
         Context c=RuntimeEnvironment.getApplication();File source=ProductionFiles.file(c,"Exports","resumable.txt");
         Files.write(source.toPath(),"artist output".getBytes(StandardCharsets.UTF_8));String sha=ProductionFiles.sha(source);

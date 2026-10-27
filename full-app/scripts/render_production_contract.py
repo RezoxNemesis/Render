@@ -7,6 +7,10 @@ from pathlib import Path
 import re
 
 OPERATIONS = frozenset((
+    'studio.create.catalog','studio.create.model','studio.create.terrain',
+    'studio.create.scatter','studio.create.material','studio.create.motion',
+    'studio.create.camera','studio.create.rig',
+    'studio.command.catalog','studio.command.preview','studio.command.submit',
     'file.importers','file.inspect','file.import',
     'artist.capabilities','artist.inspect','body.blockout','camera.frame','viewport.orient','sculpt.prepare','object.duplicate','object.remove','sculpt.mask','sculpt.stroke','facial.expression','material.inspect','light.configure','camera.configure','media.import','project.export',
     'studio.artist.sculpt.inspect','studio.artist.sculpt.enter','studio.artist.sculpt.stroke','studio.artist.sculpt.leave','studio.artist.sculpt.brush.select','studio.artist.surface.clone',
