@@ -188,8 +188,13 @@ export class RenderRelayDO extends DurableObject {
     };
     try {
       if (!this.env.ENROLLMENT_SECRET || this.env.ENROLLMENT_SECRET.length<32) fail("RELAY_NOT_CONFIGURED",503);
-      const originHeader=req.headers.get("origin");
-      if (originHeader && originHeader!==origin && originHeader!=="https://chatgpt.com") fail("ORIGIN_FORBIDDEN",403);
+      // Do not reject OAuth navigation or MCP requests merely for their Origin
+      // header. Mobile browsers (including privacy modes) may set Origin to
+      // "null" or the initiating page, and OAuth metadata is public by design.
+      // Browser-origin checks are NOT authorization: bearer tokens protect the
+      // MCP/device APIs; /oauth/approve separately enforces same-origin POST
+      // plus the unguessable, HttpOnly CSRF-bound cookie.
+      // See the explicit /oauth/approve check below.
       let response;
       if (path==="/health" && req.method==="GET") {
         response=json({ok:true,service:"chatgpt-render-relay",version:VERSION,executes_blender:false,transport:"direct-native-render"});
