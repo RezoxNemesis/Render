@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 
-const VERSION = "1.0.0";
+const VERSION = "1.0.1";
 const PROTOCOLS = ["2026-07-28", "2025-11-25", "2025-06-18", "2025-03-26"];
 const TERMINAL = new Set(["succeeded", "failed", "cancelled", "recovery_required"]);
 const enc = new TextEncoder();
