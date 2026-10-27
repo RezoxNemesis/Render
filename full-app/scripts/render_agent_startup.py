@@ -15,13 +15,117 @@ import time
 
 import bpy
 
-ROOT = os.environ.get("RENDER_AGENT_SPOOL", "")
-MOBILE_MODE = os.environ.get("RENDER_MOBILE_UI_MODE", "")
+
+def _disable_script_auto_execution():
+    """Keep imported .blend text/drivers from opting into Python at startup.
+
+    This changes only this Blender session. Trusted scripts can still be run
+    explicitly by the owner; no saved preference file is rewritten here.
+    A real runtime without the security switch must not start the executor.
+    """
+    try:
+        filepaths = bpy.context.preferences.filepaths
+        if not hasattr(filepaths, "use_scripts_auto_execute"):
+            raise AttributeError("missing auto-execution preference")
+        filepaths.use_scripts_auto_execute = False
+        if filepaths.use_scripts_auto_execute is not False:
+            raise RuntimeError("auto-execution preference did not change")
+    except Exception:
+        raise RuntimeError("NATIVE_SCRIPT_AUTO_EXECUTION_POLICY_UNAVAILABLE") from None
+
+
+def _launch_settings(environ, script_file):
+    """Read Java's private handoff when native-bridge environ is a snapshot.
+
+    The file cannot name paths or tools. The spool is derived from this bundled
+    startup script's exact Android runtime layout, never from JSON input.
+    """
+    root = environ.get("RENDER_AGENT_SPOOL", "")
+    mode = environ.get("RENDER_MOBILE_UI_MODE", "")
+    script = Path(script_file).resolve()
+    parents = script.parents
+    if (len(parents) >= 5 and parents[0].name == "startup"
+            and parents[1].name == "scripts"
+            and re.fullmatch(r"[0-9]+\.[0-9]+", parents[2].name)
+            and parents[3].name == "blender" and parents[4].name == "files"):
+        settings_file = parents[4] / "render_native_launch.json"
+        if settings_file.is_file() and not settings_file.is_symlink():
+            if settings_file.stat().st_size > 1024:
+                raise ValueError("NATIVE_LAUNCH_CONFIGURATION_TOO_LARGE")
+            settings = json.loads(settings_file.read_text(encoding="utf8"))
+            if (not isinstance(settings, dict) or settings.get("schema_version") != 1
+                    or settings.get("target_package") != "com.rezox.render"
+                    or settings.get("command_spool_enabled") is not True
+                    or settings.get("mobile_mode") not in ("portrait", "landscape")):
+                raise ValueError("INVALID_NATIVE_LAUNCH_CONFIGURATION")
+            spool = parents[4] / "render_bpy_jobs"
+            if spool.is_symlink():
+                raise ValueError("NATIVE_LAUNCH_SPOOL_SYMLINK")
+            root, mode = str(spool), settings["mobile_mode"]
+            launch = settings.get("native_activity_launch_id", "")
+            if not isinstance(launch, str) or not re.fullmatch(r"[a-f0-9-]{36}", launch):
+                raise ValueError("INVALID_NATIVE_LAUNCH_ID")
+            environ["RENDER_NATIVE_LAUNCH_ID"] = launch
+            focus=settings.get("creator_focus",False)
+            if type(focus) is not bool:
+                raise ValueError("INVALID_CREATOR_FOCUS")
+            if focus:environ["RENDER_CREATOR_FOCUS"]="1"
+            else:environ.pop("RENDER_CREATOR_FOCUS",None)
+    return root, mode
+
+
+def _native_cache_settings(environ, script_file, root):
+    """Keep native thumbnails in Android's private cache, without changing HOME."""
+    parents = Path(script_file).resolve().parents
+    if (not root or len(parents) < 5 or parents[0].name != "startup"
+            or parents[1].name != "scripts" or parents[3].name != "blender"
+            or parents[4].name != "files"
+            or not re.fullmatch(r"[0-9]+\.[0-9]+", parents[2].name)
+            or Path(root).resolve() != parents[4] / "render_bpy_jobs"):
+        return None
+    if environ.get("XDG_CACHE_HOME"):
+        return environ["XDG_CACHE_HOME"]
+    cache = parents[4].parent / "cache" / "blender"
+    if cache.is_symlink() or cache.parent.is_symlink():
+        raise ValueError("NATIVE_CACHE_SYMLINK")
+    cache.mkdir(mode=0o700, parents=True, exist_ok=True)
+    environ["XDG_CACHE_HOME"] = str(cache)
+    return str(cache)
+
+
+ROOT, MOBILE_MODE = _launch_settings(os.environ, __file__)
+_NATIVE_LAUNCH_ID = os.environ.get("RENDER_NATIVE_LAUNCH_ID", "")
+# Companion menus/HUD read the guest Python environment at import time. Publish
+# the validated private handoff there before importing any companion module.
+if ROOT:
+    os.environ["RENDER_AGENT_SPOOL"] = ROOT
+if MOBILE_MODE:
+    os.environ["RENDER_MOBILE_UI_MODE"] = MOBILE_MODE
+try:
+    _native_cache_settings(os.environ, __file__, ROOT)
+except (OSError, ValueError) as error:
+    # Thumbnail caching is optional; its failure must not disable the executor.
+    print("Render native thumbnail cache unavailable:", type(error).__name__, flush=True)
+# Real native Blender has bpy.types.Operator; host protocol tests use bpy doubles.
+if getattr(getattr(bpy, "types", None), "Operator", None) is not None:
+    _disable_script_auto_execution()
+    import sys as _render_sys
+    _native_startup_dir = str(Path(__file__).resolve().parent)
+    if _native_startup_dir not in _render_sys.path:
+        _render_sys.path.insert(0, _native_startup_dir)
+    try:
+        import render_session_tools as _render_session
+    except Exception as error:
+        _render_session = None
+        print("Render optional studio UI unavailable:", type(error).__name__, flush=True)
+else:
+    _render_session = None
+print("Render native startup: command spool " + ("configured" if ROOT else "missing"), flush=True)
 _UI_FOCUSED = False
 _LAST_HEARTBEAT = 0.0
 _ID_PATTERN = re.compile(r"^[a-f0-9]{32}$")
 _OBJECT_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,63}$")
-_MAX_BYTES = 65536
+_MAX_BYTES = 131072
 
 def _number(value, lower, upper):
     return type(value) in (int, float) and math.isfinite(value) and lower <= value <= upper
@@ -354,7 +458,36 @@ def _dispatch(command):
     args = command.get("args")
     if not isinstance(args, dict):
         raise ValueError("INVALID_ARGUMENTS")
+    if action in ("blender.project.save_session", "blender.project.restore_session",
+                  "blender.render.plan_current", "blender.render.plan_still", "blender.render.resume_last",
+                  "blender.ui.stabilize_viewport"):
+        if _render_session is None:
+            raise RuntimeError("NATIVE_EDITOR_UI_UNAVAILABLE")
+        return _render_session.dispatch(action, args)
+    if action == "omega.dispatch":
+        # The Android binder authenticated the Render target and supplied a
+        # measured memory budget. Only static operation IDs are dispatchable.
+        if set(args) != {"operation", "payload", "available_memory_bytes"}:
+            raise ValueError("INVALID_ARGUMENTS")
+        import omega_registry
+        context = {
+            "scene": bpy.context.scene,
+            "production_root": str(Path(ROOT).resolve().parent) if ROOT else "",
+            "job_id": command.get("id"),
+            "available_memory_bytes": args["available_memory_bytes"],
+            "dry_run": False,
+            "cancellation_requested": False,
+            "capability_revision": omega_registry.CAPABILITY_REVISION,
+        }
+        return omega_registry.dispatch(args["operation"], args["payload"], context)
+    if action == "blender.production.execute":
+        import render_production
+        return render_production.execute(args, ROOT, command.get("id"))
     # Local touch-overlay UI operations; NOT remotely registered agent actions.
+    if action == "blender.creator.open":
+        if args:raise ValueError("UNEXPECTED_ARGUMENT")
+        import render_creator_ui
+        return render_creator_ui.open_creator_workspace()
     if action == "blender.ui.adjust_scale":
         if set(args) != {"delta"} or not _number(args.get("delta"), -.25, .25):
             raise ValueError("INVALID_UI_SCALE_STEP")
@@ -632,6 +765,52 @@ def _write_result(path, report):
         except Exception:
             pass
 
+def _native_ui_event(method, value):
+    # Keep a private, bounded history of actual native actions even if the
+    # optional on-screen hand HUD is unavailable on this GPU/Blender version.
+    try:
+        import render_unified_workspace
+        render_unified_workspace.observe_native(method,value)
+    except Exception:
+        pass  # Never block scene work because diagnostic telemetry failed.
+    if _render_session is None:
+        return
+    try:
+        import render_native_hud
+        getattr(render_native_hud, method)(value)
+    except Exception:
+        pass  # Optional viewport feedback never changes command execution.
+
+
+def _heartbeat(root):
+    """Only this actual bpy timer publishes readiness, bound to its process."""
+    global _LAST_HEARTBEAT
+    ready = root / "ready"
+    expected = str(os.getpid())
+    try:
+        matches = (ready.is_file() and not ready.is_symlink() and ready.stat().st_size <= 32
+                   and ready.read_text(encoding="ascii") == expected)
+    except (OSError, UnicodeError):
+        matches = False
+    if not matches:
+        temporary = root / "ready.native.tmp"
+        fd = os.open(str(temporary), os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        with os.fdopen(fd, "w", encoding="ascii") as output:
+            output.write(expected)
+        os.replace(temporary, ready)
+    else:
+        ready.touch()
+    if _NATIVE_LAUNCH_ID:
+        state = root / "ready-state.json"
+        temporary = root / "ready-state.native.tmp"
+        fd = os.open(str(temporary), os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        with os.fdopen(fd, "w", encoding="utf8") as output:
+            json.dump({"pid": os.getpid(), "launch_id": _NATIVE_LAUNCH_ID,
+                       "stage": "bpy_timer_ready", "studio_ui_available": _render_session is not None}, output)
+        os.replace(temporary, state)
+    _LAST_HEARTBEAT = time.time()
+
+
 def _poll():
     global _LAST_HEARTBEAT
     if not ROOT:
@@ -642,8 +821,10 @@ def _poll():
         path.mkdir(mode=0o700, parents=True, exist_ok=True)
     now = time.time()
     if now - _LAST_HEARTBEAT > 3.0:
-        (root / "ready").touch(exist_ok=True)
-        _LAST_HEARTBEAT = now
+        first = not _LAST_HEARTBEAT
+        _heartbeat(root)
+        if first:
+            print("Render native startup: Blender timer heartbeat active", flush=True)
     for incoming in sorted(pending.glob("*.json"))[:4]:
         name = incoming.stem
         if not _ID_PATTERN.fullmatch(name) or incoming.is_symlink():
@@ -663,6 +844,7 @@ def _poll():
                 raise ValueError("INVALID_COMMAND_ID")
             if type(command.get("deadline")) not in (int, float) or command["deadline"] < time.time():
                 raise ValueError("COMMAND_EXPIRED")
+            _native_ui_event("command_started", command)
             result = _dispatch(command)
             report = {"id": name, "state": "succeeded", "result": result}
         except Exception as error:
@@ -670,16 +852,49 @@ def _poll():
             if not re.fullmatch(r"[A-Z_]{3,96}", code):
                 code = type(error).__name__
             report = {"id": name, "state": "failed", "error": code}
+            report["error_detail"] = str(error)[:240]
+            if getattr(error,"render_checkpoint",None):
+                report["checkpoint"]=error.render_checkpoint
         try:
+            # A long frame blocked this timer. Refresh liveness on the actual
+            # Blender thread BEFORE publishing its receipt, so the next frame
+            # cannot race a stale pre-render heartbeat.
+            _heartbeat(root)
             _write_result(target, report)
         except Exception:
             # Leave claimed file for crash/recovery inspection. No blind replay.
+            _native_ui_event("command_finished", {"id": name, "state": "recovery_required"})
             continue
+        _native_ui_event("command_finished", report)
         claimed.unlink(missing_ok=True)
     return 0.5
 
+def _install_render_ui_when_ready():
+    if _render_session is None or getattr(bpy.app, "background", False):
+        return None
+    try:
+        _render_session.install()
+        return None
+    except (AttributeError, RuntimeError, ValueError, TypeError) as error:
+        count = getattr(_install_render_ui_when_ready, "attempts", 0) + 1
+        _install_render_ui_when_ready.attempts = count
+        print("Render native menus not ready:", type(error).__name__)
+        return 2.0 if count < 5 else None
+
 if ROOT:
+    # The command executor must remain available even if optional UI addon
+    # registration fails on a particular Blender startup ordering.
     bpy.app.timers.register(_poll, first_interval=0.5, persistent=True)
+    # Timer executes at most one durable studio-plan action per tick. Scene
+    # edits never run from a Java worker thread or a separate Python thread.
+    try:
+        import render_unified_workspace
+        render_unified_workspace.install_timer()
+    except Exception as error:
+        print("Render native plan queue unavailable:",type(error).__name__,flush=True)
+    if _render_session is not None:
+        bpy.app.timers.register(_install_render_ui_when_ready,
+                                first_interval=3.0, persistent=False)
 
 if MOBILE_MODE in ("portrait", "landscape") and not getattr(bpy.app,"background",False):
     bpy.app.timers.register(_initial_mobile_setup, first_interval=2.0, persistent=False)

@@ -1,0 +1,89 @@
+name: Render Live Sculpt and Acting - 0.37
+on:
+  pull_request:
+    branches: [upgrade/render-studio-036-unified-workspaces-20261025]
+    paths:
+      - "full-app/scripts/**"
+      - "app/src/**"
+      - "tools/**"
+      - ".github/workflows/render-037-live-actions.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validate bounded gesture code and durable work plan schema
+        run: |
+          python -m compileall -q full-app/scripts/render_live_gestures.py \
+            full-app/scripts/render_unified_workspace.py \
+            full-app/scripts/render_unified_contract.py
+          python -m unittest tools.test_unified_studio_contract -v
+          python -m unittest tools.omega.test_phase10_packaging -v
+      - name: Validate pinned builder idempotence
+        run: |
+          python tools/prepare_production_toolkit.py
+          python tools/prepare_production_toolkit.py
+  actual-blender:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install native desktop Blender for bpy behavioral tests
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends blender
+          blender --version | head -2
+      - name: Run actual mesh/rig/frame/agent work and reject stale revisions
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          PYTHONPATH: full-app/scripts
+        run: |
+          blender -b -noaudio --python-exit-code 1 --python tools/test_real_live_gestures.py
+  windowed-sculpt-feedback:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install genuine Blender GUI and virtual framebuffer
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends blender xvfb
+      - name: Confirm Blender actually draws a verified edited mesh target
+        env:
+          PYTHONPATH: full-app/scripts
+          LIBGL_ALWAYS_SOFTWARE: "1"
+        run: |
+          timeout 75 xvfb-run -a -s "-screen 0 1280x900x24" \
+            blender --factory-startup -noaudio --python-exit-code 1 \
+            --python tools/test_real_live_sculpt_ui.py
+  android-bridge:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 38
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+      - name: Android CMake/NDK prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          MANAGER="$(find "$ANDROID_HOME/cmdline-tools" -path '*/bin/sdkmanager' -type f | sort -V | tail -1)"
+          test -x "$MANAGER"
+          yes | "$MANAGER" --licenses >/dev/null || true
+          "$MANAGER" --install "platforms;android-35" "build-tools;35.0.0" "cmake;3.22.1" "ndk;27.2.12479018"
+      - name: Run Android JVM native target/security and compile bridge
+        run: |
+          python tools/prepare_production_toolkit.py
+          gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug

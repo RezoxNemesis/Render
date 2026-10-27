@@ -8,7 +8,11 @@ import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.Gravity;
+import android.view.MotionEvent;
+import android.view.ViewConfiguration;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
@@ -17,6 +21,15 @@ import android.window.OnBackInvokedDispatcher;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.ProgressBar;
+import android.widget.ScrollView;
+import com.rezox.render.agent.RenderManualJobs;
+import com.rezox.render.agent.RenderLongForegroundService;
+import com.rezox.render.agent.ProductionBridge;
+import com.rezox.render.agent.AgentSecrets;
+import java.util.concurrent.atomic.AtomicBoolean;
+import com.rezox.render.omega.engine.OverlayBounds;
+import com.rezox.render.omega.engine.EngineEvidence;
 import android.widget.Toast;
 
 import java.io.File;
@@ -66,6 +79,10 @@ public final class BlenderMobileControls {
             throw new IllegalArgumentException("UNSUPPORTED_RENDER_ORIENTATION");
         owner.getSharedPreferences(SETTINGS,Activity.MODE_PRIVATE).edit()
              .putString(MODE,mode).apply();
+    }
+
+    public static void openCreator(Activity owner) {
+        send(owner,"blender.creator.open",new JSONObject());
     }
 
     public static void applySafeInsets(Activity owner) {
@@ -120,9 +137,17 @@ public final class BlenderMobileControls {
             ViewGroup.LayoutParams.WRAP_CONTENT,ViewGroup.LayoutParams.WRAP_CONTENT));
         FrameLayout.LayoutParams position=new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT,ViewGroup.LayoutParams.WRAP_CONTENT,
-            Gravity.END|Gravity.CENTER_VERTICAL);
-        position.rightMargin=px(activity,3);
+            Gravity.END|Gravity.TOP);
+        position.rightMargin=px(activity,5);
+        final int screenHeight=activity.getResources().getDisplayMetrics().heightPixels;
+        final int safeMargin=px(activity,8);
+        int savedTop=activity.getSharedPreferences(SETTINGS,Activity.MODE_PRIVATE)
+            .getInt("overlay_top_px",px(activity,96));
+        position.topMargin=OverlayBounds.clampTop(savedTop,screenHeight,
+            px(activity,130),safeMargin);
         activity.addContentView(content,position);
+        // An attached control surface is observed; a rendered Vulkan frame is NOT.
+        EngineEvidence.record(activity,EngineEvidence.Stage.NATIVE_CONTROLS_ATTACHED);
 
         TextView handle=button(activity,"R  ☰");
         handle.setBackground(shape(0xEEA05F32,14,activity));
@@ -130,12 +155,132 @@ public final class BlenderMobileControls {
             px(activity,58),px(activity,50)));
         LinearLayout tools=new LinearLayout(activity);
         tools.setOrientation(LinearLayout.VERTICAL);
-        tools.setVisibility(View.GONE);
-        buttons.addView(tools);
-        handle.setOnClickListener(v->tools.setVisibility(
-            tools.getVisibility()==View.VISIBLE?View.GONE:View.VISIBLE));
+        ScrollView menuScroll=new ScrollView(activity);
+        menuScroll.setVerticalScrollBarEnabled(true);
+        menuScroll.setFillViewport(false);
+        menuScroll.addView(tools,new ScrollView.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,ViewGroup.LayoutParams.WRAP_CONTENT));
+        menuScroll.setVisibility(View.GONE);
+        int menuHeight=OverlayBounds.scrollHeight(
+            Math.max(px(activity,70),screenHeight-px(activity,230)),
+            px(activity,360),px(activity,115));
+        buttons.addView(menuScroll,new LinearLayout.LayoutParams(px(activity,207),menuHeight));
+        // A real drag on this owner-visible handle moves ONLY the overlay; it
+        // never injects a fake Blender touch or changes the underlying scene.
+        final float[] drag=new float[3]; // X, Y, original top pixel
+        final boolean[] dragged={false};
+        final int touchSlop=ViewConfiguration.get(activity).getScaledTouchSlop();
+        handle.setOnTouchListener((view,event)->{
+            switch(event.getActionMasked()){
+                case MotionEvent.ACTION_DOWN:
+                    drag[0]=event.getRawX();
+                    drag[1]=event.getRawY();
+                    drag[2]=((FrameLayout.LayoutParams)content.getLayoutParams()).topMargin;
+                    dragged[0]=false;
+                    return true;
+                case MotionEvent.ACTION_MOVE: {
+                    if(!OverlayBounds.isTap(drag[0],drag[1],
+                            event.getRawX(),event.getRawY(),touchSlop))
+                        dragged[0]=true;
+                    if(dragged[0]){
+                        FrameLayout.LayoutParams p=(FrameLayout.LayoutParams)content.getLayoutParams();
+                        p.topMargin=OverlayBounds.clampTop(
+                            Math.round(drag[2]+event.getRawY()-drag[1]),
+                            activity.getResources().getDisplayMetrics().heightPixels,
+                            Math.max(px(activity,70),content.getHeight()),safeMargin);
+                        content.setLayoutParams(p);
+                    }
+                    return true;
+                }
+                case MotionEvent.ACTION_UP:
+                    if(!dragged[0] && OverlayBounds.isTap(drag[0],drag[1],
+                            event.getRawX(),event.getRawY(),touchSlop)){
+                        menuScroll.setVisibility(
+                            menuScroll.getVisibility()==View.VISIBLE?View.GONE:View.VISIBLE);
+                        // Expansion changes actual panel height. Reposition
+                        // after layout so options never fall below navigation.
+                        menuScroll.post(()->{
+                            if(activity.isFinishing()||activity.isDestroyed())return;
+                            FrameLayout.LayoutParams layout=(FrameLayout.LayoutParams)content.getLayoutParams();
+                            layout.topMargin=OverlayBounds.clampTop(layout.topMargin,
+                                activity.getResources().getDisplayMetrics().heightPixels,
+                                Math.max(px(activity,70),content.getHeight()),safeMargin);
+                            content.setLayoutParams(layout);
+                        });
+                    }
+                    activity.getSharedPreferences(SETTINGS,Activity.MODE_PRIVATE).edit()
+                        .putInt("overlay_top_px",
+                            ((FrameLayout.LayoutParams)content.getLayoutParams()).topMargin).apply();
+                    return true;
+                case MotionEvent.ACTION_CANCEL:
+                    return true;
+                default:return false;
+            }
+        });
 
         add(activity,tools,"⌂  Render Home",()->confirmHome(activity));
+        add(activity,tools,"＋  Creator · models, worlds & motion",()->openCreator(activity));
+        add(activity,tools,"File browser access",()->{
+            if(Build.VERSION.SDK_INT<30||android.os.Environment.isExternalStorageManager()){
+                toast(activity,"File browser access is already available");return;
+            }
+            try{
+                activity.startActivity(new Intent(
+                    android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                    android.net.Uri.parse("package:"+activity.getPackageName())));
+            }catch(Exception error){
+                toast(activity,"Storage settings unavailable; use the Android file picker");
+            }
+        });
+        add(activity,tools,"▣  Render Image (Protected)",()->send(activity,
+              "blender.render.plan_still",new JSONObject()));
+        add(activity,tools,"▶  Render Animation",()->send(activity,
+              "blender.render.plan_current",new JSONObject()));
+        add(activity,tools,"↻  Resume Render / MP4",()->send(activity,
+              "blender.render.resume_last",new JSONObject()));
+        add(activity,tools,"▣  Save Current Session",()->send(activity,
+              "blender.project.save_session",new JSONObject()));
+        add(activity,tools,"⬇  Save full .blend to Downloads",()->WORK.execute(()->{
+            try{
+                JSONObject args=new JSONObject().put("operation","project.checkpoint_export")
+                    .put("target_id",new AgentSecrets(activity).renderPublicId())
+                    .put("payload",new JSONObject().put("name","RenderProject"));
+                JSONObject result=ProductionBridge.execute(activity,args,new AtomicBoolean(false));
+                if(result.optBoolean("downloads_verified"))
+                    toast(activity,"Real .blend verified in Download/RenderStudio");
+                else if(result.optBoolean("checkpoint_saved"))
+                    toast(activity,"Saved internally; Downloads export unavailable");
+                else toast(activity,"Project checkpoint not verified");
+            }catch(Exception error){
+                toast(activity,"Save failed: "+error.getClass().getSimpleName());
+            }
+        }));
+        add(activity,tools,"▶  Continue render in background",()->WORK.execute(()->{
+            try{
+                String job=RenderManualJobs.status(activity).optString("job_id","");
+                if(job.isEmpty())job=RenderManualJobs.newestRecoverable(activity);
+                if(job.isEmpty())throw new IllegalStateException("NO_RENDER_JOB");
+                JSONObject result=RenderLongForegroundService.request(activity,job);
+                toast(activity,result.optBoolean("foreground_launch_requested")?
+                    "Foreground render requested; progress in notification":
+                    "Open this app to permit background renderer");
+            }catch(Exception error){
+                toast(activity,"Render service unavailable: "+error.getClass().getSimpleName());
+            }
+        }));
+        add(activity,tools,"◉  Fix Viewport Flicker",()->send(activity,
+              "blender.ui.stabilize_viewport",new JSONObject()));
+        add(activity,tools,"⬇  Export PNG / MP4",()->WORK.execute(()->{
+            try {
+                String job=RenderManualJobs.status(activity).optString("job_id","");
+                if(job.isEmpty())job=RenderManualJobs.newestRecoverable(activity);
+                if(job.isEmpty())throw new IllegalStateException("NO_RENDER_JOB");
+                RenderManualJobs.export(activity,job);
+                toast(activity,"Render exported to Downloads / RenderStudio");
+            }catch(Exception error){
+                toast(activity,"Render export unavailable: "+error.getMessage());
+            }
+        }));
         add(activity,tools,"▣  Focus viewport",()->send(activity,"blender.ui.focus_viewport",
               new JSONObject()));
         add(activity,tools,"A+  Larger controls",()->send(activity,"blender.ui.adjust_scale",
@@ -152,6 +297,143 @@ public final class BlenderMobileControls {
             toast(activity,next.equals(PORTRAIT)?"Portrait Focus":"Landscape Full Editor");
             send(activity,"blender.ui.set_mode",values("mode",next));
         });
+
+        // A real, persistent Android progress bar on top of native Blender.
+        // The bpy File menu also shows progress in Blender's own Status Bar.
+        LinearLayout progressPanel=new LinearLayout(activity);
+        progressPanel.setOrientation(LinearLayout.VERTICAL);
+        progressPanel.setPadding(px(activity,5),px(activity,4),
+                                 px(activity,5),px(activity,4));
+        progressPanel.setBackground(shape(PANEL,12,activity));
+        progressPanel.setVisibility(View.GONE);
+        LinearLayout.LayoutParams panelLayout=new LinearLayout.LayoutParams(
+                px(activity,190),ViewGroup.LayoutParams.WRAP_CONTENT);
+        panelLayout.topMargin=px(activity,5);
+        buttons.addView(progressPanel,panelLayout);
+        TextView frameStatus=new TextView(activity);
+        frameStatus.setTextColor(WHITE);
+        frameStatus.setTextSize(11);
+        progressPanel.addView(frameStatus);
+        ProgressBar frameProgress=new ProgressBar(activity,null,
+                android.R.attr.progressBarStyleHorizontal);
+        frameProgress.setMax(100);
+        progressPanel.addView(frameProgress,new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,px(activity,7)));
+        TextView renderControl=button(activity,"Pause after frame");
+        renderControl.setTextSize(11);
+        progressPanel.addView(renderControl,new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,px(activity,39)));
+        renderControl.setOnClickListener(v->{
+            if(RenderManualJobs.active()){
+                try{RenderLongForegroundService.requestPause(activity);
+                    toast(activity,"Pausing after current native frame");}
+                catch(Exception error){RenderManualJobs.pause();
+                    toast(activity,"Pause requested");}
+            } else {
+                WORK.execute(()->{
+                    try{
+                        String job=RenderManualJobs.status(activity).optString("job_id","");
+                        if(job.isEmpty())job=RenderManualJobs.newestRecoverable(activity);
+                        if(job.isEmpty())throw new IllegalStateException("NO_RENDER_JOB");
+                        JSONObject result=RenderLongForegroundService.request(activity,job);
+                        toast(activity,result.optBoolean("foreground_launch_requested")?
+                            "Resuming saved render in foreground service":
+                            "Resume from owner-visible Render activity");
+                    }catch(Exception error){
+                        toast(activity,"Render resume unavailable: "+error.getClass().getSimpleName());
+                    }
+                });
+            }
+        });
+        TextView cancelRender=button(activity,"Cancel job • keep frames");
+        cancelRender.setTextSize(11);
+        cancelRender.setContentDescription("Cancel the current render job and retain verified frames and checkpoint for retry");
+        progressPanel.addView(cancelRender,new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,px(activity,39)));
+        cancelRender.setOnClickListener(v->WORK.execute(()->{
+            try{
+                String job=RenderManualJobs.status(activity).optString("job_id","");
+                RenderLongForegroundService.requestCancel(activity,job);
+                toast(activity,"Cancelled after current frame; saved work retained");
+            }catch(Exception error){toast(activity,"Cancel unavailable: "+error.getMessage());}
+        }));
+        // Startup has no defensible percentage. Show elapsed waiting time
+        // until bpy actually responds, independently of render-frame progress.
+        LinearLayout startupPanel=new LinearLayout(activity);
+        startupPanel.setOrientation(LinearLayout.VERTICAL);
+        startupPanel.setPadding(px(activity,8),px(activity,8),px(activity,8),px(activity,8));
+        startupPanel.setBackground(shape(PANEL,12,activity));
+        TextView startupStatus=new TextView(activity);
+        startupStatus.setTextColor(WHITE);startupStatus.setTextSize(12);
+        startupPanel.addView(startupStatus);
+        ProgressBar startupProgress=new ProgressBar(activity,null,
+                android.R.attr.progressBarStyleHorizontal);
+        startupProgress.setIndeterminate(true);
+        startupPanel.addView(startupProgress,new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,px(activity,7)));
+        LinearLayout.LayoutParams startupLayout=new LinearLayout.LayoutParams(
+                px(activity,190),ViewGroup.LayoutParams.WRAP_CONTENT);
+        startupLayout.topMargin=px(activity,5);buttons.addView(startupPanel,startupLayout);
+        final long startupElapsed=android.os.SystemClock.elapsedRealtime();
+        final File editorHeartbeat=new File(activity.getFilesDir(),SPOOL+"/ready");
+        final boolean[] editorResponded={false};
+        final Handler refreshHandler=new Handler(Looper.getMainLooper());
+        final int[] ownerVisibleChecks={0};
+        final Runnable pulse=new Runnable(){
+            @Override public void run(){
+                if(activity.isFinishing()||activity.isDestroyed())return;
+                long heartbeatAge=System.currentTimeMillis()-editorHeartbeat.lastModified();
+                if(!editorResponded[0]&&com.rezox.render.agent.NativeHeartbeat.ready(activity)){
+                    editorResponded[0]=true;
+                    com.rezox.render.omega.engine.EngineStartupRecovery.markReady(activity);
+                }
+                startupPanel.setVisibility(editorResponded[0]?View.GONE:View.VISIBLE);
+                if(!editorResponded[0]){
+                    long seconds=(android.os.SystemClock.elapsedRealtime()-startupElapsed)/1000;
+                    startupStatus.setText("Starting Blender · "+seconds+"s\n"+
+                        (seconds>=120?"Still waiting for the native editor response":
+                            "Initializing the native editor"));
+                }
+                RenderManualJobs.acceptMenuRequest(activity);
+                if(++ownerVisibleChecks[0]%15==0){
+                    WORK.execute(()->{
+                        if(!activity.isFinishing()&&!activity.isDestroyed())
+                            RenderLongForegroundService.resumeConsentedVisibleJob(activity);
+                    });
+                }
+                JSONObject snapshot=RenderManualJobs.status(activity);
+                String job=snapshot.optString("job_id","");
+                String state=snapshot.optString("state","idle");
+                boolean visible=!job.isEmpty()&&
+                    (!"idle".equals(state)||RenderManualJobs.active());
+                progressPanel.setVisibility(visible?View.VISIBLE:View.GONE);
+                if(visible){
+                    int done=snapshot.optInt("completed"),total=snapshot.optInt("total");
+                    frameProgress.setProgress(total>0?(int)(100L*done/total):0);
+                    String detail=snapshot.optString("detail",state);
+                    if(detail.length()>50)detail=detail.substring(0,47)+"...";
+                    long eta=snapshot.optLong("estimated_remaining_render_ms",-1);
+                    frameStatus.setText("Render "+done+"/"+total+" frames\n"+detail+
+                        "\nRendered: "+RenderManualJobs.duration(snapshot.optLong("render_active_ms",0))+
+                        (eta>=0?" • remaining ~"+RenderManualJobs.duration(eta):" • estimate pending"));
+                    renderControl.setText(RenderManualJobs.active()?
+                        (snapshot.optBoolean("pausing")?"Finishing current frame…":
+                         "Pause after frame"):"▶ Resume saved render");
+                    renderControl.setEnabled(!snapshot.optBoolean("pausing"));
+                }
+                refreshHandler.postDelayed(this,1000L);
+            }
+        };
+        content.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener(){
+            @Override public void onViewAttachedToWindow(View v){
+                refreshHandler.removeCallbacks(pulse);
+                refreshHandler.post(pulse);
+            }
+            @Override public void onViewDetachedFromWindow(View v){
+                refreshHandler.removeCallbacks(pulse);
+            }
+        });
+        refreshHandler.post(pulse);
 
         // API 33+ handles system back gestures even when the native input
         // queue does not deliver a Java KEYCODE_BACK.
@@ -182,21 +464,40 @@ public final class BlenderMobileControls {
      */
     public static void confirmHome(Activity a){
         if(a.isFinishing()||a.isDestroyed())return;
+        if(RenderManualJobs.active()){
+            new AlertDialog.Builder(a)
+                .setTitle("Native Blender is rendering")
+                .setMessage("Keep the render service active while leaving the app. Android may still suspend native Blender if the editor process dies; committed PNG frames remain recoverable.")
+                .setNegativeButton("Stay in Blender",null)
+                .setNeutralButton("Pause after frame",(d,w)->{
+                    try{RenderLongForegroundService.requestPause(a);}
+                    catch(Exception error){RenderManualJobs.pause();}
+                })
+                .setPositiveButton("Keep rendering & hide app",(d,w)->
+                    a.moveTaskToBack(true))
+                .show();
+            return;
+        }
         new AlertDialog.Builder(a)
-            .setTitle("Return to Render Studio?")
-            .setMessage("Blender may have unsaved changes. Save your scene before leaving the native editor.")
+            .setTitle("Save work and return?")
+            .setMessage("Render will save a verified .blend snapshot before returning. Your previous project and finished render frames stay preserved.")
             .setNegativeButton("Stay in Blender",null)
-            .setNeutralButton("Save a .blend copy",(dialog,which)->
-                send(a,"blender.project.save_copy",new JSONObject()))
-            .setPositiveButton("Return to Studio",(dialog,which)->{
-                Intent home=new Intent().setClassName(a,"com.rezox.render.RenderHubActivity");
-                home.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);
-                a.startActivity(home);
-                a.finish();
+            .setNeutralButton("Save without leaving",(dialog,which)->
+                send(a,"blender.project.save_session",new JSONObject()))
+            .setPositiveButton("Save & Return",(dialog,which)->{
+                toast(a,"Saving Blender project before leaving…");
+                send(a,"blender.project.save_session",new JSONObject(),()->{
+                    if(a.isFinishing()||a.isDestroyed())return;
+                    Intent home=new Intent().setClassName(a,"com.rezox.render.RenderHubActivity");
+                    home.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                    a.startActivity(home);
+                    a.finish();
+                });
             }).show();
     }
 
     public static void detach(BlenderActivity activity){
+        EngineEvidence.record(activity,EngineEvidence.Stage.CONTROLS_DETACHED);
         if(Build.VERSION.SDK_INT>=33 && activity.renderBackCallback!=null){
             activity.getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(
                 activity.renderBackCallback);
@@ -205,6 +506,9 @@ public final class BlenderMobileControls {
     }
 
     private static void send(Activity a,String action,JSONObject args){
+        send(a,action,args,null);
+    }
+    private static void send(Activity a,String action,JSONObject args,Runnable completed){
         // The same authenticated typed bpy sidecar handles UI-only requests,
         // but they are not remotely registered as agent actions.
         WORK.execute(()->{
@@ -218,7 +522,7 @@ public final class BlenderMobileControls {
                 JSONObject command=new JSONObject()
                     .put("id",id).put("action",action).put("args",args)
                     .put("deadline",System.currentTimeMillis()/1000+
-                        ("blender.project.save_copy".equals(action)?120:15));
+                        (action.startsWith("blender.project.")||action.startsWith("blender.render.")?180:15));
                 File temporary=File.createTempFile("render-control-",".part",pending);
                 try(FileOutputStream stream=new FileOutputStream(temporary)){
                     stream.write(command.toString().getBytes(StandardCharsets.UTF_8));
@@ -230,7 +534,7 @@ public final class BlenderMobileControls {
                     Files.move(temporary.toPath(),ready.toPath());
                 }
                 long until=System.nanoTime()+ TimeUnit.SECONDS.toNanos(
-                    "blender.project.save_copy".equals(action)?120:12);
+                    (action.startsWith("blender.project.")||action.startsWith("blender.render.")?180:12));
                 while(System.nanoTime()<until){
                     if(result.isFile()) {
                         JSONObject response=new JSONObject(
@@ -238,9 +542,13 @@ public final class BlenderMobileControls {
                         result.delete();
                         if(!"succeeded".equals(response.optString("state")))
                             toast(a,"Blender: "+response.optString("error","Control unavailable"));
-                        else if("blender.project.save_copy".equals(action))
-                            toast(a,"Saved local .blend copy: "+
-                                response.optJSONObject("result").optString("filename","Render project"));
+                        else {
+                            if(action.equals("blender.project.save_session"))
+                                toast(a,"Session saved — next launch will restore it");
+                            else if(action.startsWith("blender.render."))
+                                toast(a,"Rendering queued in native Blender");
+                            if(completed!=null)a.runOnUiThread(completed);
+                        }
                         return;
                     }
                     Thread.sleep(180);

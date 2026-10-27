@@ -1,5 +1,29 @@
 # Render — Native Blender for Android
 
+## Creator Studio 0.50
+
+The `upgrade/render-studio-050-creator-suite-20261028` candidate adds a guided
+**Create** workspace inside real Blender: editable props, seeded terrain,
+Geometry Nodes scattering, procedural materials, animation presets, camera
+shots and a deform-chain rig builder. The Android home screen opens this
+workspace directly and keeps full Blender, project recovery and ChatGPT
+connection controls accessible.
+
+ChatGPT discovers eleven new typed operations through the existing authenticated
+bridge. The offline brief planner offers ten documented recipes with a visible
+preview, scene checks and a digest-bound submission. Plans execute one native
+step at a time, checkpoint changes, and stop for review if the active scene or
+native session changes. It is a local recipe compiler, not an embedded language
+model; ChatGPT can compose the broader existing typed tool set.
+
+See [features and usage](docs/CREATOR_STUDIO_050.md),
+[release notes](docs/RELEASE_NOTES_050.md) and the
+[security review](docs/SECURITY_REVIEW_050.md).
+The build workflow verifies the complete ARM64 APK, historical signing identity
+and embedded Python sources. This candidate retains the existing pinned native
+Blender engine; it does **not** claim fivefold Blender performance or capability,
+full desktop parity, or a malware-free certification.
+
 **Goal:** bring Blender's real feature set to a phone-native Android application, with on-device computation and rendering. This project is separate from VideoStudio.
 
 ## Non-negotiable product contract
@@ -11,7 +35,21 @@
 - Downloadable Google Drive asset libraries and backup are optional; active resources must be local when offline.
 - Do not advertise feature parity until real Android device tests against upstream Blender show it.
 
-**Current status: Android application/NDK foundation with native .blend framing preflight, Vulkan capability probing, and real upstream Blender BLI FP16 and BLO header/BHead decoding modules cross-compiled for Android. The full Blender scene engine is not integrated: only a genuine upstream math module is compiled. This is not a full Blender port or a render-capable APK. No BKE/Main scene reconstruction or dependency-graph evaluation; gzip header/schema preflight uses the upstream reader, zstd remains unavailable.**
+**Current build target:** the full ARM64 Android Blender application in `full-app/`,
+including the existing VideoStudio native Binder connection. The `app/` project
+also supplies the JNI bridge and project inspector; building only that module
+emits the smaller foundation APK, not the full editor.
+
+The earlier 0.32.1 candidate retains the native-control, durable rendering and character
+review improvements. It adds artist-granted folders, durable original-file
+transfers, dependency bundles and discoverable native model/media import through
+the existing VideoStudio connection. See [release notes](docs/RELEASE_NOTES_0320.md),
+[storage and ChatGPT operations](docs/ASSETS_AND_STORAGE.md),
+[workspace verification](docs/WORKSPACE_TESTING_0320.md) and the retained
+[native character evidence](docs/WORKSPACE_TESTING_0313.md).
+Host tests and APK builds do not establish native output quality, phone
+compatibility, performance or 24-hour endurance; native results are reported
+separately for their exact source builds.
 
 ## Repository layout
 
@@ -58,3 +96,18 @@ Render's UI now offers a direct on-phone bridge using the SAME VideoStudio MCP v
 
 ## Permanent signing and backup-first updates
 The private Render Studio release PKCS12 keystore and recovery record are stored in the owner’s private ChatGPT Library /Render/Signing (NEVER in this public source repository). Stable owner-signed release APKs require configuring four protected GitHub Actions secrets, detailed in docs/RELEASE_SIGNING_AND_BACKUP.md. Earlier CI debug-signatures may not be upgradeable in place; export saved .blend projects with the new Project Inspector ZIP backup feature before uninstalling.
+
+
+## Full native APK (build only)
+
+Requires JDK 17, Gradle 8.11.1, Android SDK 35, build-tools 35.0.0,
+NDK 27.2.12479018 and CMake 3.22.1. Prepare sources using
+`python3 tools/prepare_production_toolkit.py`, build `:app:assembleDebug`, then
+stage the pinned engine with `tools/assemble_full_native.py` and build
+`gradle -p full-app :app:assembleDebug`. Exact pinned download/source references
+and a build-only path are in `.github/workflows/render-031-build-only.yml`.
+
+Use the existing owner/historical signing identity. A newly signed local debug
+APK cannot replace an installation signed by another key; never uninstall or
+clear artist data to force an update. The build-only job fails when the pinned
+historical key is unavailable. Permanent owner release signing stays private.
