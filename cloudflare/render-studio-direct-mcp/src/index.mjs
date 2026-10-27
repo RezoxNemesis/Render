@@ -236,7 +236,25 @@ export class RenderRelayDO extends DurableObject {
         response=new Response(page,{headers:{"Content-Type":"text/html; charset=utf-8","Set-Cookie":"render_authorize="+cookie+"; Secure; HttpOnly; SameSite=Lax; Max-Age=600; Path=/oauth"}});
       } else if (path==="/oauth/approve" && req.method==="POST") {
         this.rate(req,"approve",10,60);
-        if(req.headers.get("origin")!==origin) fail("CSRF_ORIGIN",403);
+        // Privacy browsers sometimes omit Origin or send the opaque "null"
+        // origin for a legitimate same-origin form submission. Do not let an
+        // absent/opaque Origin become a login blocker, but reject explicit
+        // foreign origins, cross-site Fetch Metadata, and foreign referrers.
+        // The single-use form ID + HttpOnly SameSite cookie are still required
+        // and checked below before a phone link code may be consumed.
+        const formOrigin=req.headers.get("origin");
+        if(formOrigin && formOrigin!=="null" && formOrigin!==origin)
+          fail("CSRF_ORIGIN",403);
+        const fetchSite=req.headers.get("sec-fetch-site");
+        if(fetchSite==="cross-site" || fetchSite==="same-site")
+          fail("CSRF_SITE",403);
+        const referrer=req.headers.get("referer");
+        if(referrer) {
+          let referrerOrigin;
+          try { referrerOrigin=new URL(referrer).origin; }
+          catch { fail("CSRF_REFERER",403); }
+          if(referrerOrigin!==origin) fail("CSRF_REFERER",403);
+        }
         const b=await bodyForm(req,["form_id","link_code"]);
         const cookie=(req.headers.get("cookie")||"").match(/(?:^|;\s*)render_authorize=([A-Za-z0-9_-]+)/)?.[1]||"";
         const cookieHash=await sha(cookie), linkHash=await sha((b.link_code||"").trim().toUpperCase());
