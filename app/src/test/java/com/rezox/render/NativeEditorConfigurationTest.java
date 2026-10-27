@@ -21,13 +21,13 @@ public class NativeEditorConfigurationTest {
             .putBoolean("creator_focus",true).putString("mode","landscape").commit();
         NativeEditorConfiguration.publish(app);
         File file=new File(app.getFilesDir(),"render_native_launch.json");
-        JSONObject first=new JSONObject(Files.readString(file.toPath()));
+        JSONObject first=new JSONObject(new String(Files.readAllBytes(file.toPath()),StandardCharsets.UTF_8));
         assertTrue(first.getBoolean("creator_focus"));
         assertEquals("landscape",first.getString("mobile_mode"));
         assertFalse(app.getSharedPreferences("render_mobile_ui",Context.MODE_PRIVATE)
             .getBoolean("creator_focus",false));
         NativeEditorConfiguration.publish(app);
-        JSONObject second=new JSONObject(Files.readString(file.toPath()));
+        JSONObject second=new JSONObject(new String(Files.readAllBytes(file.toPath()),StandardCharsets.UTF_8));
         assertFalse(second.getBoolean("creator_focus"));
         assertEquals("landscape",second.getString("mobile_mode"));
     }
