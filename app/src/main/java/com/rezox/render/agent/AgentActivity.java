@@ -97,7 +97,7 @@ public final class AgentActivity extends Activity {
         StudioUi.add(statusPanel,status);
         StudioUi.space(statusPanel,7);
         StudioUi.add(statusPanel,StudioUi.text(this,
-            "Direct Render commands use the existing VideoStudio MCP. Pairing to a separate hosted relay is optional.",
+            "Use the dedicated Render Studio HTTPS MCP to connect this app directly to ChatGPT. VideoStudio is optional.",
             12,0xFFBBAFD4,false));
         StudioUi.add(page,statusPanel);
         StudioUi.space(page,13);
@@ -129,7 +129,7 @@ public final class AgentActivity extends Activity {
         StudioUi.space(page,17);
 
         LinearLayout localBridge=StudioUi.violetCard(this);
-        StudioUi.add(localBridge,StudioUi.label(this,"PRIMARY / VIDEOSTUDIO MCP → RENDER"));
+        StudioUi.add(localBridge,StudioUi.label(this,"LEGACY / OPTIONAL VIDEOSTUDIO BRIDGE"));
         StudioUi.space(localBridge,9);
         StudioUi.add(localBridge,StudioUi.text(this,"Connect & share\nwith ChatGPT.",22,StudioUi.WHITE,true));
         StudioUi.space(localBridge,8);
@@ -185,19 +185,19 @@ public final class AgentActivity extends Activity {
         StudioUi.add(page,referenceCard);
         StudioUi.space(page,17);
 
-        // Keep legacy cloud modes supported but do not confuse them with
-        // the recommended single, direct VideoStudio MCP connection.
+        // Dedicated Cloudflare MCP is the preferred independent Render transport.
+        // Keep the VideoStudio bridge available separately for existing owners.
         LinearLayout advanced=StudioUi.column(this);
         advanced.setVisibility(View.GONE);
         TextView advancedToggle=StudioUi.action(this,
-            "OPTIONAL CLOUD PAIRING / ADVANCED     ▾",StudioUi.SECONDARY);
+            "DIRECT RENDER MCP / PAIR THIS DEVICE     ▾",StudioUi.SECONDARY);
         StudioUi.add(page,advancedToggle);
         StudioUi.space(page,8);
         StudioUi.add(page,advanced);
         advancedToggle.setOnClickListener(v->{
             boolean expand=advanced.getVisibility()!=View.VISIBLE;
             advanced.setVisibility(expand?View.VISIBLE:View.GONE);
-            advancedToggle.setText(expand?"HIDE ADVANCED CLOUD OPTIONS     ▴":
+            advancedToggle.setText(expand?"HIDE DIRECT RENDER MCP SETUP     ▴":
                 "OPTIONAL CLOUD PAIRING / ADVANCED     ▾");
         });
         LinearLayout shared=StudioUi.violetCard(this);
@@ -219,12 +219,12 @@ public final class AgentActivity extends Activity {
         StudioUi.space(advanced,17);
 
         LinearLayout pairPanel=StudioUi.card(this);
-        StudioUi.add(pairPanel,StudioUi.label(this,"OPTIONAL / OLD INDEPENDENT RELAY"));
+        StudioUi.add(pairPanel,StudioUi.label(this,"DEDICATED / RENDER CLOUDFLARE MCP"));
         StudioUi.space(pairPanel,8);
-        StudioUi.add(pairPanel,StudioUi.text(this,"Connect your phone",21,StudioUi.WHITE,true));
+        StudioUi.add(pairPanel,StudioUi.text(this,"Pair your Render Android app",21,StudioUi.WHITE,true));
         StudioUi.space(pairPanel,7);
         StudioUi.add(pairPanel,StudioUi.text(this,
-            "Optional older method. The existing VideoStudio MCP above needs no new server or ChatGPT connector.",
+            "Pair Render directly to its dedicated Cloudflare HTTPS relay. No VideoStudio app, MCP, or owner key is required.",
             13,StudioUi.MUTED,false));
         StudioUi.space(pairPanel,14);
         relay=StudioUi.field(this,"Relay origin  ·  https://…",false);
