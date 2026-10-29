@@ -17,6 +17,9 @@ class DirectRenderMcpContract(unittest.TestCase):
         self.assertNotIn("VideoStudioNativeBridgeService", manifest)
         self.assertNotIn("com.rezoxnemesis.videostudio", manifest)
         self.assertNotIn("<queries>", manifest)
+        stage = self.read("tools/assemble_full_native.py")
+        self.assertNotIn('"com.rezox.render.agent.VideoStudioNativeBridgeService"', stage)
+        self.assertNotIn('"com.rezoxnemesis.videostudio"', stage)
 
     def test_agent_only_polls_dedicated_render_worker(self):
         direct = self.read("app/src/main/java/com/rezox/render/agent/RenderDirectMcp.java")
