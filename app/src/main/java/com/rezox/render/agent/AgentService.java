@@ -39,6 +39,11 @@ public final class AgentService extends Service {
         super.onCreate();secrets=new AgentSecrets(this);journal=new AgentJournal(this);
         try{
             credentials=secrets.load();
+            if(!RenderDirectMcp.isDirectPairing(credentials)){
+                credentials=null;
+                secrets.enabled(false);
+                secrets.status("Direct Render Studio MCP pairing required. Legacy credentials are not executed.");
+            }
             if(PROCESS_BUSY.get()){
                 secrets.enabled(false);secrets.status("Previous native call is still stopping; wait before restarting.");
             }else{
@@ -69,12 +74,9 @@ public final class AgentService extends Service {
         return secrets.enabled()?START_STICKY:START_NOT_STICKY;
     }
     private JSONObject post(String path,JSONObject body)throws Exception{
-        if(VideoStudioMcpTransport.isSelected(credentials)) {
-            if("/v1/device/poll".equals(path))return VideoStudioMcpTransport.poll(credentials,body);
-            if("/v1/device/result".equals(path))return VideoStudioMcpTransport.complete(credentials,body);
-            throw new IllegalArgumentException("VIDEOSTUDIO_MCP_ROUTE_NOT_ALLOWED");
-        }
-        return AgentHttp.post(credentials.getString("relay"),path,credentials.getString("device_token"),body);
+        RenderDirectMcp.requireDirectPairing(credentials);
+        return AgentHttp.post(RenderDirectMcp.ORIGIN,path,
+            credentials.getString("device_token"),body);
     }
     private void sendPending()throws Exception{
         for(JSONObject result:journal.pending(credentials.getString("device_id"))){
@@ -89,11 +91,10 @@ public final class AgentService extends Service {
         if(!retry.ready(android.os.SystemClock.elapsedRealtime()))return;
         try{
             sendPending();
-            // Do not claim/consume a remote job while the same-phone
-            // VideoStudio Binder executor owns Blender's process-wide lock.
-            // Still retry delivery of durable results above.
+            // Native Blender has a process-wide execution lock. Pending direct MCP
+            // jobs are not claimed until the editor is safe to execute them.
             if(PROCESS_BUSY.get() && active==null){
-                secrets.status("Native Blender busy in direct VideoStudio Binder bridge. Pending cloud jobs remain queued.");
+                secrets.status("Native Blender is busy. Pending Render MCP jobs remain queued.");
                 return;
             }
             Work w=active;
@@ -104,8 +105,7 @@ public final class AgentService extends Service {
             JSONArray cancelled=reply.optJSONArray("cancel_job_ids");
             if(w!=null&&cancelled!=null)for(int i=0;i<cancelled.length();i++)
                 if(w.envelope.id.equals(cancelled.getString(i)))w.cancelled.set(true);
-            String connection=VideoStudioMcpTransport.isSelected(credentials)
-                ?"Existing VideoStudio MCP transport":"Private Render relay";
+            String connection="Direct Render Studio MCP";
             secrets.status(secrets.enabled()?connection+" connected. Authorized native Render actions execute on this phone.":
                 (active==null?"Stopped. No new commands will run.":"Stopping after current native call."));
             JSONObject job=reply.optJSONObject("job");
@@ -134,9 +134,7 @@ public final class AgentService extends Service {
             if(e.status==401||e.status==403){
                 secrets.enabled(false);Work w=active;if(w!=null)w.cancelled.set(true);
                 secrets.status("Connection authorization revoked or expired. No further commands will execute.");
-            }else if(e.status==404 && VideoStudioMcpTransport.isSelected(credentials))
-                secrets.status("VideoStudio MCP Worker has not been upgraded with the Render route yet. Native jobs are retained.");
-            else secrets.status("Command transport unavailable (HTTP "+e.status+"). Pending results are retained locally.");
+             }else secrets.status("Direct Render MCP unavailable (HTTP "+e.status+"). Pending receipts are retained locally.");
         }catch(Exception e){
             retry.failure(android.os.SystemClock.elapsedRealtime(),Math.random(),0);
             secrets.status("Connection interrupted: "+e.getClass().getSimpleName()+". Pending work is journaled.");
