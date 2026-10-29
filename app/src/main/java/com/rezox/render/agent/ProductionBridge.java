@@ -141,7 +141,7 @@ public final class ProductionBridge {
                 .put("asset_catalog_is_infinite",false)
                 .put("asset_downloads_keep_requested_resolution",true)
                 .put("separate_preview_final_profiles",true)
-                .put("durable_binder_queue_capacity",12)
+                .put("durable_local_journal_capacity",12)
                 .put("durable_render_queue_capacity",64)
                 .put("explicit_quality_configuration",true)
                 .put("read_only_native_receipt_recovery","native.command.status")
@@ -164,11 +164,19 @@ public final class ProductionBridge {
         if(operation.equals("ipc.command.cancel")){
             fields(p,"command_id");String id=p.getString("command_id");
             if(!id.matches("[A-Za-z0-9_-]{8,128}"))throw new IllegalArgumentException("INVALID_COMMAND_ID");
-            return VideoStudioNativeBridgeService.cancelCommand(context,id);
+            // Cancel only a local not-yet-executed journal entry. For claimed
+            // direct MCP work use the authenticated render_cancel operation.
+            try(AgentJournal journal=new AgentJournal(context)){
+                boolean cancelled=journal.cancelQueued(id);
+                return new JSONObject().put("command_id",id)
+                    .put("cancelled_before_start",cancelled)
+                    .put("native_execution_interrupted",false)
+                    .put("remote_cancel_operation","render_cancel");
+            }
         }
-        // These operations remain authenticated/target-id scoped by the
-        // existing Render/VideoStudio Binder checks above. No filesystem path
-        // or arbitrary bpy operator is accepted from a remote command.
+        // These operations remain authenticated and target-ID scoped by
+        // Render Studio's direct MCP agent. No arbitrary bpy code or filesystem
+        // path can be accepted from a remote request.
         if(operation.equals("render.storage.status")){
             fields(p,"job_id");
             return RenderStorageBudget.forJob(context,p.getString("job_id"));
