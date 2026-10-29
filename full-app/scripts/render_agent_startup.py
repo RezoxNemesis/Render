@@ -71,6 +71,11 @@ def _launch_settings(environ, script_file):
                 raise ValueError("INVALID_CREATOR_FOCUS")
             if focus:environ["RENDER_CREATOR_FOCUS"]="1"
             else:environ.pop("RENDER_CREATOR_FOCUS",None)
+            animation_focus=settings.get("animation_focus",False)
+            if type(animation_focus) is not bool:
+                raise ValueError("INVALID_ANIMATION_FOCUS")
+            if animation_focus:environ["RENDER_ANIMATION_FOCUS"]="1"
+            else:environ.pop("RENDER_ANIMATION_FOCUS",None)
     return root, mode
 
 
@@ -484,6 +489,10 @@ def _dispatch(command):
         import render_production
         return render_production.execute(args, ROOT, command.get("id"))
     # Local touch-overlay UI operations; NOT remotely registered agent actions.
+    if action == "blender.animation.open":
+        if args:raise ValueError("UNEXPECTED_ARGUMENT")
+        import render_animation_ui
+        return render_animation_ui.open_animation_workspace()
     if action == "blender.creator.open":
         if args:raise ValueError("UNEXPECTED_ARGUMENT")
         import render_creator_ui

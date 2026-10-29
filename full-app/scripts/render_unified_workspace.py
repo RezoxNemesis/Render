@@ -266,7 +266,7 @@ def _execute_step(op,payload,plan_id):
     # Native Blender mutations run on this timer ONLY. Make a real .blend
     # checkpoint before a consequential step unless the existing operation
     # already checkpoints itself. No replay of an interrupted write.
-    if op in C.MUTATING and not op.startswith("studio.create.") and op not in (
+    if op in C.MUTATING and op not in C.AnimationStudio.OPS and not op.startswith("studio.create.") and op not in (
             "studio.workspace.activate","studio.view.orbit",
             "body.blockout","reference.workspace.open",
             "reference.fit.landmarks","reference.fit.multiview",
@@ -363,6 +363,7 @@ def _tool_index():
                         "render_reference_timeline",
                         "render_agent_fastlane",
                         "render_creator_contract",
+                        "render_animation_suite",
                         "render_command_contract",
                         "render_viewport_fidelity_contract",
                         "render_workflow_contract"):
@@ -469,9 +470,11 @@ def execute(op,p,root,scene):
         import render_command_contract as Commands
         result["api_supported_ops"].extend(sorted(set(Creator.OPS)|set(Commands.OPS)))
         result["creator_suite_contract"]=Creator.VERSION
+        result["api_supported_ops"].extend(sorted(C.AnimationStudio.OPS))
+        result["animation_studio_contract"]=C.AnimationStudio.VERSION
         return result
     if op=="studio.tool.search":return _tool_search(p)
-    if op.startswith(("studio.create.","studio.command.")):
+    if op in C.AnimationStudio.OPS or op.startswith(("studio.create.","studio.command.")):
         # Keep the public route identical for UI, ChatGPT and queued edits.
         # The production dispatcher owns validation and checkpoints.
         import render_production

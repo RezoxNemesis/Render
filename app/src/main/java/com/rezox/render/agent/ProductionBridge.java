@@ -21,6 +21,9 @@ public final class ProductionBridge {
     private static final String[] OPS={"capabilities","device.profile","editor.open","screenshot.capture","screenshot.preview","file.importers","file.inspect","file.import",
         "studio.create.catalog","studio.create.model","studio.create.terrain","studio.create.scatter","studio.create.material","studio.create.motion","studio.create.camera","studio.create.rig",
         "studio.command.catalog","studio.command.preview","studio.command.submit",
+        "studio.animation.catalog","studio.animation.layer.create","studio.animation.parallax.create","studio.animation.morph.create",
+        "studio.motion.rig.create","studio.motion.clip.create","studio.motion.audit",
+        "studio.finish.inspect","studio.finish.preset","studio.keyframes.inspect","studio.keyframes.retime",
         "artifact.read","artifact.export","reference.write","project.create","project.checkpoint","project.list","project.restore","mesh.edit","curve.create","shape.create","shape.keys","rig.create","rig.bind","rig.keys",
         "scene.inspect","mesh.create","body.blockout","camera.frame","viewport.orient","sculpt.prepare","asset.create","material.assign","group.create","animation.keys","camera.aim",
         "world.configure","instances.plan","instances.create","reference.attach",
@@ -120,6 +123,10 @@ public final class ProductionBridge {
                 .put("viewport_precision_controls_available",true)
                 .put("native_operator_coverage","explicit allowlist, not arbitrary Python").put("free_procedural_asset_presets",17).put("free_assets_native_editable",true)
                 .put("creator_suite", "0.50.0")
+                .put("animation_studio", "0.60.0")
+                .put("animation_catalog_operation", "studio.animation.catalog")
+                .put("motion_quality_operation", "studio.motion.audit")
+                .put("render_preflight_operation", "studio.finish.inspect")
                 .put("creator_catalog_operation", "studio.create.catalog")
                 .put("command_preview_operation", "studio.command.preview")
                 .put("command_submit_requires_preview_sha256", true)

@@ -346,6 +346,20 @@ def execute(args, spool, command_id):
     operation,p=C.validate_envelope(args);root=_root(spool)
     scene=bpy.context.scene
     if scene is None:raise RuntimeError('NO_ACTIVE_SCENE')
+    import render_animation_suite as AnimationStudio
+    if operation in AnimationStudio.OPS:
+        p = AnimationStudio.validate(operation, p)
+        receipt = None
+        if operation not in AnimationStudio.READ_ONLY:
+            _editable(scene)
+            if bpy.app.is_job_running("RENDER"):
+                raise ValueError("ANIMATION_STUDIO_RENDER_BUSY")
+            import render_artist_ops
+            receipt = render_artist_ops.checkpoint(scene, root, operation)
+        result = AnimationStudio.execute(operation, p, root, scene)
+        if receipt is not None:
+            result["checkpoint_before_change"] = receipt
+        return result
     if operation.startswith('studio.create.'):
         import render_creator_contract as Creator
         import render_creator_ops

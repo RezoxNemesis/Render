@@ -227,6 +227,10 @@ def attach_bpy_agent(runtime_zip, source_py, scene_py=None, batch_py=None):
                      "render_creator_contract.py", "render_creator_ops.py",
                      "render_creator_ui.py", "render_command_contract.py",
                      "render_command_planner.py",
+                     "render_animation_suite.py", "render_animation_ui.py",
+                     "render_animation_layers_contract.py", "render_animation_layers.py",
+                     "render_motion_lab_contract.py", "render_motion_lab.py",
+                     "render_animation_finish_contract.py", "render_animation_finish.py",
                      "render_reference_timeline.py"):
             source = Path(source_py).with_name(name)
             if not source.is_file():

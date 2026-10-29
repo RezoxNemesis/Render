@@ -95,21 +95,23 @@ public final class RenderHubActivity extends Activity {
         LinearLayout wordmark=StudioUi.column(this);
         wordmark.setPadding(StudioUi.dp(this,12),0,StudioUi.dp(this,8),0);
         StudioUi.add(wordmark,StudioUi.text(this,"Render Studio",19,StudioUi.WHITE,true));
-        StudioUi.add(wordmark,StudioUi.label(this,"Creator edition"));
+        StudioUi.add(wordmark,StudioUi.label(this,"Animation Studio · 0.60"));
         brand.addView(wordmark,new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1));
         brand.addView(StudioUi.chip(this,"ON DEVICE",StudioUi.GREEN));
         StudioUi.add(page,brand);StudioUi.space(page,27);
 
         LinearLayout hero=wide?StudioUi.row(this):StudioUi.column(this);
         LinearLayout intro=StudioUi.column(this);
-        StudioUi.add(intro,StudioUi.label(this,"IDEA → EDITABLE 3D"));StudioUi.space(intro,8);
-        StudioUi.add(intro,StudioUi.text(this,"Make your next\n3D world.",wide?38:33,StudioUi.WHITE,true));
+        StudioUi.add(intro,StudioUi.label(this,"2D · 2.5D · 3D · MOTION"));StudioUi.space(intro,8);
+        StudioUi.add(intro,StudioUi.text(this,"Bring your ideas\nto life.",wide?38:33,StudioUi.WHITE,true));
         StudioUi.space(intro,10);
         StudioUi.add(intro,StudioUi.text(this,
-            "Build an asset. Shape a landscape. Set it in motion. Start with guided tools, then keep creating in the full Blender editor.",
+            "Create layered scenes, build characters, test their movement and finish an animation. Guided tools inside the full Blender editor.",
             14,StudioUi.MUTED,false));
         StudioUi.space(intro,16);
-        addAction(intro,"Open Creator workspace  ↗",StudioUi.PRIMARY,()->launchEditor("portrait",true));
+        addAction(intro,"Open Animation Studio  ↗",StudioUi.PRIMARY,this::launchAnimation);
+        StudioUi.space(intro,8);
+        addAction(intro,"Models, worlds & materials  ↗",StudioUi.SECONDARY,()->launchEditor("portrait",true));
         if(wide){
             hero.addView(intro,new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1));
             hero.addView(new View(this),new LinearLayout.LayoutParams(StudioUi.dp(this,24),1));
@@ -127,6 +129,21 @@ public final class RenderHubActivity extends Activity {
         if(wide)hero.addView(visual,new LinearLayout.LayoutParams(0,ViewGroup.LayoutParams.WRAP_CONTENT,1));
         else StudioUi.add(hero,visual);
         StudioUi.add(page,hero);StudioUi.space(page,17);
+
+        LinearLayout animation=StudioUi.card(this);
+        StudioUi.add(animation,StudioUi.label(this,"ANIMATE / ONE WORKSPACE"));StudioUi.space(animation,7);
+        StudioUi.add(animation,StudioUi.text(this,"From first pose to final frame",23,StudioUi.WHITE,true));
+        StudioUi.space(animation,8);
+        StudioUi.add(animation,StudioUi.text(this,
+            "Layers & parallax · IK character starters · movement checks · morph animation · keyframe timing · render preflight.",
+            13,StudioUi.MUTED,false));
+        StudioUi.space(animation,12);
+        addAction(animation,"Create, animate & render  →",StudioUi.SECONDARY,this::launchAnimation);
+        StudioUi.space(animation,8);
+        StudioUi.add(animation,StudioUi.text(this,
+            "Inside Blender, choose the Animate tab. Check movement before exporting. Morphs let a 3D shape change over time.",
+            12,StudioUi.MUTED,false));
+        StudioUi.add(page,animation);StudioUi.space(page,14);
 
         LinearLayout creator=StudioUi.card(this);
         StudioUi.add(creator,StudioUi.label(this,"01 / CREATE IN BLENDER"));StudioUi.space(creator,7);
@@ -267,6 +284,13 @@ public final class RenderHubActivity extends Activity {
             final String message=feedback;
             ui.post(()->{if(visible&&!isFinishing())Toast.makeText(this,message,Toast.LENGTH_LONG).show();});
         });
+    }
+    private void launchAnimation(){
+        org.blender.blender.BlenderMobileControls.setMode(this,"portrait");
+        startActivity(new Intent(this,EditorLaunchActivity.class)
+            .putExtra("render_animation_focus",true)
+            .putExtra(com.rezox.render.omega.engine.EngineStartupRecovery.EXTRA_REQUEST,
+                com.rezox.render.omega.engine.EngineStartupRecovery.request(this)));
     }
     private void launchEditor(String mode,boolean creator){
         org.blender.blender.BlenderMobileControls.setMode(this,mode);

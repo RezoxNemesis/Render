@@ -554,6 +554,11 @@ def install():
     except Exception as error:
         print("Render Creator panel unavailable:", type(error).__name__, flush=True)
     try:
+        import render_animation_ui
+        render_animation_ui.install()
+    except Exception as error:
+        print("Render Animation panel unavailable:", type(error).__name__, flush=True)
+    try:
         import render_native_hud
         render_native_hud.install(render_progress)
     except Exception as error:

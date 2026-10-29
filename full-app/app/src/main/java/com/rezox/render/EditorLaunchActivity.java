@@ -156,15 +156,19 @@ public final class EditorLaunchActivity extends Activity {
     }
     private void prepare() {
         boolean creatorFocus=getIntent().getBooleanExtra("render_creator_focus",false);
+        boolean animationFocus=getIntent().getBooleanExtra("render_animation_focus",false);
         if(com.rezox.render.agent.NativeHeartbeat.observedCurrentProcess(this)){
             startActivity(new Intent().setClassName(this,"org.blender.blender.BlenderActivity")
                 .putExtra("render_creator_focus",creatorFocus)
+                .putExtra("render_animation_focus",animationFocus)
                 .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT|Intent.FLAG_ACTIVITY_SINGLE_TOP));
-            if(creatorFocus)org.blender.blender.BlenderMobileControls.openCreator(this);
+            if(animationFocus)org.blender.blender.BlenderMobileControls.openAnimation(this);
+            else if(creatorFocus)org.blender.blender.BlenderMobileControls.openCreator(this);
             finish();return;
         }
-        if(creatorFocus)getSharedPreferences("render_mobile_ui",MODE_PRIVATE).edit()
-            .putBoolean("creator_focus",true).apply();
+        getSharedPreferences("render_mobile_ui",MODE_PRIVATE).edit()
+            .putBoolean("creator_focus",creatorFocus && !animationFocus)
+            .putBoolean("animation_focus",animationFocus).apply();
         if(EngineStartupRecovery.launchInFlight()&&!GLOBAL_PREFLIGHT.get()){
             report("Blender launch is already in progress. Waiting for its native timer; no second engine was launched.");
             return;
@@ -222,7 +226,8 @@ public final class EditorLaunchActivity extends Activity {
                         if(isFinishing()||isDestroyed()){EngineStartupRecovery.preparationFailed();return;}
                         Intent intent=new Intent().setClassName(this,
                             "org.blender.blender.BlenderActivity")
-                            .putExtra("render_creator_focus",creatorFocus);
+                            .putExtra("render_creator_focus",creatorFocus)
+                .putExtra("render_animation_focus",animationFocus);
                         startActivity(intent);
                         EngineEvidence.record(this,EngineEvidence.Stage.EDITOR_ACTIVITY_REQUESTED);
                         // StartActivity does not attest an actual GPU frame.

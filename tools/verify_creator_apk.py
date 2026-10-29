@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-or-later
-"""Fail closed on a stale, incomplete, or differently signed Creator APK.
+"""Fail closed on a stale, incomplete, or differently signed Animation Studio APK.
 
 The Android build tools verify the actual APK signature and binary manifest.
 This check also compares every shipped Render Python source with the checkout,
@@ -19,13 +19,17 @@ import tempfile
 import zipfile
 
 PACKAGE = "com.rezox.render"
-VERSION_CODE = "60"
-VERSION_NAME = "0.50.0-creator-studio"
+VERSION_CODE = "61"
+VERSION_NAME = "0.60.0-animation-studio"
 SIGNER_SHA256 = "f3d63fb20be25ca0be8aa6a161d5cf13cd98ba2fa300c7a604cce35131b9eb30"
 ENGINE_SHA256 = "a87b805df88ab64b4af21baac98bf380de9b0a1d90ac5525c082c5aceac29d59"
 REQUIRED_CREATOR_MODULES = frozenset({
     "render_creator_contract.py", "render_creator_ops.py", "render_creator_ui.py",
     "render_command_contract.py", "render_command_planner.py",
+    "render_animation_layers.py", "render_animation_layers_contract.py",
+    "render_motion_lab.py", "render_motion_lab_contract.py",
+    "render_animation_finish.py", "render_animation_finish_contract.py",
+    "render_animation_suite.py", "render_animation_ui.py",
 })
 
 
@@ -150,7 +154,7 @@ def main():
     parser.add_argument("--report-dir", type=Path, required=True)
     args = parser.parse_args()
     result = verify(args.apk, args.source_dir, args.build_tools, args.source_sha, args.report_dir)
-    print("PASS: Creator APK", result["apk_sha256"], "source", result["source_commit"],
+    print("PASS: Animation Studio APK", result["apk_sha256"], "source", result["source_commit"],
           "runtime modules", len(result["runtime_source_sha256"]))
 
 

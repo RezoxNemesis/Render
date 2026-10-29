@@ -31,6 +31,19 @@ public class NativeEditorConfigurationTest {
         assertFalse(second.getBoolean("creator_focus"));
         assertEquals("landscape",second.getString("mobile_mode"));
     }
+    @Test public void animationLaunchIsConsumedOnceWithoutEnablingCreator()throws Exception{
+        Context app=RuntimeEnvironment.getApplication();
+        app.getSharedPreferences("render_mobile_ui",Context.MODE_PRIVATE).edit()
+            .putBoolean("animation_focus",true).putBoolean("creator_focus",false).commit();
+        NativeEditorConfiguration.publish(app);
+        File file=new File(app.getFilesDir(),"render_native_launch.json");
+        JSONObject first=new JSONObject(new String(Files.readAllBytes(file.toPath()),StandardCharsets.UTF_8));
+        assertTrue(first.getBoolean("animation_focus"));
+        assertFalse(first.getBoolean("creator_focus"));
+        NativeEditorConfiguration.publish(app);
+        JSONObject second=new JSONObject(new String(Files.readAllBytes(file.toPath()),StandardCharsets.UTF_8));
+        assertFalse(second.getBoolean("animation_focus"));
+    }
     @Test public void launchIdentityChangesOnlyOnPublicationAndDoesNotCreateReadiness()throws Exception{
         Context app=RuntimeEnvironment.getApplication();File file=new File(app.getFilesDir(),"render_native_launch.json");
         File ready=new File(app.getFilesDir(),"render_bpy_jobs/ready");ready.getParentFile().mkdirs();

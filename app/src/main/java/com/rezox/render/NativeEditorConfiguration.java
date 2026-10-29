@@ -26,6 +26,8 @@ public final class NativeEditorConfiguration {
                 .put("native_activity_launch_id", launchId)
                 .put("creator_focus", context.getSharedPreferences("render_mobile_ui",Context.MODE_PRIVATE)
                     .getBoolean("creator_focus",false))
+                .put("animation_focus", context.getSharedPreferences("render_mobile_ui",Context.MODE_PRIVATE)
+                    .getBoolean("animation_focus",false))
                 .put("command_spool_enabled", true).put("mobile_mode", mode);
         AtomicFile file = new AtomicFile(new File(context.getFilesDir(), "render_native_launch.json"));
         FileOutputStream out = file.startWrite();
@@ -33,7 +35,7 @@ public final class NativeEditorConfiguration {
             out.write(settings.toString().getBytes(StandardCharsets.UTF_8));
             file.finishWrite(out);
             context.getSharedPreferences("render_mobile_ui",Context.MODE_PRIVATE).edit()
-                .remove("creator_focus").apply();
+                .remove("creator_focus").remove("animation_focus").apply();
         } catch (Exception error) {
             file.failWrite(out);
             throw error;

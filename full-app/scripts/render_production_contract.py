@@ -45,6 +45,9 @@ OPERATIONS = frozenset((
     'object.geometry','operator.describe','operator.execute',
     'render.plan', 'render.step', 'render.status', 'render.encode',
 ))
+import render_animation_suite as AnimationStudio
+OPERATIONS = OPERATIONS | frozenset(AnimationStudio.OPS)
+
 NAME = re.compile(r'^[A-Za-z][A-Za-z0-9_-]{0,63}$')
 FILE = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$')
 MAX_INSTANCES = 10_000_000

@@ -104,6 +104,8 @@ PROGRAM_OPS={
  "studio.sim.rigidbody":"simulation",
  "studio.drawing.strokes":"drawing",
 }
+import render_animation_suite as AnimationStudio
+PROGRAM_OPS.update(AnimationStudio.OPS)
 MUTATING=frozenset(PROGRAM_OPS)-{
  "studio.create.catalog",
  "scene.inspect","animation.clip.inspect","animation.motion.audit",
@@ -119,6 +121,7 @@ MUTATING=frozenset(PROGRAM_OPS)-{
  "studio.compositor.inspect",
  "render.profile.inspect","render.quality.inspect"
 }
+MUTATING = MUTATING - AnimationStudio.READ_ONLY
 READ_ONLY=frozenset(PROGRAM_OPS)-MUTATING
 
 # Runtime native Python/Bpy discovery is separate from this catalog. The names
