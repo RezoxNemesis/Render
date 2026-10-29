@@ -35,7 +35,7 @@ public final class RenderDirectMcp {
         return saved;
     }
 
-    public static JSONObject credentials(String deviceId,String deviceToken) {
+    public static JSONObject credentials(String deviceId,String deviceToken) throws org.json.JSONException {
         JSONObject c=new JSONObject();
         c.put("transport","render-direct-mcp");
         c.put("relay",ORIGIN);
