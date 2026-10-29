@@ -41,7 +41,7 @@ class NativeAutonomySecurityTests(unittest.TestCase):
         self.assertIn("AgentHttp.post(RenderDirectMcp.ORIGIN,path,",service)
         self.assertIn("AgentWorkPresence.begin",service)
         self.assertIn("AgentWorkPresence.finish",service)
-        self.assertIn("c.getInt(0)>=12",journal)
+        self.assertIn("count.getInt(0)>=12",journal)
         self.assertFalse((ROOT/"app/src/main/java/com/rezox/render/agent/VideoStudioNativeBridgeService.java").exists())
         self.assertIn("MAX_STALE_MS",android)
         self.assertIn("POST_NOTIFICATIONS",android)
