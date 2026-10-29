@@ -14,6 +14,9 @@ public final class NativeWakeGuard implements AutoCloseable {
     private NativeWakeGuard(PowerManager.WakeLock held){lock=held;}
 
     public static long timeoutForAction(String action){
+        if("blender.production.render_frame".equals(action))
+            return NativeCommandBudget.FRAME_TIMEOUT_MS+SAFETY_MARGIN_MS;
+        if("blender.production.execute".equals(action))return 600_000L+SAFETY_MARGIN_MS;
         if("blender.scene.render_video".equals(action))return 1_800_000L+SAFETY_MARGIN_MS;
         if("blender.scene.render_still".equals(action))return 480_000L+SAFETY_MARGIN_MS;
         if("blender.project.save_copy".equals(action) ||

@@ -1,0 +1,78 @@
+name: Render 0.42 Direct Native Sculpt and Artist Control
+on:
+  pull_request:
+    branches: [upgrade/render-studio-041-real-artist-workflows-20261025]
+    paths:
+      - "full-app/scripts/**"
+      - "app/src/**"
+      - "tools/**"
+      - ".github/workflows/render-042-direct-artist.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  direct-sculpt-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Compile real native sculpt source and fail-closed gate contracts
+        run: |
+          python -m compileall -q full-app/scripts/render_artist_direct.py \
+            full-app/scripts/render_artist_direct_contract.py \
+            full-app/scripts/render_artist_direct_ui.py \
+            full-app/scripts/render_unified_workspace.py \
+            full-app/scripts/render_production.py
+      - name: Validate viewport conversion, revision locking, topology, Android bridges
+        run: |
+          python -m unittest tools.test_artist_direct_contract -v
+          python -m unittest tools.test_unified_studio_contract -v
+          python -m unittest tools.test_external_benchmarks_contract -v
+      - name: Stage actual native Blender runtime, do not downgrade or replace APK
+        run: |
+          python tools/prepare_production_toolkit.py
+          python tools/prepare_production_toolkit.py
+  actual-blender-ui:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install genuine Blender and Xvfb window
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends blender xvfb
+      - name: Test real visible Blender Sculpt Mode, native controls and stale-token rejection
+        env:
+          PYTHONPATH: full-app/scripts
+          LIBGL_ALWAYS_SOFTWARE: "1"
+        run: |
+          timeout 120 xvfb-run -a -s "-screen 0 1280x900x24" \
+            blender --factory-startup -noaudio --python-exit-code 1 \
+            --python tools/test_real_artist_direct_ui.py
+  android-native-bridge:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+      - name: Install Android build tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          M="$(find "$ANDROID_HOME/cmdline-tools" -path '*/bin/sdkmanager' -type f | sort -V | tail -1)"
+          test -x "$M"
+          yes | "$M" --licenses >/dev/null || true
+          "$M" --install "platforms;android-35" "build-tools;35.0.0" "cmake;3.22.1" "ndk;27.2.12479018"
+      - name: Original native bridge tests and debug package build
+        run: |
+          python tools/prepare_production_toolkit.py
+          gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug

@@ -97,7 +97,7 @@ public final class AgentActivity extends Activity {
         StudioUi.add(statusPanel,status);
         StudioUi.space(statusPanel,7);
         StudioUi.add(statusPanel,StudioUi.text(this,
-            "Direct Render commands use the existing VideoStudio MCP. Pairing to a separate hosted relay is optional.",
+            "Use the dedicated Render Studio HTTPS MCP to connect this app directly to ChatGPT. VideoStudio is optional.",
             12,0xFFBBAFD4,false));
         StudioUi.add(page,statusPanel);
         StudioUi.space(page,13);
@@ -129,7 +129,7 @@ public final class AgentActivity extends Activity {
         StudioUi.space(page,17);
 
         LinearLayout localBridge=StudioUi.violetCard(this);
-        StudioUi.add(localBridge,StudioUi.label(this,"PRIMARY / VIDEOSTUDIO MCP → RENDER"));
+        StudioUi.add(localBridge,StudioUi.label(this,"LEGACY / OPTIONAL VIDEOSTUDIO BRIDGE"));
         StudioUi.space(localBridge,9);
         StudioUi.add(localBridge,StudioUi.text(this,"Connect & share\nwith ChatGPT.",22,StudioUi.WHITE,true));
         StudioUi.space(localBridge,8);
@@ -158,21 +158,46 @@ public final class AgentActivity extends Activity {
         addAction(localBridge,"STOP VIDEOSTUDIO BRIDGE",StudioUi.DANGER,
             ()->disableDirectBridge());
         StudioUi.add(page,localBridge);
+        StudioUi.space(page,14);
+        LinearLayout cloudBackup=StudioUi.card(this);
+        StudioUi.add(cloudBackup,StudioUi.label(this,"PROJECT FOLDERS / FILE TRANSFERS"));
+        StudioUi.space(cloudBackup,7);
+        StudioUi.add(cloudBackup,StudioUi.text(this,
+            "Choose a working folder in device storage or Google Drive, when its Android provider supports folders. ChatGPT can create subfolders, import original files and export verified project copies through your existing Render connection. Transfers and native Blender imports report separately. No Gallery access.",
+            12,StudioUi.MUTED,false));
+        StudioUi.space(cloudBackup,10);
+        addAction(cloudBackup,"CHOOSE WORKING / BACKUP FOLDER",StudioUi.SECONDARY,()->{
+            try{ProductionDriveStorage.chooseFolder(this);}
+            catch(Exception e){Toast.makeText(this,"Folder picker unavailable: "+e.getClass().getSimpleName(),Toast.LENGTH_LONG).show();}
+        });
+        addAction(cloudBackup,"FILE TRANSFERS / PAUSE / RESUME / CANCEL",StudioUi.SECONDARY,()->showFileTransfers());
+        addAction(cloudBackup,"CHOOSE MODEL / IMAGE / VIDEO FILE",StudioUi.SECONDARY,()->StorageDocuments.pickFile(this));
+        StudioUi.add(page,cloudBackup);
+        LinearLayout referenceCard=StudioUi.card(this);
+        StudioUi.add(referenceCard,StudioUi.label(this,"REFERENCE IMAGE / VIDEO INBOX"));
+        StudioUi.add(referenceCard,StudioUi.text(this,
+            "Import only photos or videos you choose. Render checks the real file bytes and saves a private checksum. It never browses Gallery or guesses the unseen side of a character.",
+            12,StudioUi.MUTED,false));
+        addAction(referenceCard,"IMPORT PHOTOS / VIDEOS INTO RENDER",StudioUi.SECONDARY,()->{
+            try{StudioReferenceInbox.openPicker(this);}
+            catch(Exception e){Toast.makeText(this,"Reference picker unavailable: "+e.getClass().getSimpleName(),Toast.LENGTH_LONG).show();}
+        });
+        StudioUi.add(page,referenceCard);
         StudioUi.space(page,17);
 
-        // Keep legacy cloud modes supported but do not confuse them with
-        // the recommended single, direct VideoStudio MCP connection.
+        // Dedicated Cloudflare MCP is the preferred independent Render transport.
+        // Keep the VideoStudio bridge available separately for existing owners.
         LinearLayout advanced=StudioUi.column(this);
         advanced.setVisibility(View.GONE);
         TextView advancedToggle=StudioUi.action(this,
-            "OPTIONAL CLOUD PAIRING / ADVANCED     ▾",StudioUi.SECONDARY);
+            "DIRECT RENDER MCP / PAIR THIS DEVICE     ▾",StudioUi.SECONDARY);
         StudioUi.add(page,advancedToggle);
         StudioUi.space(page,8);
         StudioUi.add(page,advanced);
         advancedToggle.setOnClickListener(v->{
             boolean expand=advanced.getVisibility()!=View.VISIBLE;
             advanced.setVisibility(expand?View.VISIBLE:View.GONE);
-            advancedToggle.setText(expand?"HIDE ADVANCED CLOUD OPTIONS     ▴":
+            advancedToggle.setText(expand?"HIDE DIRECT RENDER MCP SETUP     ▴":
                 "OPTIONAL CLOUD PAIRING / ADVANCED     ▾");
         });
         LinearLayout shared=StudioUi.violetCard(this);
@@ -194,12 +219,12 @@ public final class AgentActivity extends Activity {
         StudioUi.space(advanced,17);
 
         LinearLayout pairPanel=StudioUi.card(this);
-        StudioUi.add(pairPanel,StudioUi.label(this,"OPTIONAL / OLD INDEPENDENT RELAY"));
+        StudioUi.add(pairPanel,StudioUi.label(this,"DEDICATED / RENDER CLOUDFLARE MCP"));
         StudioUi.space(pairPanel,8);
-        StudioUi.add(pairPanel,StudioUi.text(this,"Connect your phone",21,StudioUi.WHITE,true));
+        StudioUi.add(pairPanel,StudioUi.text(this,"Pair your Render Android app",21,StudioUi.WHITE,true));
         StudioUi.space(pairPanel,7);
         StudioUi.add(pairPanel,StudioUi.text(this,
-            "Optional older method. The existing VideoStudio MCP above needs no new server or ChatGPT connector.",
+            "Pair Render directly to its dedicated Cloudflare HTTPS relay. No VideoStudio app, MCP, or owner key is required.",
             13,StudioUi.MUTED,false));
         StudioUi.space(pairPanel,14);
         relay=StudioUi.field(this,"Relay origin  ·  https://…",false);
@@ -269,6 +294,100 @@ public final class AgentActivity extends Activity {
             "SCREEN CAPTURE ENABLED  •  Secret fields remain masked. This connection never uses cloud Blender rendering. Device and permission limitations still apply.",
             11,StudioUi.MUTED,false));
         ui.post(refresh);
+        if(StudioReferenceInbox.isExplicitOwnerMediaIntent(getIntent()))
+            confirmSharedReference(getIntent());
+        else if(getIntent()!=null&&"com.rezox.render.agent.PICK_MEDIA".equals(getIntent().getAction())){
+            setIntent(new Intent(this,AgentActivity.class));
+            StudioReferenceInbox.openPicker(this);
+        }
+        else if(getIntent()!=null&&"com.rezox.render.agent.PICK_STORAGE".equals(getIntent().getAction())){
+            setIntent(new Intent(this,AgentActivity.class));ProductionDriveStorage.chooseFolder(this);
+        }
+        else if(getIntent()!=null&&"com.rezox.render.agent.PICK_FILE".equals(getIntent().getAction())){
+            setIntent(new Intent(this,AgentActivity.class));StorageDocuments.pickFile(this);
+        }
+    }
+    private void confirmSharedReference(Intent inbound){
+        if(inbound==null || !StudioReferenceInbox.isExplicitOwnerMediaIntent(inbound))return;
+        new AlertDialog.Builder(this)
+            .setTitle("Import these images/videos into Render?")
+            .setMessage("Only the files explicitly selected or shared with Render are copied into its private reference inbox. No Gallery browsing occurs.")
+            .setNegativeButton("Cancel",null)
+            .setPositiveButton("Import",(dialog,which)->receiveReferenceIntent(inbound))
+            .show();
+    }
+    private void receiveReferenceIntent(Intent inbound){
+        if(inbound==null||!StudioReferenceInbox.isExplicitOwnerMediaIntent(inbound))return;
+        // Permission-limited source URIs are used only for this owner-selected copy.
+        setIntent(new Intent(this,AgentActivity.class));
+        background.execute(()->{
+            try{
+                JSONObject receipt=StudioReferenceInbox.receive(getApplicationContext(),inbound);
+                int count=receipt.getInt("imported");
+                ui.post(()->Toast.makeText(this,"Imported "+count+" reference(s); inspect reference.list through your existing Render bridge.",Toast.LENGTH_LONG).show());
+            }catch(Exception e){
+                ui.post(()->Toast.makeText(this,"Reference import failed: "+e.getMessage(),Toast.LENGTH_LONG).show());
+            }
+        });
+    }
+    @Override protected void onNewIntent(Intent intent){
+        super.onNewIntent(intent);
+        if(StudioReferenceInbox.isExplicitOwnerMediaIntent(intent))
+            confirmSharedReference(intent);
+        else if("com.rezox.render.agent.PICK_STORAGE".equals(intent.getAction()))ProductionDriveStorage.chooseFolder(this);
+        else if("com.rezox.render.agent.PICK_MEDIA".equals(intent.getAction()))StudioReferenceInbox.openPicker(this);
+        else if("com.rezox.render.agent.PICK_FILE".equals(intent.getAction()))StorageDocuments.pickFile(this);
+    }
+    private void showFileTransfers(){
+        perform(()->{
+            org.json.JSONArray rows=FileTransfers.list(this).getJSONArray("transfers");
+            if(rows.length()==0)return "No file transfers yet. Ask ChatGPT to inspect storage.capabilities through your existing Render connection.";
+            String[] labels=new String[rows.length()];
+            for(int i=0;i<rows.length();i++){
+                JSONObject row=rows.getJSONObject(i);
+                labels[i]=transferTitle(row)+" · "+transferState(row);
+            }
+            ui.post(()->new AlertDialog.Builder(this).setTitle("File transfers")
+                .setItems(labels,(dialog,index)->{
+                    try{
+                        JSONObject row=rows.getJSONObject(index);String id=row.getString("transfer_id");
+                        new AlertDialog.Builder(this).setTitle(transferTitle(row))
+                            .setMessage(transferSummary(row))
+                            .setNeutralButton("Pause",(d,w)->perform(()->transferSummary(FileTransfers.control(this,id,"pause"))))
+                            .setNegativeButton("Cancel transfer",(d,w)->perform(()->transferSummary(FileTransfers.control(this,id,"cancel"))))
+                            .setPositiveButton("Resume",(d,w)->perform(()->{
+                                FileTransfers.control(this,id,"resume");return transferSummary(FileTransferService.request(this,id));
+                            })).show();
+                    }catch(Exception e){Toast.makeText(this,"Transfer unavailable",Toast.LENGTH_LONG).show();}
+                }).setNegativeButton("Close",null).show());
+            return "File transfers report copied bytes separately from native Blender imports. Failed or interrupted transfers require an explicit Resume.";
+        });
+    }
+    private String transferTitle(JSONObject row){
+        String name=row.optString("display_name","");
+        if(!name.isEmpty())return name;
+        switch(row.optString("kind")){
+            case "import":return "Import original file";
+            case "export":return "Export project or output";
+            case "fetch":return "Download original file";
+            case "unpack":return "Extract asset dependencies";
+            default:return "File transfer";
+        }
+    }
+    private String transferState(JSONObject row){return row.optString("state","unknown").replace('_',' ');}
+    private String transferSummary(JSONObject row){
+        if(row.optBoolean("cancelled"))return "No file selected.";
+        long done=row.optLong("bytes_transferred",0),total=row.optLong("total_bytes",-1);
+        String text=transferState(row)+"\n"+android.text.format.Formatter.formatShortFileSize(this,done);
+        if(total>=0)text+=" / "+android.text.format.Formatter.formatShortFileSize(this,total);
+        JSONObject result=row.optJSONObject("result");
+        if(result!=null){
+            if(result.optBoolean("provider_readback_sha256_verified"))text+="\nVerified copy saved. The original project is retained.";
+            if(result.optBoolean("original_bytes_preserved"))text+="\nOriginal bytes saved for native Blender import.";
+        }
+        if(row.has("error_hint"))text+="\n\n"+row.optString("error_hint").replace("Use storage.task.refresh on this transfer","Ask ChatGPT to refresh this transfer");
+        if(row.optBoolean("requires_owner_open"))text+="\nOpen Render and explicitly Resume when Android permits.";
+        return text;
     }
     private void addAction(LinearLayout parent,String title,int style,Runnable action) {
         TextView view=StudioUi.action(this,title,style);
@@ -327,7 +446,7 @@ public final class AgentActivity extends Activity {
     private void shareRenderConnection(){
         String card=RenderConnectionCard.shareText(secrets.renderPublicId(),
             secrets.videoStudioBridgeEnabled(),
-            installedVideoStudioBuild()>=RenderConnectionCard.MIN_VIDEOSTUDIO_BUILD);
+            installedVideoStudioBuild()>=RenderConnectionCard.MIN_VIDEOSTUDIO_BUILD,getPackageName());
         Intent send=new Intent(Intent.ACTION_SEND);
         send.setType("text/plain");
         send.putExtra(Intent.EXTRA_TEXT,card);
@@ -499,6 +618,29 @@ public final class AgentActivity extends Activity {
         return "LOCAL SELF-CHECK ONLY — not a ChatGPT connection test.\n"+
             new AgentActions(this).execute(cmd,new AtomicBoolean(false)).toString(2);
     });}
+    @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){
+        super.onActivityResult(requestCode,resultCode,data);
+        if(requestCode==StorageDocuments.PICK_FILE)perform(()->transferSummary(StorageDocuments.acceptFile(this,resultCode,data)));
+        if(requestCode==StudioReferenceInbox.PICK_REFERENCE && resultCode==Activity.RESULT_OK){
+            Intent ownerSelected=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            if(data!=null){
+                ownerSelected.setData(data.getData());
+                ownerSelected.setClipData(data.getClipData());
+            }
+            ownerSelected.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            receiveReferenceIntent(ownerSelected);
+        }
+        if(requestCode==ProductionDriveStorage.REQUEST_PICK_FOLDER){
+            try{
+                boolean selected=ProductionDriveStorage.acceptFolderSelection(this,resultCode,data);
+                Toast.makeText(this,selected?
+                    "Working folder linked. Import uses read access; creating folders and exporting requires the provider's write access.":
+                    "No working folder selected.",Toast.LENGTH_LONG).show();
+            }catch(Exception e){
+                Toast.makeText(this,"Backup folder permission failed: "+e.getClass().getSimpleName(),Toast.LENGTH_LONG).show();
+            }
+        }
+    }
     @Override public void onRequestPermissionsResult(int code,String[] permissions,int[] results){
         super.onRequestPermissionsResult(code,permissions,results);
         if(code==42&&results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED)startSession();

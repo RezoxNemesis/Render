@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "execution_target": "com.rezox.render",
+  "required_execution": "owner Android native Blender through existing VideoStudio MCP",
+  "reference_visual_review": "pending native import and inspection",
+  "outcome": "not_run",
+  "benchmarks": [
+    {
+      "id": "initial_action_reference",
+      "reference_sha256": "9d46b179a801cca15c5dccf638549498b4f7cc3cba39fd9ae7610f8a5243be3e",
+      "reference_bytes": 2062375,
+      "goal": "Build an editable 3D figure and action animation following the initial user reference",
+      "required_evidence": ["native reference inspection", "editable scene and animation data", "checkpointed blend", "native rendered preview", "native original export"],
+      "native_command_ids": [],
+      "outcome": "not_run"
+    },
+    {
+      "id": "character_swing",
+      "reference_sha256": "96e67f35cbdb3c537aa7b051b45a843df42a6596e5cf1d0c7036feb40761aeee",
+      "reference_bytes": 3080331,
+      "goal": "Create an editable character swinging animation, with reference timing and camera checked inside Blender",
+      "required_capabilities_to_inspect": ["native character modeling", "rig and pose controls", "animation curves", "constraints or equivalent native attachment control", "camera and lighting", "native render and encode"],
+      "required_evidence": ["native reference inspection", "character mesh and rig", "editable swing timing and poses", "consistent contact and attachment", "visible in-Blender artist actions", "checkpointed blend", "native frame renders", "original movie export"],
+      "native_command_ids": [],
+      "outcome": "not_run"
+    },
+    {
+      "id": "organic_tree",
+      "reference_sha256": "eabf86b6e4f623306c83a89bfe50db4e00a9e513f4b01cbab176f9119cbc726a",
+      "reference_bytes": 3721131,
+      "goal": "Create an editable organic tree asset, reviewing the sculpting workflow and silhouette against the reference inside Blender",
+      "required_capabilities_to_inspect": ["native sculpt mode", "available sculpt brush operators and input context", "mesh inspection", "materials", "lighting", "native render"],
+      "required_evidence": ["native reference inspection", "editable organic mesh", "actual sculpt operation evidence for sculpting claims", "inspectable silhouette and branch structure", "material and lighting inspection", "checkpointed blend", "native rendered asset views"],
+      "native_command_ids": [],
+      "outcome": "not_run"
+    }
+  ],
+  "shared_acceptance": {
+    "native_target_receipt_required": true,
+    "public_id_is_not_a_device_credential": true,
+    "artist_feedback_surface": "inside Blender viewport and status bar",
+    "viewport_hud_draw_evidence_required": true,
+    "live_frame_progress_and_pause_reason_required": true,
+    "pointer_must_identify_real_input_or_native_object_projection": true,
+    "preview_and_original_outputs_separate": true,
+    "uncertain_mutations_must_not_be_blindly_replayed": true,
+    "thermal_recovery_must_preserve_original_quality": true,
+    "host_tests_cannot_pass_native_benchmarks": true,
+    "visual_similarity_score": null,
+    "android_device_performance_result": null
+  }
+}

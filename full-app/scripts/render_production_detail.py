@@ -24,7 +24,7 @@ def execute(operation,p,root,scene,C):
     if operation=='project.list':
         C.fields(p,('offset','limit'));offset=C.integer(p.get('offset',0),0,100000);limit=C.integer(p.get('limit',32),1,64)
         folder=root/'Projects';files=sorted(folder.glob('*.blend'),key=lambda f:f.name) if folder.is_dir() else []
-        files=[f for f in files if not f.is_symlink() and f.is_file()]
+        files=[f for f in files if not f.name.startswith('.') and not f.is_symlink() and f.is_file()]
         return {'projects':[C.file_receipt(f) for f in files[offset:offset+limit]],'total':len(files),
                 'next_offset':offset+limit if offset+limit<len(files) else None}
     if scene.get('production_frozen_job'):raise ValueError('RENDER_SNAPSHOT_IMMUTABLE')
@@ -119,7 +119,7 @@ def execute(operation,p,root,scene,C):
             if ob.mode!='OBJECT':bpy.ops.object.mode_set(mode='OBJECT')
             bpy.data.objects.remove(ob,do_unlink=True);raise
         finally:
-            if ob.name in bpy.data.objects:ob.select_set(False)
+            if name in bpy.data.objects:bpy.data.objects[name].select_set(False)
             for item in selected:
                 if item.name in bpy.context.view_layer.objects:item.select_set(True)
             if previous and previous.name in bpy.context.view_layer.objects:bpy.context.view_layer.objects.active=previous

@@ -1,0 +1,81 @@
+name: Render native 48-frame acting movie proof
+on:
+  pull_request:
+    branches: [upgrade/render-studio-033-output-integrity-20261024]
+    paths:
+      - "tools/render_reference_motion_demo.py"
+      - "full-app/scripts/render_reference_motion*.py"
+      - ".github/workflows/render-034-acting-demo.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-render-movie:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 28
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install native desktop Blender and H.264 encoder for acceptance fixture
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends blender ffmpeg
+          blender --version | head -2
+          ffmpeg -version | head -1
+      - name: Execute authentic Blender armature, facial action, NLA, and 48 renders
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          PYTHONPATH: full-app/scripts
+        run: |
+          mkdir -p "$RUNNER_TEMP/motion-visual"
+          blender -b -noaudio --factory-startup --python-exit-code 1 \
+            --python tools/render_reference_motion_demo.py -- \
+            --output "$RUNNER_TEMP/motion-visual"
+      - name: Assemble H.264 MP4 from exact original PNG sequence
+        run: |
+          set -euo pipefail
+          ffmpeg -hide_banner -loglevel error -y -framerate 24 -start_number 1 \
+            -i "$RUNNER_TEMP/motion-visual/png_masters/acting_%04d.png" \
+            -frames:v 48 -an -c:v libx264 -pix_fmt yuv420p \
+            -crf 19 -preset medium -movflags +faststart \
+            "$RUNNER_TEMP/motion-visual/CinematicActingTake01.mp4"
+      - name: Require decoded video frame count, dimensions, duration and verified source
+        run: |
+          python - <<'PY'
+          import os, subprocess, json, hashlib
+          from pathlib import Path
+          p=Path(os.environ["RUNNER_TEMP"])/"motion-visual"
+          film=p/"CinematicActingTake01.mp4"
+          assert film.is_file() and film.stat().st_size>4096
+          probe=json.loads(subprocess.check_output(["ffprobe","-v","error","-count_frames",
+            "-select_streams","v:0","-show_entries","stream=codec_name,width,height,avg_frame_rate,nb_read_frames",
+            "-show_entries","format=duration","-of","json",str(film)],text=True))
+          video=probe["streams"][0]
+          assert video["codec_name"]=="h264",video
+          assert (video["width"],video["height"])==(320,480),video
+          assert int(video["nb_read_frames"])==48,video
+          assert abs(float(probe["format"]["duration"])-2.0)<0.03,probe
+          source=json.loads((p/"evidence.json").read_text())
+          assert source["frames"]==48 and len(source["actual_image_hashes"])==48
+          assert source["native_pose_audit"]["native_pose_evaluated"]
+          assert source["native_pose_audit"]["trajectories"][0]["total_path_distance"]>0
+          for sample in (1,24,48):
+            original=p/"png_masters"/f"acting_{sample:04d}.png"
+            target=p/f"sample_{sample:04d}.png"
+            assert original.is_file()
+            target.write_bytes(original.read_bytes())
+          print("PASS: Real Blender PNG frame masters, 48 decoded H.264 frames, 2.0s, native pose movement")
+          print("Not a physical Android render, benchmark-grade likeness, or user-scene asset")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Render-0.34-native-acting-movie-editable-blend
+          path: |
+            ${{ runner.temp }}/motion-visual/CinematicActingTake01.mp4
+            ${{ runner.temp }}/motion-visual/CinematicActingTake01.blend
+            ${{ runner.temp }}/motion-visual/evidence.json
+            ${{ runner.temp }}/motion-visual/sample_0001.png
+            ${{ runner.temp }}/motion-visual/sample_0024.png
+            ${{ runner.temp }}/motion-visual/sample_0048.png
+          if-no-files-found: error
+          compression-level: 6
+          retention-days: 14

@@ -1,0 +1,12 @@
+diff --git a/source/blender/gpu/vulkan/vk_device.hh b/source/blender/gpu/vulkan/vk_device.hh
+--- a/source/blender/gpu/vulkan/vk_device.hh
++++ b/source/blender/gpu/vulkan/vk_device.hh
+@@ -498,7 +498,7 @@
+   {
+     BLI_assert(vk_timeline_semaphore_ != VK_NULL_HANDLE);
+     TimelineValue current_timeline;
+-    VkResult result = functions.vkGetSemaphoreCounterValueKHR(
++    VkResult result = functions.vkGetSemaphoreCounterValue(
+         vk_device_, vk_timeline_semaphore_, &current_timeline);
+     UNUSED_VARS(result);
+     BLI_assert_msg(
