@@ -1,0 +1,343 @@
+name: Render 0.61 Direct Render Studio MCP tested native APK
+
+on:
+  pull_request:
+    branches: [feature/native-production-toolkit-20261022]
+    paths:
+      - "app/**"
+      - "full-app/**"
+      - "tools/**"
+      - "patches/**"
+      - "cloudflare/render-studio-direct-mcp/**"
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "gradle.properties"
+      - ".github/workflows/render-061-direct-mcp.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: render-061-direct-mcp-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+  PYTHONPATH: tools:full-app/scripts
+
+jobs:
+  host-contracts:
+    if: github.head_ref == 'upgrade/render-studio-061-direct-mcp-only-20261029' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check exact source, Python syntax and repeatable build adapter
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          python -m compileall -q full-app/scripts tools/verify_creator_apk.py
+          python tools/prepare_production_toolkit.py
+          python tools/prepare_production_toolkit.py
+          git diff --exit-code
+      - name: Animation payloads, command plans, integration and release rejection checks
+        run: |
+          set -euo pipefail
+          for test in tools.test_creator_contract tools.test_command_planner tools.test_creator_release \
+                      tools.test_animation_layers_contract tools.test_motion_lab_contract \
+                      tools.test_animation_finish_contract tools.test_animation_suite_integration; do
+            python -m unittest "$test" -v
+          done
+      - name: Preserve existing native operations, storage and recovery contracts
+        run: |
+          set -euo pipefail
+          for test in \
+            tools.test_assemble_full_native tools.test_pinned_timeline_dispatch \
+            tools.test_asset_library tools.test_execution_settings \
+            tools.test_blender_bpy_bridge tools.test_lively_scene_contract \
+            tools.test_lively_scene_mock tools.test_native_autonomy_security \
+            tools.test_blender_batch_assembly tools.test_production_contract \
+            tools.test_thermal_drive_inplace_contract tools.test_studio_v22_contract \
+            tools.test_v23_reference_contract tools.test_render_v24_contract \
+            tools.test_render_v25_contract tools.test_long_foreground_contract \
+            tools.test_file_contract tools.test_file_ops \
+            tools.test_transfer_source_policy \
+            tools.test_unified_studio_contract tools.test_agent_fastlane_contract \
+            tools.test_viewport_fidelity_contract tools.test_artist_direct_contract \
+            tools.omega.test_phase10_packaging; do
+            python -m unittest "$test" -v
+          done
+      - name: Fail closed on obsolete VideoStudio app, transport and Binder service
+        run: python -m unittest tools.test_direct_mcp_only_contract -v
+      - name: Bound authenticated MCP request bodies and preserve access checks
+        run: node --test tools/test_direct_mcp_security.mjs
+
+  real-blender:
+    if: github.head_ref == 'upgrade/render-studio-061-direct-mcp-only-20261029' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - version: "4.2.23"
+            series: "4.2"
+            sha256: bea0eb3146be13eae6225409a117b215184f41b7f79e799f97cb3abb8f6dc404
+            legacy_regressions: true
+          - version: "5.2.3"
+            series: "5.2"
+            sha256: 78486c018b4443efe5e75ab54c290ed8c15abafd249b862c2c9ce2530a918eec
+            legacy_regressions: false
+    env:
+      LIBGL_ALWAYS_SOFTWARE: "1"
+      BLENDER_VERSION: ${{ matrix.version }}
+      BLENDER_SERIES: ${{ matrix.series }}
+      BLENDER_ARCHIVE_SHA256: ${{ matrix.sha256 }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Install checksum-pinned desktop Blender and virtual display
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends xvfb xauth \
+            libxi6 libxrender1 libxfixes3 libxxf86vm1 libxkbcommon0 libsm6 \
+            libgl1 libegl1 libegl-mesa0 libgl1-mesa-dri
+          curl -fL --retry 3 --connect-timeout 20 \
+            "https://download.blender.org/release/Blender$BLENDER_SERIES/blender-$BLENDER_VERSION-linux-x64.tar.xz" \
+            -o "$RUNNER_TEMP/blender.tar.xz"
+          echo "$BLENDER_ARCHIVE_SHA256  $RUNNER_TEMP/blender.tar.xz" | sha256sum --check --status
+          tar -xJf "$RUNNER_TEMP/blender.tar.xz" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/blender-$BLENDER_VERSION-linux-x64" >> "$GITHUB_PATH"
+          mkdir -p "$RUNNER_TEMP/creator-blender-evidence"
+      - name: Real Blender layers, morphs, motion QA, retiming, rendering and public dispatch
+        run: |
+          set -euo pipefail
+          blender --version | tee "$RUNNER_TEMP/creator-blender-evidence/version.txt"
+          for test in test_real_creator_suite test_real_creator_integration test_real_command_recipes \
+                      test_real_animation_layers test_real_motion_lab test_real_animation_finish \
+                      test_real_animation_suite_integration; do
+            blender --factory-startup -b -noaudio --python-exit-code 1 \
+              --python "tools/$test.py" 2>&1 | tee "$RUNNER_TEMP/creator-blender-evidence/$test.log"
+          done
+      - name: Preserve existing rendering, queue and viewport behavior
+        if: matrix.legacy_regressions
+        run: |
+          set -euo pipefail
+          for test in test_real_blender_bpy test_real_unified_studio test_real_agent_fastlane \
+                      test_real_viewport_fidelity test_real_viewport_sampling; do
+            blender --factory-startup -b -noaudio --python-exit-code 1 \
+              --python "tools/$test.py" 2>&1 | tee "$RUNNER_TEMP/creator-blender-evidence/$test.log"
+          done
+      - name: Native Blender Creator and Animation panel registration and operator execution
+        if: matrix.legacy_regressions
+        env:
+          RENDER_ANIMATION_UI_SCREENSHOT: ${{ runner.temp }}/creator-blender-evidence/animation-ui.png
+        run: |
+          set -euo pipefail
+          for test in test_real_creator_ui test_real_animation_ui; do
+            timeout 150 xvfb-run -a -s "-screen 0 1280x900x24" \
+              blender --factory-startup -noaudio --python-exit-code 1 \
+              --python "tools/$test.py" 2>&1 | \
+              tee "$RUNNER_TEMP/creator-blender-evidence/$test.log"
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Render-0.61.0-real-desktop-Blender-${{ matrix.version }}-evidence
+          path: ${{ runner.temp }}/creator-blender-evidence/
+          if-no-files-found: warn
+          retention-days: 14
+
+  signed-native-build:
+    # The pinned historical cache is scoped to this PR base. A push build or a
+    # fork must never generate a replacement key or publish a different signer.
+    if: github.head_ref == 'upgrade/render-studio-061-direct-mcp-only-20261029' && github.event.pull_request.head.repo.full_name == github.repository
+    needs: [host-contracts, real-blender]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Verify exact tested source and prepare native production build
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          python3 tools/prepare_production_toolkit.py
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Restore historical development signer; never generate a new key
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.android/render-production-development.keystore
+          key: render-production-development-signing-v1
+          fail-on-cache-miss: true
+      - name: Require pinned historical certificate before building
+        run: |
+          set -euo pipefail
+          KEY="$HOME/.android/render-production-development.keystore"
+          test -s "$KEY"
+          keytool -list -v -keystore "$KEY" -storepass android -alias androiddebugkey > "$RUNNER_TEMP/render-private-key-check.txt"
+          grep -Fqi 'F3:D6:3F:B2:0B:E2:5C:A0:BE:8A:A6:A1:61:D5:CF:13:CD:98:BA:2F:A3:00:C7:A6:04:CC:E3:51:31:B9:EB:30' "$RUNNER_TEMP/render-private-key-check.txt"
+          echo "RENDER_DEVELOPMENT_KEYSTORE=$KEY" >> "$GITHUB_ENV"
+      - name: Install Android SDK, NDK and CMake
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -path '*/bin/sdkmanager' -type f | sort -V | tail -1)"
+          test -x "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" --install "platforms;android-35" "build-tools;35.0.0" "cmake;3.22.1" "ndk;27.2.12479018"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+      - name: Run Android unit tests and compile native JNI bridge
+        run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
+      - name: Download the exact existing Android Blender engine
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 --connect-timeout 20 \
+            https://github.com/simfeo/blender/releases/download/android-alpha-4/blender-full.apk \
+            -o "$RUNNER_TEMP/blender-full.apk"
+          echo "3fe775a1e14470ebfcd3c25ae32b57003433f04552f896880631ae98b1f18aea  $RUNNER_TEMP/blender-full.apk" | sha256sum --check --status
+          test "$(stat -c%s "$RUNNER_TEMP/blender-full.apk")" = "286561495"
+      - name: Retrieve the pinned original Android launcher source
+        run: |
+          set -euo pipefail
+          mkdir "$RUNNER_TEMP/full-blender-src"
+          git -C "$RUNNER_TEMP/full-blender-src" init -q
+          git -C "$RUNNER_TEMP/full-blender-src" remote add origin https://github.com/simfeo/blender.git
+          git -C "$RUNNER_TEMP/full-blender-src" sparse-checkout init --cone
+          git -C "$RUNNER_TEMP/full-blender-src" sparse-checkout set build_files/android/apk/app/src/main
+          git -C "$RUNNER_TEMP/full-blender-src" -c protocol.version=2 fetch --depth=1 --filter=blob:none origin d93bd33cba768e19ee4387a31c0ea137ee2f0047
+          git -C "$RUNNER_TEMP/full-blender-src" checkout --detach -q FETCH_HEAD
+          test "$(git -C "$RUNNER_TEMP/full-blender-src" rev-parse HEAD)" = "d93bd33cba768e19ee4387a31c0ea137ee2f0047"
+      - name: Stage full native Blender and every Animation Studio runtime module
+        run: |
+          python3 tools/assemble_full_native.py \
+            --engine-apk "$RUNNER_TEMP/blender-full.apk" \
+            --bridge-apk app/build/outputs/apk/debug/app-debug.apk \
+            --upstream-source "$RUNNER_TEMP/full-blender-src" --output full-app/stage
+      - name: Build complete historical-signer APK and compile instrumentation
+        run: gradle -p full-app --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest
+      - name: Verify actual APK signature, Android identity, engine and every runtime source
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          git diff --exit-code HEAD -- app full-app/scripts tools
+          OUT="$RUNNER_TEMP/creator-release"
+          mkdir -p "$OUT"
+          cp full-app/app/build/outputs/apk/debug/app-debug.apk "$OUT/Render-0.61.0-direct-mcp-arm64.apk"
+          python3 tools/verify_creator_apk.py \
+            --apk "$OUT/Render-0.61.0-direct-mcp-arm64.apk" \
+            --build-tools "$ANDROID_HOME/build-tools/35.0.0" \
+            --source-sha "$SOURCE_SHA" --report-dir "$OUT"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs \
+            full-app/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk \
+            > "$RUNNER_TEMP/render-creator-instrumentation-signature.txt"
+          grep -Fqi 'f3d63fb20be25ca0be8aa6a161d5cf13cd98ba2fa300c7a604cce35131b9eb30' "$RUNNER_TEMP/render-creator-instrumentation-signature.txt"
+          cd "$OUT"
+          sha256sum Render-0.61.0-direct-mcp-arm64.apk render-creator-verification.json > SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Render-0.61.0-Direct-MCP-verified-APK
+          path: ${{ runner.temp }}/creator-release/
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Render-0.61.0-Android-unit-test-evidence
+          path: |
+            app/build/test-results/testDebugUnitTest/
+            ${{ runner.temp }}/render-creator-instrumentation-signature.txt
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Record verification boundary
+        run: |
+          echo 'Full ARM64 Android 12+ APK: com.rezox.render, versionCode 62, historical development certificate. Real desktop Blender semantics and Android unit tests ran; instrumentation compiled. No Android phone installation, GPU behavior, thermal endurance, or installed-device certificate was verified. No user data was removed and no signing key was generated.' >> "$GITHUB_STEP_SUMMARY"
+
+  publish-prerelease:
+    if: github.head_ref == 'upgrade/render-studio-061-direct-mcp-only-20261029' && github.event.pull_request.head.repo.full_name == github.repository
+    needs: [host-contracts, real-blender, signed-native-build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    # This isolated job never executes repository code. The build and test jobs
+    # retain read-only tokens; no signing keystore is an uploaded artifact.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Render-0.61.0-Direct-MCP-verified-APK
+          path: verified-apk
+      - name: Publish the tested commit as a downloadable development prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          cd verified-apk
+          sha256sum --check SHA256SUMS
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          report = json.loads(Path('render-creator-verification.json').read_text())
+          assert report['source_commit'] == os.environ['SOURCE_SHA']
+          assert report['version_code'] == 62
+          assert report['package'] == 'com.rezox.render'
+          assert report['apk_filename'] == 'Render-0.61.0-direct-mcp-arm64.apk'
+          assert report['signer_certificate_sha256'] == 'f3d63fb20be25ca0be8aa6a161d5cf13cd98ba2fa300c7a604cce35131b9eb30'
+          assert not report['android_device_install_tested']
+          assert not report['permanent_release_signing_claimed']
+          PY
+          TAG="render-studio-0.61.0-${SOURCE_SHA:0:12}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          cat > release-notes.md <<EOF
+          Animation Studio development candidate for Android 12+ ARM64.
+
+          Package: com.rezox.render. Version: 0.61.0-direct-mcp (62).
+          Exact tested source: $SOURCE_SHA.
+          Workflow: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID.
+
+          Dedicated Render Studio MCP HTTPS connection only; no VideoStudio
+          Android Binder, relay route, paired owner key or app dependency.
+          Includes the full pinned native Blender engine, layered animation and morph tools,
+          evaluated motion checks, native keyframe and render controls, Creator tools,
+          authenticated command plans, and existing recovery/storage tools.
+          Host contracts, real desktop Blender operations/UI, Android unit tests,
+          compiled instrumentation, APK certificate and embedded source checks passed.
+
+          Signed with the pinned historical development certificate. This is not a
+          permanent-key production release. Phone installation, actual device signer,
+          GPU behavior and thermal endurance have not been verified by this workflow.
+          An in-place update requires the device's installed signature to match.
+          Keep existing app data; this workflow does not install, uninstall or clear it.
+
+          SHA256SUMS and render-creator-verification.json contain the APK checksum,
+          exact source commit, certificate digest, runtime hashes and test boundaries.
+          EOF
+          gh release create "$TAG" --repo "$GH_REPO" --target "$SOURCE_SHA" \
+            --prerelease --title "Render 0.61.0 Direct MCP (${SOURCE_SHA:0:12})" \
+            --notes-file release-notes.md \
+            Render-0.61.0-direct-mcp-arm64.apk SHA256SUMS \
+            render-creator-verification.json render-creator-signature.txt \
+            render-creator-badging.txt render-creator-manifest.txt
+          gh release view "$TAG" --repo "$GH_REPO" --json url --jq .url >> "$GITHUB_STEP_SUMMARY"
