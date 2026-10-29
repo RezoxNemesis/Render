@@ -38,7 +38,7 @@ class DirectRenderMcpContract(unittest.TestCase):
         self.assertNotIn("CHECK VIDEOSTUDIO APP", activity)
         self.assertNotIn("VideoStudioMcpTransport", activity)
         self.assertNotIn("VideoStudioNativeBridgeService", activity)
-        self.assertIn("native files remain", self.read("app/src/main/java/com/rezox/render/agent/RenderDirectMcp.java").replace("Blender and files remain", "native files remain"))
+        self.assertIn("Native Blender and files remain on Android", self.read("app/src/main/java/com/rezox/render/agent/RenderDirectMcp.java"))
 
     def test_monotonic_signed_apk_identity(self):
         gradle = self.read("full-app/app/build.gradle")
