@@ -167,9 +167,9 @@ public final class ProductionBridge {
             // Cancel only a local not-yet-executed journal entry. For claimed
             // direct MCP work use the authenticated render_cancel operation.
             try(AgentJournal journal=new AgentJournal(context)){
-                boolean cancelled=journal.cancelQueued(id);
+                boolean cancelledBeforeStart=journal.cancelQueued(id);
                 return new JSONObject().put("command_id",id)
-                    .put("cancelled_before_start",cancelled)
+                    .put("cancelled_before_start",cancelledBeforeStart)
                     .put("native_execution_interrupted",false)
                     .put("remote_cancel_operation","render_cancel");
             }
@@ -295,13 +295,14 @@ public final class ProductionBridge {
                 .put("target_package",context.getPackageName())
                 .put("editor_ready",editorReady(context))
                 .put("native_runtime_diagnostics",com.rezox.render.omega.engine.EngineRuntimeDiagnostics.inspect(context))
-                .put("owner_bridge_enabled",new AgentSecrets(context).videoStudioBridgeEnabled())
+                .put("mcp_transport","render-studio-direct-https")
+                .put("direct_agent_session_requested",new AgentSecrets(context).enabled())
                 .put("work",StudioLiveHandOverlay.snapshot(context))
                 .put("reference_inbox",StudioReferenceInbox.list(context,
                     new JSONObject().put("offset",0).put("limit",1)))
                 .put("local_dispatch_completed",true)
-                .put("native_binder_verified_by_this_call",false)
-                .put("binder_authentication_requires_end_to_end_check",true);
+                .put("direct_mcp_receipt_verified_by_this_call",false)
+                .put("end_to_end_android_receipt_required",true);
             return status;
         }
         if(operation.equals("reference.pick")){
