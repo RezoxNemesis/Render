@@ -65,6 +65,13 @@ public final class AgentActivity extends Activity {
         // Enrollment remains masked; credentials are in Android Keystore.
         getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
         secrets=new AgentSecrets(this);journal=new AgentJournal(this);
+        try {
+            if(RenderDirectMcp.isLegacyPairing(secrets.load())){
+                secrets.enabled(false);
+                secrets.status("Legacy VideoStudio connection retired. Pair this phone directly to Render Studio MCP; original projects are preserved.");
+            }
+        }catch(Exception ignored){}
+
         if(!AgentExecutionLock.BUSY.get())AgentWorkPresence.recoverIfInterrupted(this);
         LinearLayout page=StudioUi.page(this);
 
