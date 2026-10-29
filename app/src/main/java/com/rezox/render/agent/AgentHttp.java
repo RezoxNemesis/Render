@@ -12,7 +12,10 @@ public final class AgentHttp {
     private AgentHttp(){}
     public static final class RelayException extends java.io.IOException {
         public final int status;
-        RelayException(int status){super("RELAY_HTTP_"+status);this.status=status;}
+        public final long retryAfterMillis;
+        RelayException(int status){this(status,null);}
+        RelayException(int status,String retryAfter){super("RELAY_HTTP_"+status);this.status=status;
+            retryAfterMillis=TransportRetry.retryAfterMillis(retryAfter);}
     }
     /** Public relay health check: never claims phone pairing or native command success. */
     public static JSONObject checkHealth(String origin)throws Exception {
@@ -52,7 +55,7 @@ public final class AgentHttp {
             c.setFixedLengthStreamingMode(data.length);
             try(java.io.OutputStream out=c.getOutputStream()){out.write(data);}
             int status=c.getResponseCode();
-            if(status!=200)throw new RelayException(status);
+            if(status!=200)throw new RelayException(status,c.getHeaderField("Retry-After"));
             try(InputStream in=c.getInputStream();ByteArrayOutputStream out=new ByteArrayOutputStream()){
                 byte[] buffer=new byte[8192];int n;
                 while((n=in.read(buffer))!=-1){if(out.size()+n>524288)throw new java.io.IOException("RESPONSE_TOO_LARGE");out.write(buffer,0,n);}

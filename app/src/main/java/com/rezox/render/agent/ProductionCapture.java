@@ -21,7 +21,7 @@ public final class ProductionCapture {
     private static volatile WeakReference<Activity> active=new WeakReference<>(null);
     private ProductionCapture(){}
     public static void attach(Activity activity){active=new WeakReference<>(activity);}
-    public static boolean available(){Activity a=active.get();return a!=null&&!a.isDestroyed()&&!a.isFinishing()&&a.hasWindowFocus();}
+    public static boolean available(){Activity a=active.get();return a!=null&&!a.isDestroyed()&&!a.isFinishing()&&a.getWindow().getDecorView().isAttachedToWindow()&&a.getWindow().getDecorView().isShown();}
     private static final class Pending {
         boolean abandoned;Bitmap bitmap;Exception error;
         synchronized void complete(Bitmap value,Exception failure){
@@ -32,11 +32,20 @@ public final class ProductionCapture {
         synchronized boolean cancelled(){return abandoned;}
     }
     public static JSONObject capture(Context context)throws Exception {
+        return captureInternal(context,false,0);
+    }
+    /** A lightweight preview from the exact same PixelCopy path as the full PNG. */
+    public static JSONObject preview(Context context,JSONObject options)throws Exception {
+        ProductionBridge.fields(options,"max_width");
+        int maxWidth=(int)ProductionBridge.integer(options,"max_width",320,1280,960);
+        return captureInternal(context,true,maxWidth);
+    }
+    private static JSONObject captureInternal(Context context,boolean preview,int maxWidth)throws Exception {
         if(Looper.myLooper()==Looper.getMainLooper())throw new IllegalStateException("CAPTURE_WORKER_REQUIRED");
         Activity activity=active.get();
-        if(activity==null||activity.isDestroyed()||activity.isFinishing()||!activity.hasWindowFocus())throw new IllegalStateException("RENDER_WINDOW_NOT_VISIBLE");
+        if(activity==null||activity.isDestroyed()||activity.isFinishing()||!activity.getWindow().getDecorView().isAttachedToWindow()||!activity.getWindow().getDecorView().isShown())throw new IllegalStateException("RENDER_WINDOW_NOT_VISIBLE");
         CountDownLatch latch=new CountDownLatch(1);Pending pending=new Pending();
-        new Handler(Looperoper()).post(()->{
+        new Handler(Looper.getMainLooper()).post(()->{
             if(pending.cancelled()){latch.countDown();return;}
             Bitmap bitmap=null;
             try{
@@ -58,13 +67,36 @@ public final class ProductionCapture {
         Bitmap bitmap;
         synchronized(pending){if(pending.error!=null)throw pending.error;bitmap=pending.bitmap;pending.bitmap=null;}
         if(bitmap==null)throw new IllegalStateException("NATIVE_WINDOW_CAPTURE_EMPTY");
-        File file=ProductionFiles.file(context,"Captures","Capture_"+UUID.randomUUID().toString().replace("-","")+".png");
-        int width=bitmap.getWidth(),height=bitmap.getHeight();boolean saved=false;
-        try(FileOutputStream out=new FileOutputStream(file)){
-            if(!bitmap.compress(Bitmap.CompressFormat.PNG,100,out))throw new IllegalStateException("CAPTURE_ENCODE_FAILED");out.getFD().sync();saved=true;
-        }finally{bitmap.recycle();if(!saved)file.delete();}
-        return ProductionFiles.receipt(file,"Captures").put("width",width).put("height",height)
-            .put("captured_surface","Render native Android window").put("quality_reduced",false);
+        int sourceWidth=bitmap.getWidth(),sourceHeight=bitmap.getHeight();
+        Bitmap encoded=bitmap;
+        File file=null;
+        boolean saved=false;
+        try{
+            if(preview && sourceWidth>maxWidth){
+                int targetHeight=Math.max(1,(int)Math.round((double)sourceHeight*maxWidth/sourceWidth));
+                encoded=Bitmap.createScaledBitmap(bitmap,maxWidth,targetHeight,true);
+                if(encoded==null)throw new IllegalStateException("PREVIEW_SCALE_FAILED");
+            }
+            file=ProductionFiles.file(context,"Captures",
+                (preview?"Preview_":"Capture_")+UUID.randomUUID().toString().replace("-","")+
+                (preview?".jpg":".png"));
+            try(FileOutputStream out=new FileOutputStream(file)){
+                if(!encoded.compress(preview?Bitmap.CompressFormat.JPEG:Bitmap.CompressFormat.PNG,
+                                     preview?74:100,out))
+                    throw new IllegalStateException("CAPTURE_ENCODE_FAILED");
+                out.getFD().sync();saved=true;
+            }
+            return ProductionFiles.receipt(file,"Captures")
+                .put("width",encoded.getWidth()).put("height",encoded.getHeight())
+                .put("source_width",sourceWidth).put("source_height",sourceHeight)
+                .put("captured_surface","Render native Android window")
+                .put("preview_only",preview).put("preview_lossy",preview)
+                .put("preview_downscaled",preview && sourceWidth>maxWidth)
+                .put("final_render_quality_unchanged",true).put("quality_reduced",false);
+        }finally{
+            if(encoded!=bitmap && !encoded.isRecycled())encoded.recycle();
+            if(!bitmap.isRecycled())bitmap.recycle();
+            if(!saved && file!=null)file.delete();
+        }
     }
-    private static Looper Looperoper(){return Looper.getMainLooper();}
 }

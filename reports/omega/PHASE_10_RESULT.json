@@ -1,0 +1,90 @@
+{
+  "contract": "RENDER-OMEGA-13P-20261022",
+  "phase": 10,
+  "title": "Cross-phase API registry / native packaging and release gates",
+  "status": "Partial",
+  "seed_sha": "ed7ef34fa85d9e361bc9c92d554d8ec937755cc2",
+  "head_branch": "feature/omega-P10-integration-20261022",
+  "head_sha": "d37f8d9ab7bf2e5bb4cb9b3a5b31e927ddafc336",
+  "pr_url": "https://github.com/RezoxNemesis/Render/pull/17",
+  "owned_paths_changed": [
+    ".github/workflows/omega-phase10.yml",
+    "app/src/main/java/com/rezox/render/agent/BlenderSpool.java",
+    "app/src/main/java/com/rezox/render/agent/ProductionBridge.java",
+    "app/src/main/java/com/rezox/render/omega/integration/OmegaOperations.java",
+    "full-app/scripts/omega/__init__.py",
+    "full-app/scripts/omega_registry.py",
+    "full-app/scripts/render_agent_startup.py",
+    "reports/omega/PHASE_10_RESULT.json",
+    "tools/assemble_full_native.py",
+    "tools/omega/test_phase10_bpy.py",
+    "tools/omega/test_phase10_ownership.py",
+    "tools/omega/test_phase10_packaging.py",
+    "tools/omega/test_phase10_registry.py",
+    "tools/omega/test_phase10_release_gate.py"
+  ],
+  "real_bpy_tests": {
+    "state": "NOT_RUN",
+    "commands": [
+      "/usr/bin/blender -b -noaudio --python-exit-code 1 --python tools/omega/test_phase10_bpy.py"
+    ],
+    "results": [
+      "Initial CI command called wrong executable (runner's Python blender). Corrected to absolute Blender binary; rerun pending at report commit."
+    ],
+    "run_url": "https://github.com/RezoxNemesis/Render/actions/runs/39790435762"
+  },
+  "host_python_tests": {
+    "state": "PASS",
+    "commands": [
+      "python tools/prepare_production_toolkit.py",
+      "PYTHONPATH=tools:full-app/scripts python -m unittest discover -s tools/omega -p 'test_phase10_*.py' -v",
+      "python tools/prepare_production_toolkit.py"
+    ],
+    "results": [
+      "17 tests run: 16 passed, 1 skipped because real bpy unavailable in host-only runner",
+      "Build adapter initial staging and repeat invocation both pass"
+    ],
+    "run_url": "https://github.com/RezoxNemesis/Render/actions/runs/39789482126"
+  },
+  "android_tests": {
+    "state": "PASS",
+    "commands": [
+      "python3 tools/prepare_production_toolkit.py",
+      "gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug"
+    ],
+    "results": [
+      "GitHub Actions android-bridge job success; BUILD SUCCESSFUL in 1m 49s, real JNI debug build and Android unit test task run"
+    ],
+    "run_url": "https://github.com/RezoxNemesis/Render/actions/runs/39789482126"
+  },
+  "ownership_tests": {
+    "state": "PASS",
+    "results": [
+      "PR changed-file ownership gate passed, frozen seed ancestry verified"
+    ],
+    "run_url": "https://github.com/RezoxNemesis/Render/actions/runs/39789482126"
+  },
+  "native_receipts": [],
+  "artifacts": [
+    "full-app/scripts/omega_registry.py",
+    "full-app/scripts/omega/__init__.py",
+    "app/src/main/java/com/rezox/render/omega/integration/OmegaOperations.java",
+    "tools/omega/test_phase10_packaging.py",
+    "tools/omega/test_phase10_release_gate.py",
+    ".github/workflows/omega-phase10.yml"
+  ],
+  "quality_reduced": false,
+  "residual_blockers": [
+    "True Blender bpy fixture is pending corrected CI runner; previous first attempt hit runner executable collision before native test executed.",
+    "End-to-end authenticated Android Binder->actual on-device bpy receipt not captured; no connected owner device.",
+    "No pinned full-engine Android APK was assembled/installed or inspected with original currently installed certificate and versionCode.",
+    "External phase modules P01–P09/P11–P13 remain disabled until independently merged, validated and explicitly approved.",
+    "No phone Vulkan/thermal/render output endurance, signer continuity or owner acceptance evidence."
+  ],
+  "unverified_claims": [
+    "Native complete parity",
+    "Actual APK runtime module loading",
+    "Real-world phone render performance",
+    "All cross-phase operations functional"
+  ]
+}

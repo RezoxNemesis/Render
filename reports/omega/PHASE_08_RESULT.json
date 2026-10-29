@@ -1,0 +1,72 @@
+{
+  "contract": "RENDER-OMEGA-13P-20261022",
+  "phase": 8,
+  "title": "Free asset library / worlds / scatter / cinematic staging",
+  "status": "Partial",
+  "seed_sha": "ed7ef34fa85d9e361bc9c92d554d8ec937755cc2",
+  "head_branch": "feature/omega-P08-assets-world-20261022",
+  "head_sha": "0ba0d2191b4b267b0ea3ab10ded665dbae2f2f82",
+  "head_sha_meaning": "Verified Phase 8 source commit; the report-only commit necessarily follows this hash.",
+  "pr_url": "https://github.com/RezoxNemesis/Render/pull/12",
+  "owned_paths_changed": [
+    "full-app/scripts/render_assets.py",
+    "full-app/scripts/omega/phase08_world.py",
+    "tools/omega/test_phase08_catalog.py",
+    "tools/omega/test_phase08_contract.py",
+    "native-tests/omega/phase08/test_phase08_bpy.py",
+    "reports/omega/PHASE_08_RESULT.json"
+  ],
+  "host_tests": {
+    "state": "PASSED",
+    "python": "3.13.5",
+    "command": "python -m unittest discover -s tools/omega -p 'test_phase08_*.py' -v",
+    "passed": 10,
+    "failed": 0,
+    "errors": 0,
+    "note": "Local catalog fixture mirrors the 17 names and new catalog definitions; test on exact GitHub checkout is pending.",
+    "compilation": "python -m compileall -q full-app/scripts/omega tools/omega native-tests/omega/phase08: PASS"
+  },
+  "real_bpy_tests": {
+    "state": "NOT_RUN",
+    "commands": [
+      "blender -b -noaudio --python-exit-code 1 --python native-tests/omega/phase08/test_phase08_bpy.py"
+    ],
+    "results": [],
+    "reason": "No Blender executable or importable bpy in the engineering runtime; native fixture included but no result fabricated."
+  },
+  "android_tests": {
+    "state": "NOT_RUN",
+    "reason": "No physical Render Studio ARM64 Android device connected; GitHub Android foundation CI queued when PR opened."
+  },
+  "native_receipts": [],
+  "artifacts": [
+    {
+      "path": "native-tests/omega/phase08/test_phase08_bpy.py",
+      "kind": "native_test_source",
+      "verified_execution": false
+    },
+    {
+      "path": "full-app/scripts/omega/phase08_world.py",
+      "kind": "native_bpy_implementation_source",
+      "verified_execution": false
+    }
+  ],
+  "quality_reduced": false,
+  "external_asset_downloads": 0,
+  "ownership_check": {
+    "state": "PASSED",
+    "changed_code_files": 5,
+    "unauthorized_files": 0,
+    "base": "ed7ef34fa85d9e361bc9c92d554d8ec937755cc2"
+  },
+  "residual_blockers": [
+    "Real Blender bpy build/save/reopen/cancellation rollback fixture not executed on an actual Blender runtime.",
+    "No verified saved .blend project or image artifact yet.",
+    "Native Android integration pending Phase 10 registry/packaging plus on-device validation.",
+    "Current PR CI does not run Phase 08 bpy fixture; a P10-owned workflow test hook is required."
+  ],
+  "unverified_claims": [
+    "Blender mesh creation, save/reopen and scene count checks are implemented as tests but not yet run in bpy.",
+    "GPU rendering, Android thermal safety and phone visual quality are unverified."
+  ]
+}

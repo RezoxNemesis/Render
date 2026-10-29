@@ -31,6 +31,10 @@ file(WRITE "${RENDER_ALLOCATOR_STAGE}/mallocn_intern.hh" "${allocator_header}")
 # Equivalent full zero initialization of the original ARM spinlock. This staged
 # header is private to these C++ translation units; algorithms are unchanged.
 file(COPY "${RENDER_BLENDER_SOURCE_DIR}/intern/atomic/" DESTINATION "${RENDER_ALLOCATOR_STAGE}/atomic")
+# file(COPY) can retain the newer header patched by a previous configure.
+# Always restage these exact pinned bytes before applying the guarded patch.
+configure_file("${RENDER_BLENDER_SOURCE_DIR}/intern/atomic/intern/atomic_ops_unix.h"
+  "${RENDER_ALLOCATOR_STAGE}/atomic/intern/atomic_ops_unix.h" COPYONLY)
 file(READ "${RENDER_ALLOCATOR_STAGE}/atomic/intern/atomic_ops_unix.h" atomic_header)
 string(FIND "${atomic_header}" "_atomic_global_lock = {0};" atomic_initializer)
 if(atomic_initializer EQUAL -1)

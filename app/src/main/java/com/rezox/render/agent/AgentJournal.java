@@ -11,12 +11,52 @@ import java.util.List;
 
 /** Durable receipt/result journal: a lost network acknowledgment never reruns a command. */
 public final class AgentJournal extends SQLiteOpenHelper {
-    public AgentJournal(Context c){super(c,"render_agent_jobs.db",null,1);}
+    public AgentJournal(Context c){super(c,"render_agent_jobs.db",null,2);}
     @Override public void onCreate(SQLiteDatabase db){
-        db.execSQL("CREATE TABLE jobs(id TEXT PRIMARY KEY,request_key TEXT UNIQUE,digest TEXT NOT NULL,action TEXT,state TEXT,result TEXT,acked INTEGER DEFAULT 0,updated INTEGER)");
+        db.execSQL("CREATE TABLE jobs(id TEXT PRIMARY KEY,request_key TEXT UNIQUE,digest TEXT NOT NULL,action TEXT,state TEXT,result TEXT,command TEXT,acked INTEGER DEFAULT 0,updated INTEGER)");
     }
     @Override public void onUpgrade(SQLiteDatabase db,int oldVersion,int newVersion){
-        throw new IllegalStateException("Agent journal migration required; do not discard jobs");
+        if(oldVersion==1 && newVersion==2)db.execSQL("ALTER TABLE jobs ADD COLUMN command TEXT");
+        else throw new IllegalStateException("Agent journal migration required; do not discard jobs");
+    }
+    /** Commit acceptance before a direct MCP native dispatch can be lost. */
+    public synchronized boolean enqueue(String id,String digest,JSONObject command)throws Exception{
+        if(snapshot(id,digest)!=null)return false;
+        try(Cursor count=getReadableDatabase().rawQuery("SELECT COUNT(*) FROM jobs WHERE state='queued'",null)){
+            if(count.moveToFirst()&&count.getInt(0)>=12)throw new IllegalStateException("RENDER_NATIVE_QUEUE_FULL_OR_STOPPING");
+        }
+        ContentValues v=new ContentValues();v.put("id",id);v.put("digest",digest);
+        v.put("request_key",command.getString("device_id")+":"+command.getString("request_id"));
+        v.put("action",command.getString("action"));v.put("state","queued");
+        v.put("command",command.toString());v.put("updated",System.currentTimeMillis());
+        getWritableDatabase().insertOrThrow("jobs",null,v);return true;
+    }
+    public synchronized List<JSONObject> queued()throws Exception{
+        List<JSONObject> out=new ArrayList<>();
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT id,command FROM jobs WHERE state='queued' ORDER BY updated LIMIT 12",null)){
+            while(c.moveToNext())if(!c.isNull(1))out.add(new JSONObject(c.getString(1)).put("journal_id",c.getString(0)));
+        }return out;
+    }
+    public synchronized boolean claim(String id,String digest)throws Exception{
+        snapshot(id,digest);ContentValues v=new ContentValues();v.put("state","running_on_device");
+        v.put("updated",System.currentTimeMillis());
+        return getWritableDatabase().update("jobs",v,"id=? AND state='queued' AND digest=?",new String[]{id,digest})==1;
+    }
+    public synchronized JSONObject inspect(String id)throws Exception{
+        if(id==null||!id.matches("[A-Za-z0-9_-]{8,128}"))throw new IllegalArgumentException("INVALID_COMMAND_ID");
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT state,result,updated FROM jobs WHERE id=?",new String[]{id})){
+            if(!c.moveToFirst())return new JSONObject().put("command_id",id).put("state","not_found").put("safe_to_replay",false);
+            JSONObject result=new JSONObject().put("command_id",id).put("state",c.getString(0))
+                .put("updated_ms",c.getLong(2)).put("safe_to_replay",false);
+            if(!c.isNull(1))result.put("result",new JSONObject(c.getString(1)));
+            return result;
+        }
+    }
+    public synchronized boolean cancelQueued(String id)throws Exception{
+        ContentValues v=new ContentValues();v.put("state","cancelled");v.put("acked",0);
+        v.put("updated",System.currentTimeMillis());
+        v.put("result",new JSONObject().put("ok",false).put("error","CANCELLED_BEFORE_NATIVE_START").toString());
+        return getWritableDatabase().update("jobs",v,"id=? AND state='queued'",new String[]{id})==1;
     }
     public synchronized boolean begin(String id,String fingerprint,JSONObject command)throws Exception{
         SQLiteDatabase db=getWritableDatabase();db.beginTransaction();
@@ -38,19 +78,36 @@ public final class AgentJournal extends SQLiteOpenHelper {
     public synchronized void finish(String id,String state,JSONObject result)throws Exception{
         if(!("succeeded".equals(state)||"failed".equals(state)||"cancelled".equals(state)||"recovery_required".equals(state)))
             throw new IllegalArgumentException("INVALID_TERMINAL_STATE");
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT result FROM jobs WHERE id=?",new String[]{id})){
+            if(c.moveToFirst()&&!c.isNull(0)){
+                JSONObject prior=new JSONObject(c.getString(0));
+                if(prior.has("native_command_id")&&!result.has("native_command_id"))
+                    result.put("native_command_id",prior.getString("native_command_id"))
+                        .put("recovery_operation","native.command.status");
+            }
+        }
         ContentValues v=new ContentValues();v.put("state",state);v.put("result",result.toString());
         v.put("acked",0);v.put("updated",System.currentTimeMillis());
         getWritableDatabase().update("jobs",v,"id=? AND state='running_on_device'",new String[]{id});
     }
     public synchronized void recover()throws Exception{
-        ContentValues v=new ContentValues();v.put("state","recovery_required");v.put("acked",0);
-        v.put("result",new JSONObject().put("error","PROCESS_INTERRUPTED_NATIVE_OUTCOME_UNKNOWN")
-            .put("safe_to_replay",false).toString());v.put("updated",System.currentTimeMillis());
-        getWritableDatabase().update("jobs",v,"state='running_on_device'",null);
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT id,result FROM jobs WHERE state='running_on_device'",null)){
+            while(c.moveToNext()){
+                JSONObject result=c.isNull(1)?new JSONObject():new JSONObject(c.getString(1));
+                result.put("ok",false).put("error","PROCESS_INTERRUPTED_NATIVE_OUTCOME_UNKNOWN")
+                    .put("safe_to_replay",false).put("state","recovery_required");
+                finish(c.getString(0),"recovery_required",result);
+            }
+        }
+    }
+    public synchronized void attachNative(String id,String nativeId)throws Exception{
+        ContentValues v=new ContentValues();v.put("result",new JSONObject().put("native_command_id",nativeId)
+            .put("recovery_operation","native.command.status").put("safe_to_replay",false).toString());
+        getWritableDatabase().update("jobs",v,"id=? AND state='running_on_device'",new String[]{id});
     }
     public synchronized List<JSONObject> pending(String deviceId)throws Exception{
         List<JSONObject> out=new ArrayList<>();
-        try(Cursor c=getReadableDatabase().rawQuery("SELECT id,digest,state,result FROM jobs WHERE acked=0 AND state<>'running_on_device' AND request_key LIKE ? ORDER BY updated LIMIT 25",new String[]{deviceId+":%"})){
+        try(Cursor c=getReadableDatabase().rawQuery("SELECT id,digest,state,result FROM jobs WHERE acked=0 AND state NOT IN ('queued','running_on_device') AND request_key LIKE ? ORDER BY updated LIMIT 25",new String[]{deviceId+":%"})){
             while(c.moveToNext())out.add(new JSONObject().put("job_id",c.getString(0)).put("digest",c.getString(1))
                 .put("state",c.getString(2)).put("result",new JSONObject(c.getString(3))));
         }return out;

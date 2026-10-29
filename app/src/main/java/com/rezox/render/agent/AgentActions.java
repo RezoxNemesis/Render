@@ -39,14 +39,20 @@ public final class AgentActions {
         if(context!=null){
             File heartbeat=new File(context.getFilesDir(),"render_bpy_jobs/ready");
             long age=System.currentTimeMillis()-heartbeat.lastModified();
-            editorReady=heartbeat.isFile() && age>=0 && age<15000;
+            editorReady=NativeHeartbeat.ready(context);
         }
         JSONArray out = new JSONArray();
         for (String id : AgentPolicy.ACTIONS.keySet()) {
             JSONObject properties = new JSONObject();
             for (String field : AgentPolicy.ACTIONS.get(id)) {
                 JSONObject prop=new JSONObject();
-                if(field.equals("assembly")){
+                if(field.equals("operation")){
+                    prop.put("type","string");
+                }else if(field.equals("payload")){
+                    prop.put("type","object");
+                }else if(field.equals("target_id")){
+                    prop.put("type","string").put("pattern","^[a-fA-F0-9-]{36}$");
+                }else if(field.equals("assembly")){
                     prop.put("type","string").put("pattern","^[A-Za-z][A-Za-z0-9_-]{0,63}$");
                 }else if(field.equals("parts")){
                     JSONObject partProperties=new JSONObject();
@@ -130,7 +136,7 @@ public final class AgentActions {
                 }else prop.put("type","string").put("pattern","^[a-f0-9]{64}$");
                 properties.put(field,prop);
             }
-            String[] required = id.equals("blender.scene.batch_assembly") ? new String[]{"assembly","parts"} :
+            String[] required = id.equals("production.execute") ? new String[]{"operation"} : id.equals("blender.scene.batch_assembly") ? new String[]{"assembly","parts"} :
                 id.equals("projects.inspect") ? new String[]{"project_id"} :
                 id.equals("blender.project.restore_scene") ? new String[]{"project_id"} :
                 id.equals("blender.scene.set_frame") ? new String[]{"frame"} :
@@ -157,7 +163,7 @@ public final class AgentActions {
             boolean bpy=id.startsWith("blender.");
             boolean available=!bpy||fullBlender;
             JSONObject descriptor=new JSONObject().put("id",id).put("available",available).put("api_version",1)
-                .put("read_only",!bpy || id.equals("blender.scene.summary") ||
+                .put("read_only",(!bpy && !id.equals("production.execute")) || id.equals("blender.scene.summary") ||
                     id.equals("blender.scene.visual_audit"))
                 .put("cancellation","between_native_calls").put("input_schema",schema);
             descriptor.put("executable_now",!bpy || editorReady);
@@ -182,6 +188,11 @@ public final class AgentActions {
         String action = command.getString("action");
         AgentPolicy.validate(command.getString("request_id"),command.getInt("api_version"),action,fields);
         checkCancelled(cancelled);
+        if (action.equals(ProductionBridge.ACTION)){
+            JSONObject nativeResult=ProductionBridge.execute(context,args,cancelled);
+            StudioLiveHandOverlay.recordConfirmedResult(args.optString("operation",""),nativeResult);
+            return nativeResult;
+        }
         if (action.equals("agent.capabilities")) {
             JSONArray descriptors=capabilities(context);
             int installed=0,ready=0;
@@ -192,7 +203,7 @@ public final class AgentActions {
             }
             File heartbeat=new File(context.getFilesDir(),"render_bpy_jobs/ready");
             long age=System.currentTimeMillis()-heartbeat.lastModified();
-            boolean editorReady=heartbeat.isFile() && age>=0 && age<15000;
+            boolean editorReady=NativeHeartbeat.ready(context);
             return new JSONObject()
                 .put("target_app","Render Studio")
                 .put("target_package",context.getPackageName())
@@ -216,7 +227,7 @@ public final class AgentActions {
             AgentWorkPresence.Snapshot work=AgentWorkPresence.snapshot(context);
             File ready=new File(context.getFilesDir(),"render_bpy_jobs/ready");
             long age=System.currentTimeMillis()-ready.lastModified();
-            boolean bridgeReady=ready.isFile() && age>=0 && age<15000;
+            boolean bridgeReady=NativeHeartbeat.ready(context);
             android.app.NotificationManager manager=context.getSystemService(
                     android.app.NotificationManager.class);
             boolean canNotify=manager!=null && manager.areNotificationsEnabled();
@@ -228,10 +239,9 @@ public final class AgentActions {
                     .put("target_app","Render Studio")
                     .put("target_package",context.getPackageName())
                     .put("registeredTypedActions",AgentPolicy.ACTIONS.size())
-                    .put("directBinderEnabled",new AgentSecrets(context).videoStudioBridgeEnabled())
+                    .put("mcpTransport","render-studio-direct-https")
+                    .put("directMcpSessionEnabled",new AgentSecrets(context).enabled())
                     .put("nativeExecutorBusy",AgentExecutionLock.BUSY.get())
-                    .put("binderServiceActive",VideoStudioNativeBridgeService.binderServiceActive())
-                    .put("binderQueuedNativeCommands",VideoStudioNativeBridgeService.pendingBinderCommands())
                     .put("remoteQueueKnown",false)
                     .put("blenderEditorReady",bridgeReady)
                     .put("ownerNotificationsEnabled",canNotify)
@@ -262,7 +272,15 @@ public final class AgentActions {
             File ready=new File(context.getFilesDir(),"render_bpy_jobs/ready");
             long age=System.currentTimeMillis()-ready.lastModified();
             result.put("editorCommandBridgeReady",
-                ready.isFile() && age>=0 && age<15000);
+                NativeHeartbeat.ready(context));
+            boolean editorReady=NativeHeartbeat.ready(context);
+            if(hasFullBlender(context)){
+                result.put("engineIntegrated",editorReady)
+                    .put("native_status",editorReady?
+                        "Full Android Blender editor and native command timer ready":
+                        RenderManualJobs.active()?"Native Blender render is in progress":
+                            "Full Android Blender bundled; awaiting native editor readiness");
+            }
             // Public signer identity only. Protect user app-data continuity.
             String signer=SigningIdentity.installedSigner(context);
             result.put("installedSignerSha256",signer);

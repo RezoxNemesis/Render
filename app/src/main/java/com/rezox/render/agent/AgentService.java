@@ -28,6 +28,7 @@ public final class AgentService extends Service {
     private final ExecutorService executor=Executors.newSingleThreadExecutor();
     private volatile Work active;
     private boolean scheduled;
+    private final TransportRetry retry=new TransportRetry();
     private volatile boolean destroyed;
     private static final class Work {
         final AgentEnvelope envelope;
@@ -38,6 +39,11 @@ public final class AgentService extends Service {
         super.onCreate();secrets=new AgentSecrets(this);journal=new AgentJournal(this);
         try{
             credentials=secrets.load();
+            if(!RenderDirectMcp.isDirectPairing(credentials)){
+                credentials=null;
+                secrets.enabled(false);
+                secrets.status("Direct Render Studio MCP pairing required. Legacy credentials are not executed.");
+            }
             if(PROCESS_BUSY.get()){
                 secrets.enabled(false);secrets.status("Previous native call is still stopping; wait before restarting.");
             }else{
@@ -65,42 +71,41 @@ public final class AgentService extends Service {
         }
         if(credentials==null||actions==null){secrets.enabled(false);stopSelf();return START_NOT_STICKY;}
         if(!scheduled){scheduled=true;transport.scheduleWithFixedDelay(this::tick,0,5,TimeUnit.SECONDS);}
-        return START_NOT_STICKY;
+        return secrets.enabled()?START_STICKY:START_NOT_STICKY;
     }
     private JSONObject post(String path,JSONObject body)throws Exception{
-        if(VideoStudioMcpTransport.isSelected(credentials)) {
-            if("/v1/device/poll".equals(path))return VideoStudioMcpTransport.poll(credentials,body);
-            if("/v1/device/result".equals(path))return VideoStudioMcpTransport.complete(credentials,body);
-            throw new IllegalArgumentException("VIDEOSTUDIO_MCP_ROUTE_NOT_ALLOWED");
-        }
-        return AgentHttp.post(credentials.getString("relay"),path,credentials.getString("device_token"),body);
+        RenderDirectMcp.requireDirectPairing(credentials);
+        return AgentHttp.post(RenderDirectMcp.ORIGIN,path,
+            credentials.getString("device_token"),body);
     }
     private void sendPending()throws Exception{
         for(JSONObject result:journal.pending(credentials.getString("device_id"))){
             JSONObject ack=post("/v1/device/result",result);
             if(ack.optBoolean("accepted"))journal.acknowledge(result.getString("job_id"));
+            else throw new java.io.IOException("RESULT_ACKNOWLEDGEMENT_PENDING");
         }
     }
     private void tick(){
         if(destroyed)return;
+        if(!secrets.enabled()&&active==null){stopSelf();return;}
+        if(!retry.ready(android.os.SystemClock.elapsedRealtime()))return;
         try{
             sendPending();
-            // Do not claim/consume a remote job while the same-phone
-            // VideoStudio Binder executor owns Blender's process-wide lock.
-            // Still retry delivery of durable results above.
+            // Native Blender has a process-wide execution lock. Pending direct MCP
+            // jobs are not claimed until the editor is safe to execute them.
             if(PROCESS_BUSY.get() && active==null){
-                secrets.status("Native Blender busy in direct VideoStudio Binder bridge. Pending cloud jobs remain queued.");
+                secrets.status("Native Blender is busy. Pending Render MCP jobs remain queued.");
                 return;
             }
             Work w=active;
             if(!secrets.enabled()&&w!=null)w.cancelled.set(true);
             JSONObject reply=post("/v1/device/poll",new JSONObject().put("enabled",secrets.enabled())
                 .put("capabilities",AgentActions.capabilities(getApplicationContext())).put("active_job_id",w==null?JSONObject.NULL:w.envelope.id));
+            retry.success();
             JSONArray cancelled=reply.optJSONArray("cancel_job_ids");
             if(w!=null&&cancelled!=null)for(int i=0;i<cancelled.length();i++)
                 if(w.envelope.id.equals(cancelled.getString(i)))w.cancelled.set(true);
-            String connection=VideoStudioMcpTransport.isSelected(credentials)
-                ?"Existing VideoStudio MCP transport":"Private Render relay";
+            String connection="Direct Render Studio MCP";
             secrets.status(secrets.enabled()?connection+" connected. Authorized native Render actions execute on this phone.":
                 (active==null?"Stopped. No new commands will run.":"Stopping after current native call."));
             JSONObject job=reply.optJSONObject("job");
@@ -125,13 +130,13 @@ public final class AgentService extends Service {
                 }
             }
         }catch(AgentHttp.RelayException e){
+            retry.failure(android.os.SystemClock.elapsedRealtime(),Math.random(),e.retryAfterMillis);
             if(e.status==401||e.status==403){
                 secrets.enabled(false);Work w=active;if(w!=null)w.cancelled.set(true);
                 secrets.status("Connection authorization revoked or expired. No further commands will execute.");
-            }else if(e.status==404 && VideoStudioMcpTransport.isSelected(credentials))
-                secrets.status("VideoStudio MCP Worker has not been upgraded with the Render route yet. Native jobs are retained.");
-            else secrets.status("Command transport unavailable (HTTP "+e.status+"). Pending results are retained locally.");
+             }else secrets.status("Direct Render MCP unavailable (HTTP "+e.status+"). Pending receipts are retained locally.");
         }catch(Exception e){
+            retry.failure(android.os.SystemClock.elapsedRealtime(),Math.random(),0);
             secrets.status("Connection interrupted: "+e.getClass().getSimpleName()+". Pending work is journaled.");
         }finally{
             if(!secrets.enabled()&&active==null)stopSelf();
@@ -146,6 +151,7 @@ public final class AgentService extends Service {
             }else{
                 AgentWorkPresence.begin(this,work.envelope.command.getString("action"),
                         "Render native session");
+                BlenderSpool.carrier(work.envelope.id);
                 result=actions.execute(work.envelope.command,work.cancelled);
                 if(work.cancelled.get()||!secrets.enabled()||destroyed){
                     state="cancelled";result.put("native_call_completed_after_cancel",true);
@@ -158,6 +164,14 @@ public final class AgentService extends Service {
                 String code=e.getMessage();
                 if(code==null||!code.matches("[A-Z_]{3,96}"))code=e.getClass().getSimpleName();
                 result=new JSONObject().put("error",code).put("executed_by","android-agent");
+                if(e instanceof BlenderSpool.NativeActionFailure){
+                    BlenderSpool.NativeActionFailure failure=(BlenderSpool.NativeActionFailure)e;
+                    result.put("native_command_id",failure.commandId).put("native_failure",failure.receipt)
+                        .put("recovery_operation","native.command.status").put("safe_to_replay",false);
+                }
+                if(e instanceof BlenderSpool.RecoveryRequired)
+                    result.put("native_command_id",((BlenderSpool.RecoveryRequired)e).commandId)
+                        .put("recovery_operation","native.command.status");
             }catch(Exception ignored){}
         }finally{
             boolean receiptStored=false;
@@ -168,8 +182,9 @@ public final class AgentService extends Service {
                 secrets.enabled(false);
                 secrets.status("Result journal failed. Recovery required; automatic replay disabled.");
             }
-            AgentWorkPresence.finish(this,receiptStored?state:"recovery_required");
+            AgentWorkPresence.finish(this,receiptStored?state:"recovery_required",result);
             active=null;PROCESS_BUSY.set(false);
+            BlenderSpool.carrier(null);
         }
     }
     @Override public void onDestroy(){

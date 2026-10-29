@@ -36,16 +36,15 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class AgentActivity extends Activity {
     private AgentSecrets secrets;
     private AgentJournal journal;
-    private EditText relay,enrollment,videoStudioPairCode;
-    private TextView status,history,bridgeState,workingHand,workingCaption;
+    private EditText enrollment;
+    private TextView status,history,workingHand,workingCaption;
     private ObjectAnimator handAnimator;
     private final ExecutorService background=Executors.newSingleThreadExecutor();
     private final Handler ui=new Handler(Looper.getMainLooper());
     private boolean busy;
     private final Runnable refresh=new Runnable(){public void run(){
         if(isFinishing()||isDestroyed())return;
-        status.setText(secrets.videoStudioBridgeEnabled()?localBridgeStatus():secrets.status());
-        if(bridgeState!=null)bridgeState.setText(localBridgeStatus());
+        status.setText(secrets.status());
         AgentWorkPresence.Snapshot state=AgentWorkPresence.snapshot(AgentActivity.this);
         if(workingCaption!=null)workingCaption.setText(state.description());
         if(workingHand!=null) {
@@ -66,6 +65,13 @@ public final class AgentActivity extends Activity {
         // Enrollment remains masked; credentials are in Android Keystore.
         getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
         secrets=new AgentSecrets(this);journal=new AgentJournal(this);
+        try {
+            if(RenderDirectMcp.isLegacyPairing(secrets.load())){
+                secrets.enabled(false);
+                secrets.status("Legacy VideoStudio connection retired. Pair this phone directly to Render Studio MCP; original projects are preserved.");
+            }
+        }catch(Exception ignored){}
+
         if(!AgentExecutionLock.BUSY.get())AgentWorkPresence.recoverIfInterrupted(this);
         LinearLayout page=StudioUi.page(this);
 
@@ -93,11 +99,11 @@ public final class AgentActivity extends Activity {
         LinearLayout statusPanel=StudioUi.violetCard(this);
         StudioUi.add(statusPanel,StudioUi.label(this,"CONNECTION STATUS"));
         StudioUi.space(statusPanel,9);
-        status=StudioUi.text(this,secrets.videoStudioBridgeEnabled()?localBridgeStatus():secrets.status(),15,StudioUi.WHITE,true);
+        status=StudioUi.text(this,secrets.status(),15,StudioUi.WHITE,true);
         StudioUi.add(statusPanel,status);
         StudioUi.space(statusPanel,7);
         StudioUi.add(statusPanel,StudioUi.text(this,
-            "Direct Render commands use the existing VideoStudio MCP. Pairing to a separate hosted relay is optional.",
+            "This app uses only your dedicated Render Studio HTTPS MCP. Blender actions run natively on this phone.",
             12,0xFFBBAFD4,false));
         StudioUi.add(page,statusPanel);
         StudioUi.space(page,13);
@@ -128,90 +134,76 @@ public final class AgentActivity extends Activity {
         handAnimator.setRepeatCount(ValueAnimator.INFINITE);
         StudioUi.space(page,17);
 
-        LinearLayout localBridge=StudioUi.violetCard(this);
-        StudioUi.add(localBridge,StudioUi.label(this,"PRIMARY / VIDEOSTUDIO MCP → RENDER"));
-        StudioUi.space(localBridge,9);
-        StudioUi.add(localBridge,StudioUi.text(this,"Connect & share\nwith ChatGPT.",22,StudioUi.WHITE,true));
-        StudioUi.space(localBridge,8);
-        StudioUi.add(localBridge,StudioUi.text(this,
-            "Connect Render as a separate Blender executor through the SAME VideoStudio MCP. No extra relay, private app key, pairing code or cloud Start Session step. Native Blender work stays on your phone.",
-            13,0xFFE2D5FF,false));
-        StudioUi.space(localBridge,12);
-        bridgeState=StudioUi.text(this,localBridgeStatus(),13,StudioUi.GREEN,true);
-        StudioUi.add(localBridge,bridgeState);
-        StudioUi.space(localBridge,10);
-        StudioUi.add(localBridge,StudioUi.text(this,
-            "RENDER APP ID  •  "+secrets.renderPublicId(),11,0xFFB9B0D6,false));
-        StudioUi.space(localBridge,16);
-        addAction(localBridge,"CONNECT / SHARE WITH CHATGPT    ↗",StudioUi.PRIMARY,
-            ()->connectShare());
-        StudioUi.space(localBridge,10);
-        addAction(localBridge,"SHARE RENDER CONNECTION",StudioUi.PURPLE,
-            ()->shareRenderConnection());
-        StudioUi.space(localBridge,10);
-        addAction(localBridge,"COPY RENDER APP ID",StudioUi.SECONDARY,
-            ()->copyRenderAppId());
-        StudioUi.space(localBridge,10);
-        addAction(localBridge,"CHECK VIDEOSTUDIO APP",StudioUi.SECONDARY,
-            ()->checkVideoStudioApp());
-        StudioUi.space(localBridge,10);
-        addAction(localBridge,"STOP VIDEOSTUDIO BRIDGE",StudioUi.DANGER,
-            ()->disableDirectBridge());
-        StudioUi.add(page,localBridge);
+        LinearLayout identity=StudioUi.violetCard(this);
+        StudioUi.add(identity,StudioUi.label(this,"01 / DIRECT RENDER STUDIO MCP"));
+        StudioUi.space(identity,8);
+        StudioUi.add(identity,StudioUi.text(this,"One studio. One native connection.",22,StudioUi.WHITE,true));
+        StudioUi.space(identity,9);
+        StudioUi.add(identity,StudioUi.text(this,
+            "Dedicated MCP over HTTPS. No VideoStudio app, Binder carrier or shared owner credential.",
+            13,StudioUi.MUTED,false));
+        StudioUi.space(identity,11);
+        StudioUi.add(identity,StudioUi.text(this,
+            "PUBLIC RENDER ID  •  "+secrets.renderPublicId(),11,0xFFB9B0D6,false));
+        StudioUi.space(identity,12);
+        addAction(identity,"SHARE RENDER MCP DETAILS",StudioUi.PURPLE,()->shareRenderConnection());
+        addAction(identity,"COPY PUBLIC RENDER ID",StudioUi.SECONDARY,()->copyRenderAppId());
+        StudioUi.add(page,identity);
+        StudioUi.space(page,14);
+        LinearLayout cloudBackup=StudioUi.card(this);
+        StudioUi.add(cloudBackup,StudioUi.label(this,"PROJECT FOLDERS / FILE TRANSFERS"));
+        StudioUi.space(cloudBackup,7);
+        StudioUi.add(cloudBackup,StudioUi.text(this,
+            "Choose a working folder in device storage or Google Drive, when its Android provider supports folders. ChatGPT can create subfolders, import original files and export verified project copies through your existing Render connection. Transfers and native Blender imports report separately. No Gallery access.",
+            12,StudioUi.MUTED,false));
+        StudioUi.space(cloudBackup,10);
+        addAction(cloudBackup,"CHOOSE WORKING / BACKUP FOLDER",StudioUi.SECONDARY,()->{
+            try{ProductionDriveStorage.chooseFolder(this);}
+            catch(Exception e){Toast.makeText(this,"Folder picker unavailable: "+e.getClass().getSimpleName(),Toast.LENGTH_LONG).show();}
+        });
+        addAction(cloudBackup,"FILE TRANSFERS / PAUSE / RESUME / CANCEL",StudioUi.SECONDARY,()->showFileTransfers());
+        addAction(cloudBackup,"CHOOSE MODEL / IMAGE / VIDEO FILE",StudioUi.SECONDARY,()->StorageDocuments.pickFile(this));
+        StudioUi.add(page,cloudBackup);
+        LinearLayout referenceCard=StudioUi.card(this);
+        StudioUi.add(referenceCard,StudioUi.label(this,"REFERENCE IMAGE / VIDEO INBOX"));
+        StudioUi.add(referenceCard,StudioUi.text(this,
+            "Import only photos or videos you choose. Render checks the real file bytes and saves a private checksum. It never browses Gallery or guesses the unseen side of a character.",
+            12,StudioUi.MUTED,false));
+        addAction(referenceCard,"IMPORT PHOTOS / VIDEOS INTO RENDER",StudioUi.SECONDARY,()->{
+            try{StudioReferenceInbox.openPicker(this);}
+            catch(Exception e){Toast.makeText(this,"Reference picker unavailable: "+e.getClass().getSimpleName(),Toast.LENGTH_LONG).show();}
+        });
+        StudioUi.add(page,referenceCard);
         StudioUi.space(page,17);
 
-        // Keep legacy cloud modes supported but do not confuse them with
-        // the recommended single, direct VideoStudio MCP connection.
-        LinearLayout advanced=StudioUi.column(this);
-        advanced.setVisibility(View.GONE);
-        TextView advancedToggle=StudioUi.action(this,
-            "OPTIONAL CLOUD PAIRING / ADVANCED     ▾",StudioUi.SECONDARY);
-        StudioUi.add(page,advancedToggle);
-        StudioUi.space(page,8);
-        StudioUi.add(page,advanced);
-        advancedToggle.setOnClickListener(v->{
-            boolean expand=advanced.getVisibility()!=View.VISIBLE;
-            advanced.setVisibility(expand?View.VISIBLE:View.GONE);
-            advancedToggle.setText(expand?"HIDE ADVANCED CLOUD OPTIONS     ▴":
-                "OPTIONAL CLOUD PAIRING / ADVANCED     ▾");
-        });
-        LinearLayout shared=StudioUi.violetCard(this);
-        StudioUi.add(shared,StudioUi.label(this,"PREFERRED / EXISTING VIDEOSTUDIO MCP"));
-        StudioUi.space(shared,10);
-        StudioUi.add(shared,StudioUi.text(this,"One connection.\nTwo native studios.",22,StudioUi.WHITE,true));
-        StudioUi.space(shared,8);
-        StudioUi.add(shared,StudioUi.text(this,
-            "Ask ChatGPT through the existing VideoStudio MCP for a one-time Render pairing code. Enter the code here; VideoStudio's private owner key never leaves its original connection.",
-            13,0xFFE2D5FF,false));
-        StudioUi.space(shared,13);
-        videoStudioPairCode=StudioUi.field(this,"One-time Render pairing code (10 minutes)",true);
-        StudioUi.add(shared,videoStudioPairCode);
-        StudioUi.space(shared,12);
-        addAction(shared,"PAIR VIA VIDEOSTUDIO MCP",StudioUi.PURPLE,()->pairWithVideoStudio());
-        StudioUi.space(shared,10);
-        addAction(shared,"CHECK VIDEOSTUDIO MCP WORKER",StudioUi.SECONDARY,()->verifyExistingMcp());
-        StudioUi.add(advanced,shared);
-        StudioUi.space(advanced,17);
-
+        // The direct Render Studio MCP is the sole connection mode.
+        LinearLayout advanced=page;
         LinearLayout pairPanel=StudioUi.card(this);
-        StudioUi.add(pairPanel,StudioUi.label(this,"OPTIONAL / OLD INDEPENDENT RELAY"));
+        StudioUi.add(pairPanel,StudioUi.label(this,"02 / PAIR RENDER STUDIO"));
         StudioUi.space(pairPanel,8);
-        StudioUi.add(pairPanel,StudioUi.text(this,"Connect your phone",21,StudioUi.WHITE,true));
+        StudioUi.add(pairPanel,StudioUi.text(this,"Connect this Android device",21,StudioUi.WHITE,true));
+        StudioUi.space(pairPanel,8);
+        StudioUi.add(pairPanel,StudioUi.text(this,
+            "Dedicated endpoint: "+RenderDirectMcp.MCP_ENDPOINT,
+            12,StudioUi.MUTED,false));
         StudioUi.space(pairPanel,7);
         StudioUi.add(pairPanel,StudioUi.text(this,
-            "Optional older method. The existing VideoStudio MCP above needs no new server or ChatGPT connector.",
+            "Enter a one-use enrollment code from your existing Render Studio Cloudflare Worker. After pairing, authorize ChatGPT using the generated link code.",
             13,StudioUi.MUTED,false));
-        StudioUi.space(pairPanel,14);
-        relay=StudioUi.field(this,"Relay origin  ·  https://…",false);
-        StudioUi.add(pairPanel,relay);
-        StudioUi.space(pairPanel,10);
-        enrollment=StudioUi.field(this,"One-use enrollment code",true);
+        try {
+            if(RenderDirectMcp.isLegacyPairing(secrets.load())){
+                StudioUi.add(pairPanel,StudioUi.text(this,
+                    "Legacy VideoStudio pairing detected. It cannot run in this version. A successful direct pairing will replace only that stored credential; projects and native files remain.",
+                    13,StudioUi.WHITE,true));
+            }
+        }catch(Exception ignored){}
+        StudioUi.space(pairPanel,12);
+        enrollment=StudioUi.field(this,"One-use Render Studio enrollment code",true);
         StudioUi.add(pairPanel,enrollment);
-        try{JSONObject c=secrets.load();if(c!=null)relay.setText(c.optString("relay"));}catch(Exception ignored){}
-        StudioUi.space(pairPanel,13);
-        addAction(pairPanel,"PAIR THIS DEVICE     →",StudioUi.PURPLE,()->pair());
         StudioUi.space(pairPanel,10);
-        addAction(pairPanel,"CHECK RELAY REACHABILITY",StudioUi.SECONDARY,()->testRelay());
+        addAction(pairPanel,"PAIR THIS DEVICE",StudioUi.PRIMARY,()->pair());
+        StudioUi.space(pairPanel,10);
+        addAction(pairPanel,"CHECK DIRECT MCP REACHABILITY",StudioUi.SECONDARY,()->testRelay());
         StudioUi.space(pairPanel,10);
         addAction(pairPanel,"GENERATE CHATGPT LINK CODE",StudioUi.SECONDARY,()->link());
         StudioUi.add(advanced,pairPanel);
@@ -269,74 +261,119 @@ public final class AgentActivity extends Activity {
             "SCREEN CAPTURE ENABLED  •  Secret fields remain masked. This connection never uses cloud Blender rendering. Device and permission limitations still apply.",
             11,StudioUi.MUTED,false));
         ui.post(refresh);
+        if(StudioReferenceInbox.isExplicitOwnerMediaIntent(getIntent()))
+            confirmSharedReference(getIntent());
+        else if(getIntent()!=null&&"com.rezox.render.agent.PICK_MEDIA".equals(getIntent().getAction())){
+            setIntent(new Intent(this,AgentActivity.class));
+            StudioReferenceInbox.openPicker(this);
+        }
+        else if(getIntent()!=null&&"com.rezox.render.agent.PICK_STORAGE".equals(getIntent().getAction())){
+            setIntent(new Intent(this,AgentActivity.class));ProductionDriveStorage.chooseFolder(this);
+        }
+        else if(getIntent()!=null&&"com.rezox.render.agent.PICK_FILE".equals(getIntent().getAction())){
+            setIntent(new Intent(this,AgentActivity.class));StorageDocuments.pickFile(this);
+        }
+    }
+    private void confirmSharedReference(Intent inbound){
+        if(inbound==null || !StudioReferenceInbox.isExplicitOwnerMediaIntent(inbound))return;
+        new AlertDialog.Builder(this)
+            .setTitle("Import these images/videos into Render?")
+            .setMessage("Only the files explicitly selected or shared with Render are copied into its private reference inbox. No Gallery browsing occurs.")
+            .setNegativeButton("Cancel",null)
+            .setPositiveButton("Import",(dialog,which)->receiveReferenceIntent(inbound))
+            .show();
+    }
+    private void receiveReferenceIntent(Intent inbound){
+        if(inbound==null||!StudioReferenceInbox.isExplicitOwnerMediaIntent(inbound))return;
+        // Permission-limited source URIs are used only for this owner-selected copy.
+        setIntent(new Intent(this,AgentActivity.class));
+        background.execute(()->{
+            try{
+                JSONObject receipt=StudioReferenceInbox.receive(getApplicationContext(),inbound);
+                int count=receipt.getInt("imported");
+                ui.post(()->Toast.makeText(this,"Imported "+count+" reference(s); inspect reference.list through the dedicated Render MCP.",Toast.LENGTH_LONG).show());
+            }catch(Exception e){
+                ui.post(()->Toast.makeText(this,"Reference import failed: "+e.getMessage(),Toast.LENGTH_LONG).show());
+            }
+        });
+    }
+    @Override protected void onNewIntent(Intent intent){
+        super.onNewIntent(intent);
+        if(StudioReferenceInbox.isExplicitOwnerMediaIntent(intent))
+            confirmSharedReference(intent);
+        else if("com.rezox.render.agent.PICK_STORAGE".equals(intent.getAction()))ProductionDriveStorage.chooseFolder(this);
+        else if("com.rezox.render.agent.PICK_MEDIA".equals(intent.getAction()))StudioReferenceInbox.openPicker(this);
+        else if("com.rezox.render.agent.PICK_FILE".equals(intent.getAction()))StorageDocuments.pickFile(this);
+    }
+    private void showFileTransfers(){
+        perform(()->{
+            org.json.JSONArray rows=FileTransfers.list(this).getJSONArray("transfers");
+            if(rows.length()==0)return "No file transfers yet. Ask ChatGPT to inspect storage.capabilities through your existing Render connection.";
+            String[] labels=new String[rows.length()];
+            for(int i=0;i<rows.length();i++){
+                JSONObject row=rows.getJSONObject(i);
+                labels[i]=transferTitle(row)+" · "+transferState(row);
+            }
+            ui.post(()->new AlertDialog.Builder(this).setTitle("File transfers")
+                .setItems(labels,(dialog,index)->{
+                    try{
+                        JSONObject row=rows.getJSONObject(index);String id=row.getString("transfer_id");
+                        new AlertDialog.Builder(this).setTitle(transferTitle(row))
+                            .setMessage(transferSummary(row))
+                            .setNeutralButton("Pause",(d,w)->perform(()->transferSummary(FileTransfers.control(this,id,"pause"))))
+                            .setNegativeButton("Cancel transfer",(d,w)->perform(()->transferSummary(FileTransfers.control(this,id,"cancel"))))
+                            .setPositiveButton("Resume",(d,w)->perform(()->{
+                                FileTransfers.control(this,id,"resume");return transferSummary(FileTransferService.request(this,id));
+                            })).show();
+                    }catch(Exception e){Toast.makeText(this,"Transfer unavailable",Toast.LENGTH_LONG).show();}
+                }).setNegativeButton("Close",null).show());
+            return "File transfers report copied bytes separately from native Blender imports. Failed or interrupted transfers require an explicit Resume.";
+        });
+    }
+    private String transferTitle(JSONObject row){
+        String name=row.optString("display_name","");
+        if(!name.isEmpty())return name;
+        switch(row.optString("kind")){
+            case "import":return "Import original file";
+            case "export":return "Export project or output";
+            case "fetch":return "Download original file";
+            case "unpack":return "Extract asset dependencies";
+            default:return "File transfer";
+        }
+    }
+    private String transferState(JSONObject row){return row.optString("state","unknown").replace('_',' ');}
+    private String transferSummary(JSONObject row){
+        if(row.optBoolean("cancelled"))return "No file selected.";
+        long done=row.optLong("bytes_transferred",0),total=row.optLong("total_bytes",-1);
+        String text=transferState(row)+"\n"+android.text.format.Formatter.formatShortFileSize(this,done);
+        if(total>=0)text+=" / "+android.text.format.Formatter.formatShortFileSize(this,total);
+        JSONObject result=row.optJSONObject("result");
+        if(result!=null){
+            if(result.optBoolean("provider_readback_sha256_verified"))text+="\nVerified copy saved. The original project is retained.";
+            if(result.optBoolean("original_bytes_preserved"))text+="\nOriginal bytes saved for native Blender import.";
+        }
+        if(row.has("error_hint"))text+="\n\n"+row.optString("error_hint").replace("Use storage.task.refresh on this transfer","Ask ChatGPT to refresh this transfer");
+        if(row.optBoolean("requires_owner_open"))text+="\nOpen Render and explicitly Resume when Android permits.";
+        return text;
     }
     private void addAction(LinearLayout parent,String title,int style,Runnable action) {
         TextView view=StudioUi.action(this,title,style);
         StudioUi.add(parent,view);
         view.setOnClickListener(v->action.run());
     }
-    private long installedVideoStudioBuild(){
-        try {
-            PackageInfo info;
-            if(Build.VERSION.SDK_INT>=33)
-                info=getPackageManager().getPackageInfo(
-                    RenderConnectionCard.VIDEOSTUDIO_PACKAGE,
-                    PackageManager.PackageInfoFlags.of(0));
-            else
-                info=getPackageManager().getPackageInfo(
-                    RenderConnectionCard.VIDEOSTUDIO_PACKAGE,0);
-            return info.getLongVersionCode();
-        }catch(PackageManager.NameNotFoundException ignored){return -1;}
-        catch(RuntimeException ignored){return -1;}
-    }
-    private String localBridgeStatus(){
-        return RenderConnectionCard.localStatus(
-            secrets.renderPublicId(),secrets.videoStudioBridgeEnabled(),
-            installedVideoStudioBuild(),secrets.lastVideoStudioNativeResult());
-    }
-    private void connectShare(){
-        long installed=installedVideoStudioBuild();
-        if(installed<RenderConnectionCard.MIN_VIDEOSTUDIO_BUILD){
-            new AlertDialog.Builder(this)
-                .setTitle("Updated VideoStudio required")
-                .setMessage("The compatible VideoStudio v3.5.4+ Android app is not visible on this phone. Install the updated VideoStudio APK without deleting its app data. Then return here. You can share the Render setup card meanwhile.")
-                .setNegativeButton("Close",null)
-                .setPositiveButton("Share setup",(d,w)->shareRenderConnection()).show();
-            return;
-        }
-        new AlertDialog.Builder(this)
-            .setTitle("Connect Render through VideoStudio MCP?")
-            .setMessage("Use the existing ChatGPT↔VideoStudio MCP connection to forward only registered Render Blender commands. VideoStudio keeps its own projects, Render performs 3D work locally, and you can stop this bridge at any time. The shared card contains a NON-SECRET Render ID.")
-            .setNegativeButton("Cancel",null)
-            .setNeutralButton("Enable only",(d,w)->activateDirectBridge())
-            .setPositiveButton("Enable & Share",(d,w)->{
-                activateDirectBridge();
-                shareRenderConnection();
-            }).show();
-    }
-    private void activateDirectBridge(){
-        secrets.videoStudioBridgeEnabled(true);
-        secrets.status("Local Render bridge enabled. Awaiting a confirmed native command via existing VideoStudio MCP.");
-        if(bridgeState!=null)bridgeState.setText(localBridgeStatus());
-        // Direct Binder jobs need notification permission too; never block a
-        // modelling job because the user declines the optional notification.
-        if(Build.VERSION.SDK_INT>=33 && checkSelfPermission(
-                Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)
-            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},44);
-    }
     private void shareRenderConnection(){
+        JSONObject saved=null;
+        try{saved=secrets.load();}catch(Exception ignored){}
         String card=RenderConnectionCard.shareText(secrets.renderPublicId(),
-            secrets.videoStudioBridgeEnabled(),
-            installedVideoStudioBuild()>=RenderConnectionCard.MIN_VIDEOSTUDIO_BUILD);
+            RenderDirectMcp.isDirectPairing(saved),secrets.enabled(),getPackageName());
         Intent send=new Intent(Intent.ACTION_SEND);
         send.setType("text/plain");
         send.putExtra(Intent.EXTRA_TEXT,card);
-        try{
-            startActivity(Intent.createChooser(send,"Share Render connection with ChatGPT"));
-        }catch(android.content.ActivityNotFoundException ignored){
+        try{startActivity(Intent.createChooser(send,"Share Render Studio MCP details"));}
+        catch(android.content.ActivityNotFoundException ignored){
             ClipboardManager clipboard=getSystemService(ClipboardManager.class);
-            clipboard.setPrimaryClip(ClipData.newPlainText("Render Studio connection",card));
-            Toast.makeText(this,"Render connection card copied",Toast.LENGTH_LONG).show();
+            clipboard.setPrimaryClip(ClipData.newPlainText("Render Studio MCP",card));
+            Toast.makeText(this,"Render MCP details copied",Toast.LENGTH_LONG).show();
         }
     }
     private void copyRenderAppId(){
@@ -345,59 +382,11 @@ public final class AgentActivity extends Activity {
             "Render Studio public app ID",secrets.renderPublicId()));
         Toast.makeText(this,"Public Render app ID copied",Toast.LENGTH_SHORT).show();
     }
-    private void checkVideoStudioApp(){
-        long version=installedVideoStudioBuild();
-        String result=version<0 ? "VideoStudio is not installed or is hidden by Android package visibility." :
-            "VideoStudio installed (build "+version+").\n"+
-            (version>=RenderConnectionCard.MIN_VIDEOSTUDIO_BUILD
-            ?"Compatible with the current native Binder bridge."
-            :"Update VideoStudio to build 354 or newer.");
-        new AlertDialog.Builder(this)
-            .setTitle("Render ↔ VideoStudio")
-            .setMessage(result+"\n\n"+localBridgeStatus()
-                +"\n\nA compatible installation and enabled bridge are not proof of a real ChatGPT command. Verify through the existing VideoStudio MCP using render.engine.status.")
-            .setPositiveButton("OK",null).show();
-    }
-    private void disableDirectBridge(){
-        secrets.videoStudioBridgeEnabled(false);
-        VideoStudioNativeBridgeService.requestCancel();
-        secrets.status("Render's local bridge stopped. The original VideoStudio MCP and projects remain unchanged.");
-        if(bridgeState!=null)bridgeState.setText(localBridgeStatus());
-    }
-    private void pairWithVideoStudio(){
-        final String oneTimeCode=videoStudioPairCode.getText().toString().trim();
-        videoStudioPairCode.setText(""); // Do not retain a reusable code in the UI.
-        if(oneTimeCode.isEmpty()){
-            new AlertDialog.Builder(this).setTitle("One-time code required")
-                .setMessage("Ask ChatGPT to get the new Render pairing code using your existing VideoStudio MCP. Enter that short-lived code here. Do not copy your private VideoStudio owner link.")
-                .setPositiveButton("OK",null).show();
-            return;
-        }
-        perform(()->{
-            if(secrets.load()!=null)
-                throw new IllegalStateException("Revoke the previous Render pairing before changing transport. VideoStudio stays connected.");
-            JSONObject credentials=VideoStudioMcpTransport.pair(this,oneTimeCode);
-            secrets.save(credentials);
-            secrets.enabled(false);
-            secrets.status("Render paired to existing VideoStudio MCP. Start the native agent session.");
-            return "Render uses your existing VideoStudio MCP! No second ChatGPT connection or extra relay is needed. Start Agent Session on this phone to accept native Blender commands.";
-        });
-    }
-    private void verifyExistingMcp(){
-        perform(()->{
-            JSONObject check=VideoStudioMcpTransport.checkSharedWorker();
-            return "Existing VideoStudio MCP Worker reachable: "+check.optString("service")
-                +"\nThe phone still needs one-time pairing and Start Agent Session.";
-        });
-    }
     private void testRelay(){
-        String requested=relay.getText().toString().trim();
         perform(()->{
-            if(requested.isEmpty())
-                return "No relay address has been entered. Paste the HTTPS URL of your private hosted Render relay here, then run this check.";
-            JSONObject health=AgentHttp.checkHealth(requested);
-            return "RELAY REACHABLE\n"+health.optString("service","Unknown server")
-                + "\n\nThis verifies HTTPS connectivity only. It does not mean the device is paired or ChatGPT can send commands.";
+            JSONObject health=AgentHttp.checkHealth(RenderDirectMcp.ORIGIN);
+            return "DIRECT RENDER MCP REACHABLE\n"+health.optString("service","Unknown server")
+                +"\n\nOnly the Worker endpoint was checked. Pair and start the Android session before claiming native command connectivity.";
         });
     }
     private interface Task{String run()throws Exception;}
@@ -419,8 +408,8 @@ public final class AgentActivity extends Activity {
         }
         if(e instanceof AgentHttp.RelayException){
             int status=((AgentHttp.RelayException)e).status;
-            if(status==404)return "Render channel not deployed on the existing VideoStudio MCP Worker yet. The Worker needs its additive Render update.";
-            if(status==403)return "Pairing code invalid, expired, already used or not authorized by VideoStudio.";
+            if(status==404)return "The dedicated Render Studio MCP endpoint does not support that route.";
+            if(status==403)return "Render Studio enrollment code invalid, expired or already used.";
             if(status==409)return "This relay has already enrolled a phone. Generate a fresh authorized setup before retrying.";
             if(status==401)return "Authorization failed or expired. Pair with a fresh one-use enrollment code.";
             if(status==429)return "Too many attempts. Wait briefly before trying again.";
@@ -434,63 +423,74 @@ public final class AgentActivity extends Activity {
         return "Connection setup failed ("+e.getClass().getSimpleName()+"). No private credential was displayed.";
     }
     private void pair(){
-        final String origin=relay.getText().toString().trim(),code=enrollment.getText().toString().trim();
+        final String code=enrollment.getText().toString().trim();
         enrollment.setText("");
-        if(origin.isEmpty()){secrets.status("Relay URL missing. Deploy the private relay first, then paste its HTTPS address.");
-            new AlertDialog.Builder(this).setTitle("Relay address needed")
-                .setMessage("The relay address field is empty. This is a real HTTPS service URL, not your GitHub repository or ChatGPT account. Once deployed, paste the exact URL here.")
-                .setPositiveButton("OK",null).show();return;}
-        if(code.isEmpty()){secrets.status("One-use enrollment code missing.");
+        if(code.isEmpty()){
+            secrets.status("Direct Render Studio enrollment code required.");
             new AlertDialog.Builder(this).setTitle("Enrollment code needed")
-                .setMessage("The one-use enrollment code has not been entered. It is issued when your relay is configured. A ChatGPT password, API key or random code will not work.")
-                .setPositiveButton("OK",null).show();return;}
+                .setMessage("Enter the one-use enrollment code from the existing Render Studio Worker. This is not your ChatGPT password or a VideoStudio code.")
+                .setPositiveButton("OK",null).show();return;
+        }
         perform(()->{
-            AgentPolicy.relayUrl(origin);
-            if(secrets.load()!=null)throw new IllegalStateException("Revoke the existing connection before pairing another");
-            JSONObject answer=AgentHttp.post(origin,"/v1/device/enroll",null,new JSONObject().put("enrollment_code",code).put("name","Render Android"));
-            if(!answer.getString("device_id").matches("[a-f0-9]{32}")||!answer.getString("device_token").matches("[A-Za-z0-9_-]{32,256}"))
-                throw new IllegalArgumentException("Invalid enrollment response");
-            JSONObject saved=new JSONObject().put("device_id",answer.getString("device_id"))
-                .put("device_token",answer.getString("device_token")).put("relay",AgentPolicy.relayUrl(origin));
-            secrets.save(saved);secrets.enabled(false);secrets.status("Phone paired. ChatGPT authorization and Start are still required.");
-            return "Phone paired securely.\n\nChatGPT MCP endpoint:\n"+saved.getString("relay")+"/mcp\n\nTemporary ChatGPT authorization code (10 minutes):\n"+answer.getString("link_code")+
-                "\n\nEnter this code only in your relay's authorization page. Then start the session here.";
+            JSONObject previous=secrets.load();
+            if(RenderDirectMcp.isDirectPairing(previous))
+                throw new IllegalStateException("REVOKE_EXISTING_RENDER_PAIRING_FIRST");
+            if(previous!=null&&!RenderDirectMcp.isLegacyPairing(previous))
+                throw new IllegalStateException("UNRECOGNIZED_PAIRING_REVOKE_FIRST");
+            JSONObject health=AgentHttp.checkHealth(RenderDirectMcp.ORIGIN);
+            JSONObject answer=AgentHttp.post(RenderDirectMcp.ORIGIN,"/v1/device/enroll",null,
+                new JSONObject().put("enrollment_code",code).put("name","Render Studio Android"));
+            JSONObject saved=RenderDirectMcp.credentials(
+                answer.getString("device_id"),answer.getString("device_token"));
+            secrets.enabled(false);
+            secrets.save(saved); // Replaces legacy transport credentials only after successful enrollment.
+            secrets.status("Direct Render Studio MCP paired. Authorize ChatGPT and Start Agent Session.");
+            return "Render Studio paired securely.\n\nChatGPT MCP endpoint:\n"
+                +RenderDirectMcp.MCP_ENDPOINT
+                +"\n\nTemporary ChatGPT link code (10 minutes):\n"
+                +answer.getString("link_code")
+                +"\n\nAuthorize this code in the Render Studio MCP login, then start the session.";
         });
     }
     private void link(){perform(()->{
-        JSONObject c=secrets.load();if(c==null)throw new IllegalStateException("Pair Render first using the VideoStudio MCP one-time code.");
-        if(VideoStudioMcpTransport.isSelected(c))return "Render uses your existing VideoStudio MCP. No new ChatGPT link code or connector is needed.";
-        JSONObject r=AgentHttp.post(c.getString("relay"),"/v1/device/link",c.getString("device_token"),new JSONObject());
-        return "New ChatGPT authorization code (10 minutes):\n"+r.getString("link_code")+"\n\nMCP endpoint: "+c.getString("relay")+"/mcp";
+        JSONObject c=RenderDirectMcp.requireDirectPairing(secrets.load());
+        JSONObject r=AgentHttp.post(RenderDirectMcp.ORIGIN,"/v1/device/link",
+            c.getString("device_token"),new JSONObject());
+        return "New Render Studio ChatGPT authorization code (10 minutes):\n"
+            +r.getString("link_code")+"\n\nMCP endpoint: "+RenderDirectMcp.MCP_ENDPOINT;
     });}
     private void startSession(){
         if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED){
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},42);return;
         }
         try{
-            if(secrets.load()==null){secrets.status("Pair this phone first.");return;}
+            RenderDirectMcp.requireDirectPairing(secrets.load());
             if(!getSystemService(NotificationManager.class).areNotificationsEnabled()){
-                secrets.status("Enable Render notifications so the active connection and Stop control stay visible.");return;
+                secrets.status("Enable Render notifications so the active native session and Stop control stay visible.");return;
             }
             secrets.enabled(true);
-            secrets.status(VideoStudioMcpTransport.isSelected(secrets.load())
-                ?"Connecting through VideoStudio MCP. No Blender operation has executed yet."
-                :"Connecting to standalone relay. No command has executed yet.");
+            secrets.status("Connecting to dedicated Render Studio MCP. No native command has executed yet.");
             startForegroundService(new Intent(this,AgentService.class));
-        }catch(Exception e){secrets.enabled(false);secrets.status("Cannot start session: "+e.getClass().getSimpleName());}
+        }catch(Exception e){
+            secrets.enabled(false);
+            secrets.status("Direct Render MCP pairing required. Pair this phone with its one-use enrollment code.");
+        }
     }
     private void stopSession(){
-        disableDirectBridge();
-        secrets.enabled(false);secrets.status("Stopped locally; current native calls stop at the next safe boundary.");
+        secrets.enabled(false);
+        secrets.status("Stopped locally; a current native call stops at the next safe boundary.");
         try{startService(new Intent(this,AgentService.class).setAction(AgentService.STOP));}catch(Exception ignored){}
     }
     private void revoke(){
         stopSession();perform(()->{
             JSONObject c=secrets.load();if(c==null)return "No connection is saved.";
-            if(VideoStudioMcpTransport.isSelected(c))VideoStudioMcpTransport.unlink(c);
-            else AgentHttp.post(c.getString("relay"),"/v1/device/revoke",c.getString("device_token"),new JSONObject());
-            secrets.clear();secrets.status("Connection revoked. Existing projects were preserved.");
-            return "Render pairing was revoked. The original VideoStudio MCP connection and projects are preserved.";
+            if(RenderDirectMcp.isDirectPairing(c))
+                AgentHttp.post(RenderDirectMcp.ORIGIN,"/v1/device/revoke",
+                    c.getString("device_token"),new JSONObject());
+            // Old relay credentials are deleted locally without contacting VideoStudio.
+            secrets.clear();
+            secrets.status("Render connection revoked. All native projects were preserved.");
+            return "Render Studio MCP pairing revoked or legacy credential discarded. Local projects and files were preserved.";
         });
     }
     private void localCheck(){perform(()->{
@@ -499,6 +499,29 @@ public final class AgentActivity extends Activity {
         return "LOCAL SELF-CHECK ONLY — not a ChatGPT connection test.\n"+
             new AgentActions(this).execute(cmd,new AtomicBoolean(false)).toString(2);
     });}
+    @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){
+        super.onActivityResult(requestCode,resultCode,data);
+        if(requestCode==StorageDocuments.PICK_FILE)perform(()->transferSummary(StorageDocuments.acceptFile(this,resultCode,data)));
+        if(requestCode==StudioReferenceInbox.PICK_REFERENCE && resultCode==Activity.RESULT_OK){
+            Intent ownerSelected=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            if(data!=null){
+                ownerSelected.setData(data.getData());
+                ownerSelected.setClipData(data.getClipData());
+            }
+            ownerSelected.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            receiveReferenceIntent(ownerSelected);
+        }
+        if(requestCode==ProductionDriveStorage.REQUEST_PICK_FOLDER){
+            try{
+                boolean selected=ProductionDriveStorage.acceptFolderSelection(this,resultCode,data);
+                Toast.makeText(this,selected?
+                    "Working folder linked. Import uses read access; creating folders and exporting requires the provider's write access.":
+                    "No working folder selected.",Toast.LENGTH_LONG).show();
+            }catch(Exception e){
+                Toast.makeText(this,"Backup folder permission failed: "+e.getClass().getSimpleName(),Toast.LENGTH_LONG).show();
+            }
+        }
+    }
     @Override public void onRequestPermissionsResult(int code,String[] permissions,int[] results){
         super.onRequestPermissionsResult(code,permissions,results);
         if(code==42&&results.length>0&&results[0]==PackageManager.PERMISSION_GRANTED)startSession();
