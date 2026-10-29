@@ -44,12 +44,6 @@ public final class AgentSecrets {
     public void clear(){prefs.edit().remove("secret").remove("iv").putBoolean("enabled",false).putBoolean("videostudio_ipc",false).commit();}
     public void enabled(boolean value){prefs.edit().putBoolean("enabled",value).commit();}
     public boolean enabled(){return prefs.getBoolean("enabled",false);}
-    public void videoStudioBridgeEnabled(boolean enabled){
-        prefs.edit().putBoolean("videostudio_ipc",enabled).commit();
-    }
-    public boolean videoStudioBridgeEnabled(){
-        return prefs.getBoolean("videostudio_ipc",false);
-    }
     /** Publicly shareable ID only. No authentication is derived from this UUID. */
     public synchronized String renderPublicId() {
         String id=prefs.getString("render_public_id","");
@@ -58,12 +52,6 @@ public final class AgentSecrets {
         if(!prefs.edit().putString("render_public_id",id).commit())
             throw new IllegalStateException("PUBLIC_ID_SAVE_FAILED");
         return id;
-    }
-    public void recordVideoStudioNativeResult() {
-        prefs.edit().putLong("videostudio_last_native_result",System.currentTimeMillis()).apply();
-    }
-    public long lastVideoStudioNativeResult() {
-        return prefs.getLong("videostudio_last_native_result",0);
     }
 
     public void status(String message){prefs.edit().putString("status",message).apply();}
