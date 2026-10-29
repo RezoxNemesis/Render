@@ -118,9 +118,7 @@ public class BlenderActivity extends NativeActivity {
         self.assertNotIn('publishOutputDir(', log_method)
         self.assertTrue((self.output / "assets/licenses/Render-Full-Native-Sources.txt").exists())
         root = ET.parse(self.output / "AndroidManifest.xml").getroot()
-        assert root.find("queries") is not None
-        self.assertEqual("com.rezoxnemesis.videostudio",
-                         root.find("queries/package").get(A+"name"))
+        self.assertIsNone(root.find("queries"))
         self.assertNotIn("package", root.attrib)
         self.assertIn("android.permission.FOREGROUND_SERVICE_SPECIAL_USE",
                       [p.get(A+"name") for p in root.findall("uses-permission")])
