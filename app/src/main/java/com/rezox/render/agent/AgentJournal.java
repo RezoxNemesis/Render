@@ -19,7 +19,7 @@ public final class AgentJournal extends SQLiteOpenHelper {
         if(oldVersion==1 && newVersion==2)db.execSQL("ALTER TABLE jobs ADD COLUMN command TEXT");
         else throw new IllegalStateException("Agent journal migration required; do not discard jobs");
     }
-    /** Commit acceptance before an in-memory Binder dispatch can be lost. */
+    /** Commit acceptance before a direct MCP native dispatch can be lost. */
     public synchronized boolean enqueue(String id,String digest,JSONObject command)throws Exception{
         if(snapshot(id,digest)!=null)return false;
         try(Cursor count=getReadableDatabase().rawQuery("SELECT COUNT(*) FROM jobs WHERE state='queued'",null)){
