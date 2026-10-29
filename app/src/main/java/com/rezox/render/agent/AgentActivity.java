@@ -378,8 +378,8 @@ public final class AgentActivity extends Activity {
     private void testRelay(){
         perform(()->{
             JSONObject health=AgentHttp.checkHealth(RenderDirectMcp.ORIGIN);
-            return "DIRECT RENDER MCP REACHABLE\\n"+health.optString("service","Unknown server")
-                +"\\n\\nOnly the Worker endpoint was checked. Pair and start the Android session before claiming native command connectivity.";
+            return "DIRECT RENDER MCP REACHABLE\n"+health.optString("service","Unknown server")
+                +"\n\nOnly the Worker endpoint was checked. Pair and start the Android session before claiming native command connectivity.";
         });
     }
     private interface Task{String run()throws Exception;}
@@ -438,19 +438,19 @@ public final class AgentActivity extends Activity {
             secrets.enabled(false);
             secrets.save(saved); // Replaces legacy transport credentials only after successful enrollment.
             secrets.status("Direct Render Studio MCP paired. Authorize ChatGPT and Start Agent Session.");
-            return "Render Studio paired securely.\\n\\nChatGPT MCP endpoint:\\n"
+            return "Render Studio paired securely.\n\nChatGPT MCP endpoint:\n"
                 +RenderDirectMcp.MCP_ENDPOINT
-                +"\\n\\nTemporary ChatGPT link code (10 minutes):\\n"
+                +"\n\nTemporary ChatGPT link code (10 minutes):\n"
                 +answer.getString("link_code")
-                +"\\n\\nAuthorize this code in the Render Studio MCP login, then start the session.";
+                +"\n\nAuthorize this code in the Render Studio MCP login, then start the session.";
         });
     }
     private void link(){perform(()->{
         JSONObject c=RenderDirectMcp.requireDirectPairing(secrets.load());
         JSONObject r=AgentHttp.post(RenderDirectMcp.ORIGIN,"/v1/device/link",
             c.getString("device_token"),new JSONObject());
-        return "New Render Studio ChatGPT authorization code (10 minutes):\\n"
-            +r.getString("link_code")+"\\n\\nMCP endpoint: "+RenderDirectMcp.MCP_ENDPOINT;
+        return "New Render Studio ChatGPT authorization code (10 minutes):\n"
+            +r.getString("link_code")+"\n\nMCP endpoint: "+RenderDirectMcp.MCP_ENDPOINT;
     });}
     private void startSession(){
         if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED){
