@@ -14,19 +14,19 @@ from tools import prepare_production_toolkit as P
 
 class CreatorApkReleaseChecks(unittest.TestCase):
     def setUp(self):
-        self.badging = ("package: name='com.rezox.render' versionCode='61' "
-                        "versionName='0.60.0-animation-studio'\n"
+        self.badging = ("package: name='com.rezox.render' versionCode='62' "
+                        "versionName='0.61.0-direct-mcp'\n"
                         "sdkVersion:'31'\nnative-code: 'arm64-v8a'\n")
         self.signature = "Signer #1 certificate SHA-256 digest: " + V.SIGNER_SHA256 + "\n"
 
     def test_original_package_monotonic_version_and_historical_signer(self):
         report = V.verify_android_identity(self.badging, self.signature)
-        self.assertEqual(report["version_code"], 61)
+        self.assertEqual(report["version_code"], 62)
         self.assertEqual(report["signer_certificate_sha256"], V.SIGNER_SHA256)
 
     def test_rejects_wrong_package_version_minimum_and_abi(self):
         for original, replacement in (("com.rezox.render", "com.rezox.render.preview"),
-                                      ("versionCode='61'", "versionCode='60'"),
+                                      ("versionCode='62'", "versionCode='61'"),
                                       (V.VERSION_NAME, "0.40.0-viewport-fidelity"),
                                       ("sdkVersion:'31'", "sdkVersion:'28'"),
                                       ("'arm64-v8a'", "'arm64-v8a' 'x86_64'")):
@@ -83,8 +83,8 @@ class CreatorApkReleaseChecks(unittest.TestCase):
     def test_version_adapter_promotes_previous_release_once_and_refuses_future_versions(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            files = (("app/build.gradle.kts", 'versionCode = 60\nversionName = "0.50.0-creator-studio"'),
-                     ("full-app/app/build.gradle", "versionCode 60\nversionName '0.50.0-creator-studio'"))
+            files = (("app/build.gradle.kts", 'versionCode = 61\nversionName = "0.60.0-animation-studio"'),
+                     ("full-app/app/build.gradle", "versionCode 61\nversionName '0.60.0-animation-studio'"))
             for relative, contents in files:
                 destination = root / relative
                 destination.parent.mkdir(parents=True, exist_ok=True)
@@ -96,7 +96,7 @@ class CreatorApkReleaseChecks(unittest.TestCase):
                 self.assertEqual(promoted, {relative: (root / relative).read_bytes() for relative, _ in files})
                 for relative, _ in files:
                     self.assertIn(V.VERSION_NAME, (root / relative).read_text())
-                (root / files[0][0]).write_text('versionCode = 62\nversionName = "0.61.0"')
+                (root / files[0][0]).write_text('versionCode = 63\nversionName = "0.62.0"')
                 with self.assertRaises(RuntimeError):
                     P.promote_startup_version()
 
