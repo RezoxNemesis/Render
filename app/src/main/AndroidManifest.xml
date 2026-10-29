@@ -1,9 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Explicit known app visibility for same-phone VideoStudio native MCP. -->
-    <queries>
-        <package android:name="com.rezoxnemesis.videostudio" />
-    </queries>
     <!-- Network is optional command transport; Blender computation remains local. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -34,10 +30,5 @@
         <!-- Android work notification can only target this non-exported Stop receiver. -->
         <receiver android:name=".agent.NativeWorkStopReceiver" android:exported="false" />
         <service android:name=".agent.FileTransferService" android:exported="false" android:foregroundServiceType="dataSync" />
-        <!-- Cross-app native bridge. Messenger checks caller's kernel-supplied UID
-             and local owner-enabled flag before accepting typed commands. -->
-        <service
-            android:name=".agent.VideoStudioNativeBridgeService"
-            android:exported="true" />
     </application>
 </manifest>
