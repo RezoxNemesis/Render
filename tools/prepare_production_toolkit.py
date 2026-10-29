@@ -13,8 +13,8 @@ def replace(path,before,after):
 def promote_startup_version():
     for name in ('app/build.gradle.kts','full-app/app/build.gradle'):
         target=ROOT/name;source=target.read_text()
-        new='versionCode = 61' if name.endswith('.kts') else 'versionCode 61'
-        new_name='0.60.0-animation-studio'
+        new='versionCode = 62' if name.endswith('.kts') else 'versionCode 62'
+        new_name='0.61.0-direct-mcp'
         if new in source and new_name in source:continue
         previous=[]
         for code,version in ((30,'0.28.0-native-control-reliability'),
@@ -37,7 +37,8 @@ def promote_startup_version():
                              (47,'0.38.0-native-ik-video-sync'),
                              (48,'0.39.0-agent-fastlane'),
                              (49,'0.40.0-viewport-fidelity'),
-                             (60,'0.50.0-creator-studio')):
+                             (60,'0.50.0-creator-studio'),
+                             (61,'0.60.0-animation-studio')):
             old='versionCode = '+str(code) if name.endswith('.kts') else 'versionCode '+str(code)
             if source.count(old)==1 and source.count(version)==1:previous.append((old,version))
         if len(previous)!=1:
@@ -58,12 +59,12 @@ def prepare():
             ('app/src/main/java/com/rezox/render/agent/StorageOperations.java','storage.task.refresh'),
             ('app/src/main/java/com/rezox/render/agent/ProductionBridge.java','StudioReferenceInbox.list(context,p)'),
             ('full-app/scripts/render_production.py','import render_studio_ops'),
-            ('full-app/app/build.gradle','versionCode 61'),
-            ('app/build.gradle.kts','versionCode = 61'),
+            ('full-app/app/build.gradle','versionCode 62'),
+            ('app/build.gradle.kts','versionCode = 62'),
         )
         if not all(marker in (ROOT/path).read_text() for path,marker in required):
             raise RuntimeError('INCOMPLETE_V022_BUILD_ADAPTER_STATE')
-        print('Render 0.60.0 adapter verified; no second mutation')
+        print('Render 0.61.0 adapter verified; no second mutation')
         return
     prefix='app/src/main/java/com/rezox/render/agent/'
     replace(prefix+'AgentPolicy.java','registry.put("engine.status", Collections.emptySet());','registry.put("engine.status", Collections.emptySet());\n        registry.put("production.execute", fields("operation", "payload", "target_id"));')
@@ -74,9 +75,12 @@ def prepare():
     replace(prefix+'BlenderSpool.java','private static void checkArguments(String action, JSONObject args) throws Exception {','private static void checkArguments(String action, JSONObject args) throws Exception {\n        if("blender.production.execute".equals(action)){ProductionBridge.validate(args);return;}')
     replace(prefix+'BlenderSpool.java','long timeoutMillis=action.equals("blender.scene.render_video") ? 1800000L :','long timeoutMillis=action.equals("blender.production.execute") ? 600000L :\n            action.equals("blender.scene.render_video") ? 1800000L :')
     replace(prefix+'BlenderSpool.java','if(contents.length>65536)','if(contents.length>131072)')
-    service=ROOT/(prefix+'VideoStudioNativeBridgeService.java');text=service.read_text()
-    if 'raw.length()>32768' in text:service.write_text(text.replace('raw.length()>32768','raw.getBytes(java.nio.charset.StandardCharsets.UTF_8).length>131072'))
-    elif 'length>131072' not in text:raise RuntimeError('SOURCE_DRIFT: Binder payload bound')
+    # Legacy Binder source is intentionally absent from direct-only Render releases.
+    service=ROOT/(prefix+'VideoStudioNativeBridgeService.java')
+    if service.exists():
+        text=service.read_text()
+        if 'raw.length()>32768' in text:service.write_text(text.replace('raw.length()>32768','raw.getBytes(java.nio.charset.StandardCharsets.UTF_8).length>131072'))
+        elif 'length>131072' not in text:raise RuntimeError('SOURCE_DRIFT: Binder payload bound')
     replace('full-app/scripts/render_agent_startup.py','_MAX_BYTES = 65536','_MAX_BYTES = 131072')
     before='    # Local touch-overlay UI operations; NOT remotely registered agent actions.'
     after='''    if action == "blender.production.execute":
@@ -171,5 +175,5 @@ def prepare():
             '0.27.0-resumable-long-render','0.28.0-native-control-reliability')
         target.write_text(source)
     promote_startup_version()
-    print('RENDER 0.60.0 source staged (versionCode 61); signing must be verified by the build')
+    print('RENDER 0.61.0 source staged (versionCode 62); signing must be verified by the build')
 if __name__=='__main__':prepare()
