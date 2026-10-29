@@ -19,8 +19,8 @@ import tempfile
 import zipfile
 
 PACKAGE = "com.rezox.render"
-VERSION_CODE = "61"
-VERSION_NAME = "0.60.0-animation-studio"
+VERSION_CODE = "62"
+VERSION_NAME = "0.61.0-direct-mcp"
 SIGNER_SHA256 = "f3d63fb20be25ca0be8aa6a161d5cf13cd98ba2fa300c7a604cce35131b9eb30"
 ENGINE_SHA256 = "a87b805df88ab64b4af21baac98bf380de9b0a1d90ac5525c082c5aceac29d59"
 REQUIRED_CREATOR_MODULES = frozenset({
@@ -121,6 +121,9 @@ def verify(apk_path, source_dir, build_tools, source_sha, report_dir):
                      "FileTransferService", "FOREGROUND_SERVICE_DATA_SYNC"):
         if required not in output["manifest"]:
             raise ValueError("CREATOR_ANDROID_SERVICE_MISSING: " + required)
+    for forbidden in ("VideoStudioNativeBridgeService", "com.rezoxnemesis.videostudio"):
+        if forbidden in output["manifest"]:
+            raise ValueError("LEGACY_VIDEOSTUDIO_BRIDGE_STILL_EXPORTED: " + forbidden)
     with zipfile.ZipFile(apk_path) as apk:
         if len(apk.namelist()) != len(set(apk.namelist())):
             raise ValueError("CREATOR_DUPLICATED_APK_MEMBER")
